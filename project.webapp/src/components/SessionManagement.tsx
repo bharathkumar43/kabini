@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Database, Save, Trash2, Download, RefreshCcw, FileText, Clock, Users, Calendar, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 
 interface Session {
   id: string;
@@ -230,7 +231,9 @@ function SessionManagement() {
                 type="text"
                 placeholder="Enter session name (e.g., 'Blog Analysis - Q1 2024')"
                 value={currentSessionName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentSessionName(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleEmojiFilteredInput(e, (value) => setCurrentSessionName(value))}
+                onPaste={(e) => handlePaste(e, (value) => setCurrentSessionName(value))}
+                onKeyDown={handleKeyDown}
                 onKeyPress={(e: React.KeyboardEvent) => e.key === 'Enter' && saveCurrentSession()}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />

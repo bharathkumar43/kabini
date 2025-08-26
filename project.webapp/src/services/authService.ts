@@ -925,13 +925,34 @@ class AuthService {
     // Clear tokens
     this.clearTokens();
     
-    // Clear potentially conflicting localStorage data
+    // Clear user data from localStorage
+    try {
+      localStorage.removeItem('user');
+      console.log('[AuthService] User data cleared from localStorage');
+    } catch (e) {
+      console.warn('[AuthService] Could not clear user data:', e);
+    }
+    
+    // Clear user-specific history data
+    try {
+      // Import historyService dynamically to avoid circular dependency
+      import('./historyService').then(({ historyService }) => {
+        historyService.clearUserData();
+        console.log('[AuthService] User-specific history data cleared');
+      }).catch(error => {
+        console.warn('[AuthService] Could not clear user history data:', error);
+      });
+    } catch (e) {
+      console.warn('[AuthService] Could not clear user history data:', e);
+    }
+    
+    // Clear potentially conflicting localStorage data (but NOT history data)
     const conflictingKeys = [
       'llm_qa_current_session',
       'structure_last_saved',
       'overview_market_analysis',
-      'llm_qa_sessions',
-      'comprehensive_history'
+      'llm_qa_sessions'
+      // Removed 'comprehensive_history' to preserve user history between sessions
     ];
     
     conflictingKeys.forEach(key => {
@@ -945,13 +966,37 @@ class AuthService {
       }
     });
     
-    console.log('[AuthService] All authentication data cleared');
+    console.log('[AuthService] All authentication data cleared (history preserved)');
   }
 
   // Get auth headers for API requests
   getAuthHeaders(): Record<string, string> {
     const token = this.getAccessToken();
     return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
+
+  // Get current user from localStorage (for user isolation)
+  getCurrentUserFromStorage(): any {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        return JSON.parse(userData);
+      }
+    } catch (error) {
+      console.warn('[AuthService] Error parsing user data from localStorage:', error);
+    }
+    return null;
+  }
+
+  // Get current user ID from localStorage (for user isolation)
+  getCurrentUserId(): string | null {
+    try {
+      const user = this.getCurrentUserFromStorage();
+      return user?.id || null;
+    } catch (error) {
+      console.warn('[AuthService] Error getting user ID from localStorage:', error);
+      return null;
+    }
   }
 }
 

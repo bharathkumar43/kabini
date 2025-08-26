@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckSquare, Square, Play, RotateCcw, Target, Filter, RefreshCw, TrendingUp, Search } from 'lucide-react';
 import { GeneratedQuestion } from '../types';
+import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 
 interface QuestionSelectionProps {
   questions: GeneratedQuestion[];

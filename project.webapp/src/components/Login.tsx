@@ -4,7 +4,7 @@ import { User, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import ErrorNotification from './ui/ErrorNotification';
-import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import { useEmojiBlocking } from '../utils/useEmojiBlocking';
 import { validateProfessionalEmail, getEmailValidationMessage, formatEmail } from '../utils/emailValidation';
 
 const Login = () => {
@@ -18,6 +18,9 @@ const Login = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { login, error, clearError, isAuthenticated } = useAuth();
+  
+  // Enhanced emoji blocking hook
+  const { handleInputChangeAggressive: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
 
   // Debug effect to monitor error state
   useEffect(() => {
@@ -47,8 +50,8 @@ const Login = () => {
     // Check immediately
     checkAuthAndRedirect();
 
-    // Set up an interval to check authentication status
-    const interval = setInterval(checkAuthAndRedirect, 500);
+    // Set up an interval to check authentication status (more frequent for better responsiveness)
+    const interval = setInterval(checkAuthAndRedirect, 100);
 
     return () => {
       clearInterval(interval);
@@ -402,7 +405,17 @@ const Login = () => {
               type="email"
               name="email"
               value={formData.email}
-              onChange={handleInputChange}
+              onChange={(e) => handleEmojiFilteredInput(e, (value) => {
+                const formattedEmail = formatEmail(value);
+                setFormData(prev => ({ ...prev, email: formattedEmail }));
+                // Trigger validation after paste
+                const emailValidation = validateProfessionalEmail(formattedEmail);
+                if (!emailValidation.isValid) {
+                  setValidationErrors(prev => ({ ...prev, email: getEmailValidationMessage(formattedEmail, emailValidation) }));
+                } else {
+                  setValidationErrors(prev => ({ ...prev, email: undefined }));
+                }
+              })}
               onPaste={(e) => handlePaste(e, (value) => {
                 const formattedEmail = formatEmail(value);
                 setFormData(prev => ({ ...prev, email: formattedEmail }));
@@ -415,6 +428,9 @@ const Login = () => {
                 }
               })}
               onKeyDown={handleKeyDown}
+              onCompositionStart={(e) => e.preventDefault()}
+              onCompositionUpdate={(e) => e.preventDefault()}
+              onCompositionEnd={(e) => e.preventDefault()}
               onBlur={handleBlur}
               required
               inputMode="email"
@@ -444,7 +460,15 @@ const Login = () => {
               type={showPassword ? 'text' : 'password'}
               name="password"
               value={formData.password}
-              onChange={handleInputChange}
+              onChange={(e) => handleEmojiFilteredInput(e, (value) => {
+                setFormData(prev => ({ ...prev, password: value }));
+                // Trigger validation after paste
+                if (!value.trim()) {
+                  setValidationErrors(prev => ({ ...prev, password: 'Please enter your password' }));
+                } else {
+                  setValidationErrors(prev => ({ ...prev, password: undefined }));
+                }
+              })}
               onPaste={(e) => handlePaste(e, (value) => {
                 setFormData(prev => ({ ...prev, password: value }));
                 // Trigger validation after paste
@@ -455,6 +479,9 @@ const Login = () => {
                 }
               })}
               onKeyDown={handleKeyDown}
+              onCompositionStart={(e) => e.preventDefault()}
+              onCompositionUpdate={(e) => e.preventDefault()}
+              onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Enter your password *"
               className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${

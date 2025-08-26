@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, Loader2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import { useEmojiBlocking } from '../utils/useEmojiBlocking';
 import { validateProfessionalEmail, getEmailValidationMessage, formatEmail } from '../utils/emailValidation';
 import ErrorNotification from './ui/ErrorNotification';
 
@@ -11,6 +11,9 @@ const ForgotPassword = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  
+  // Enhanced emoji blocking hook
+  const { handleInputChangeAggressive: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -165,7 +168,17 @@ const ForgotPassword = () => {
               <input
                 type="email"
                 value={email}
-                onChange={handleEmailChange}
+                onChange={(e) => handleEmojiFilteredInput(e, (value) => {
+                  const formattedEmail = formatEmail(value);
+                  setEmail(formattedEmail);
+                  // Trigger validation after paste
+                  const emailValidation = validateProfessionalEmail(formattedEmail);
+                  if (!emailValidation.isValid) {
+                    setError(getEmailValidationMessage(formattedEmail, emailValidation));
+                  } else {
+                    setError(null); // Clear error when email is valid
+                  }
+                })}
                 onPaste={(e) => handlePaste(e, (value) => {
                   const formattedEmail = formatEmail(value);
                   setEmail(formattedEmail);
@@ -177,10 +190,13 @@ const ForgotPassword = () => {
                     setError(null); // Clear error when email is valid
                   }
                 })}
-                onKeyDown={handleKeyDown}
-                required
-                placeholder="Enter your email address *"
-                className="w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all border-gray-300"
+                              onKeyDown={handleKeyDown}
+              onCompositionStart={(e) => e.preventDefault()}
+              onCompositionUpdate={(e) => e.preventDefault()}
+              onCompositionEnd={(e) => e.preventDefault()}
+              required
+              placeholder="Enter your email address *"
+              className="w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all border-gray-300"
               />
               
               {/* Remove inline error message - now using ErrorNotification toggle */}

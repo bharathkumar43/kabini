@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SessionData } from '../types';
 import { Filter, Calendar, Cpu, Link, ChevronDown, X, History as HistoryIcon } from 'lucide-react';
+import { useEmojiBlocking } from '../utils/useEmojiBlocking';
 
 interface AnswerHistorySidebarProps {
   answerSessions: SessionData[];
@@ -41,6 +42,9 @@ export function AnswerHistorySidebar({
   // New filter states
   const [llmProviderFilter, setLlmProviderFilter] = useState(currentFilters?.llmProvider || '');
   const [llmModelFilter, setLlmModelFilter] = useState(currentFilters?.llmModel || '');
+  
+  // Enhanced emoji blocking hook
+  const { handleInputChange: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
 
   // Update local state when currentFilters change
   useEffect(() => {
@@ -343,7 +347,9 @@ export function AnswerHistorySidebar({
         type="text"
         placeholder="Filter by date/time..."
         value={filter}
-        onChange={e => setFilter(e.target.value)}
+        onChange={(e) => handleEmojiFilteredInput(e, (value) => setFilter(value))}
+        onPaste={(e) => handlePaste(e, (value) => setFilter(value))}
+        onKeyDown={handleKeyDown}
         className="mb-3 px-3 py-2 border rounded w-full text-sm"
       />
 

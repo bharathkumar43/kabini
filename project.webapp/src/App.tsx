@@ -6,7 +6,7 @@ import { Statistics } from './components/Statistics';
 import Login from './components/Login';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { downloadFile } from './utils/fileUtils';
-import type { QAItem, SessionData, User as UserType } from './types';
+import type { QAItem, SessionData, User as UserType, QAHistoryItem } from './types';
 import type { UrlData } from './components/ContentInput';
 import { useAuth } from './contexts/AuthContext';
 import { calculateCost } from './utils/pricing';
@@ -652,7 +652,24 @@ function QAGenerationPage() {
     
     // Save to history
     console.log('[App] Saving QA session to history:', sessionData);
-    historyService.addQAHistory(sessionData);
+    
+    // Create a proper QAHistoryItem
+    const qaHistoryItem: QAHistoryItem = {
+      id: `qa-history-${Date.now()}`,
+      type: 'qa',
+      name: `Q&A Analysis - ${new Date().toLocaleDateString()}`,
+      timestamp: new Date().toISOString(),
+      status: 'completed',
+      userId: user?.id || 'anonymous',
+      sessionData: sessionData
+    };
+    
+    historyService.addHistoryItem(qaHistoryItem);
+    
+    // Dispatch custom event to notify other components (like History) that new analysis was created
+    window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+      detail: { type: 'qa', timestamp: new Date().toISOString() } 
+    }));
     
     // Record a non-intrusive save flag instead of a popup
     try { localStorage.setItem('qa_last_saved', new Date().toISOString()); } catch {}
@@ -917,7 +934,7 @@ function QAGenerationPage() {
           <div>
             <label className="block text-base font-semibold text-black mb-3 flex items-center gap-2">
               <Globe className="w-5 h-5 text-black" />
-              Add URL to crawl
+              Add Blog URL to crawl
             </label>
             <div className="space-y-3">
               {/* URL Input with Extract Button */}

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { User, AuthState, LoginResponse } from '../types';
 import { authService } from '../services/authService';
+import { useNavigate } from 'react-router-dom';
 
 // Action types
 type AuthAction =
@@ -78,6 +79,15 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  
+  // Navigation effect - redirect to overview after successful authentication
+  useEffect(() => {
+    if (state.isAuthenticated && state.user && !state.isLoading) {
+      console.log('🔐 AuthContext: User authenticated, should redirect to overview');
+      // The actual navigation will be handled by the Login/SignUp components
+      // This effect just logs the state change
+    }
+  }, [state.isAuthenticated, state.user, state.isLoading]);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -105,6 +115,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const user = await authService.getCurrentUser();
           if (user) {
             console.log('🔐 AuthContext: User info retrieved, dispatching AUTH_SUCCESS');
+            
+            // Store user data in localStorage for persistence
+            try {
+              localStorage.setItem('user', JSON.stringify(user));
+              console.log('🔐 AuthContext: User data stored in localStorage on startup:', user);
+            } catch (error) {
+              console.warn('🔐 AuthContext: Failed to store user data in localStorage on startup:', error);
+            }
+            
             dispatch({ 
               type: 'AUTH_SUCCESS', 
               payload: { user, token: authService.getAccessToken()! } 
@@ -232,6 +251,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       
       console.log('🔐 AuthContext: Dispatching AUTH_SUCCESS with user:', response.user);
+      
+      // Store user data in localStorage for persistence and user isolation
+      try {
+        localStorage.setItem('user', JSON.stringify(response.user));
+        console.log('🔐 AuthContext: User data stored in localStorage:', response.user);
+      } catch (error) {
+        console.warn('🔐 AuthContext: Failed to store user data in localStorage:', error);
+      }
+      
       dispatch({ 
         type: 'AUTH_SUCCESS', 
         payload: { user: response.user, token: response.accessToken } 
@@ -261,11 +289,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = async () => {
     try {
       await authService.logout();
+      
+      // Clear user data from localStorage
+      try {
+        localStorage.removeItem('user');
+        console.log('🔐 AuthContext: User data cleared from localStorage on logout');
+      } catch (error) {
+        console.warn('🔐 AuthContext: Failed to clear user data from localStorage on logout:', error);
+      }
+      
       dispatch({ type: 'AUTH_LOGOUT' });
     } catch (error) {
       console.error('Logout error:', error);
       // Still clear the state even if logout fails
       authService.clearTokens();
+      
+      // Clear user data from localStorage even on logout failure
+      try {
+        localStorage.removeItem('user');
+        console.log('🔐 AuthContext: User data cleared from localStorage on logout failure');
+      } catch (clearError) {
+        console.warn('🔐 AuthContext: Failed to clear user data from localStorage on logout failure:', clearError);
+      }
+      
       dispatch({ type: 'AUTH_LOGOUT' });
     }
   };
@@ -280,6 +326,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const user = await authService.getCurrentUser();
       if (user) {
+        // Store user data in localStorage for persistence
+        try {
+          localStorage.setItem('user', JSON.stringify(user));
+          console.log('🔐 AuthContext: User data refreshed in localStorage:', user);
+        } catch (error) {
+          console.warn('🔐 AuthContext: Failed to store refreshed user data in localStorage:', error);
+        }
+        
         dispatch({ 
           type: 'AUTH_SUCCESS', 
           payload: { user, token: authService.getAccessToken()! } 

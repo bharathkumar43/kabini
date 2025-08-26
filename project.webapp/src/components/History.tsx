@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { QAItem, SessionData, HistoryItem, QAHistoryItem, AIVisibilityHistoryItem, ContentAnalysisHistoryItem, StructureAnalysisHistoryItem } from '../types';
 import { historyService } from '../services/historyService';
+import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 
 interface HistoryProps {
   qaItems: QAItem[];
@@ -99,29 +100,56 @@ export function History({ qaItems, onExport }: HistoryProps) {
     }
   }, [refreshKey]);
 
-  // Listen for storage changes to auto-refresh
+  // Load history items when component mounts
+  useEffect(() => {
+    console.log('[History] Component mounted, loading initial history items');
+    const items = historyService.getHistoryItems();
+    setHistoryItems(items);
+  }, []);
+
+  // Sync with qaItems prop changes (when new analysis is created)
+  useEffect(() => {
+    if (qaItems && qaItems.length > 0) {
+      console.log('[History] qaItems prop changed, syncing with history service');
+      // Trigger a refresh to get the latest history items
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [qaItems]);
+
+  // Listen for storage changes and custom events to auto-refresh
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'comprehensive_history') {
+      if (e.key && e.key.includes('comprehensive_history')) {
         console.log('[History] Storage changed, refreshing history');
         setRefreshKey(prev => prev + 1);
       }
     };
 
+    // Custom event listener for when new analysis is created
+    const handleNewAnalysis = () => {
+      console.log('[History] New analysis event received, refreshing history');
+      setRefreshKey(prev => prev + 1);
+    };
+
+    // Listen for custom events from other components
+    window.addEventListener('new-analysis-created', handleNewAnalysis);
     window.addEventListener('storage', handleStorageChange);
     
-    // Also check for changes every 2 seconds (fallback)
-    const interval = setInterval(() => {
+    // Check for changes only when the component is focused
+    const handleFocus = () => {
       const currentItems = historyService.getHistoryItems();
       if (currentItems.length !== historyItems.length) {
-        console.log('[History] Item count changed, refreshing history');
+        console.log('[History] Item count changed on focus, refreshing history');
         setHistoryItems(currentItems);
       }
-    }, 2000);
+    };
 
+    window.addEventListener('focus', handleFocus);
+    
     return () => {
+      window.removeEventListener('new-analysis-created', handleNewAnalysis);
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [historyItems.length]);
 
@@ -131,13 +159,13 @@ export function History({ qaItems, onExport }: HistoryProps) {
     const statuses = new Set<string>();
 
     historyItems.forEach(item => {
-      types.add(item.type);
-      statuses.add(item.status);
+      if (item.type) types.add(item.type);
+      if (item.status) statuses.add(item.status);
     });
 
     return {
-      types: Array.from(types).sort(),
-      statuses: Array.from(statuses).sort()
+      types: Array.from(types).filter(Boolean).sort(),
+      statuses: Array.from(statuses).filter(Boolean).sort()
     };
   }, [historyItems, refreshKey]);
 
@@ -362,6 +390,8 @@ export function History({ qaItems, onExport }: HistoryProps) {
   };
 
   const getTypeDisplayName = (type: string) => {
+    if (!type) return 'Unknown';
+    
     switch (type) {
       case 'qa':
         return 'Q&A Sessions';
@@ -377,6 +407,8 @@ export function History({ qaItems, onExport }: HistoryProps) {
   };
 
   const getTypeIcon = (type: string) => {
+    if (!type) return <Tag className="h-4 w-4" />;
+    
     switch (type) {
       case 'qa':
         return <FileText className="h-4 w-4" />;
@@ -530,8 +562,8 @@ export function History({ qaItems, onExport }: HistoryProps) {
               </div>
             </div>
           </div>
-        <div className="flex items-center gap-2">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
             {item.status}
           </span>
           <input
@@ -623,8 +655,8 @@ export function History({ qaItems, onExport }: HistoryProps) {
               </div>
             </div>
           </div>
-        <div className="flex items-center gap-2">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
             {item.status}
           </span>
           <input
@@ -1280,7 +1312,13 @@ export function History({ qaItems, onExport }: HistoryProps) {
                   type="text"
                   placeholder="Search all analysis..."
                   value={filters.searchTerm}
-                  onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+                  onChange={(e) => handleEmojiFilteredInput(e, (value) => setFilters(prev => ({ ...prev, searchTerm: value })))}
+                  onPaste={(e) => handlePaste(e, (value) => setFilters(prev => ({ ...prev, searchTerm: value })))}
+                  onKeyDown={(e) => {
+                    if (!handleKeyDown(e)) {
+                      e.preventDefault();
+                    }
+                  }}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-black placeholder-gray-400 relative z-10"
                 />
               </div>
@@ -1323,7 +1361,7 @@ export function History({ qaItems, onExport }: HistoryProps) {
               >
                 <option value="all">All Types</option>
                 {filterOptions.types.map(type => (
-                  <option key={type} value={type}>{getTypeDisplayName(type)}</option>
+                  <option key={type} value={type}>{type ? getTypeDisplayName(type) : 'Unknown'}</option>
                 ))}
               </select>
             </div>
@@ -1338,7 +1376,7 @@ export function History({ qaItems, onExport }: HistoryProps) {
               >
                 <option value="all">All Status</option>
                 {filterOptions.statuses.map(status => (
-                  <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
+                  <option key={status} value={status}>{status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}</option>
                 ))}
               </select>
             </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, DollarSign, Activity, Calendar, Users, Target, Zap } from 'lucide-react';
 import { SessionData, QAItem, HistoryItem, QAHistoryItem } from '../types';
 import { historyService } from '../services/historyService';
+import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 
 interface StatisticsProps {
   sessions: SessionData[];

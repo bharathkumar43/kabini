@@ -183,9 +183,10 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
   };
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newContent = e.target.value;
-    setContent(newContent);
-    updateMetrics(newContent);
+    const newContent = handleEmojiFilteredInput(e, (value) => {
+      setContent(value);
+      updateMetrics(value);
+    });
   };
 
   const handleGenerateQA = async () => {
@@ -374,6 +375,11 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
           <textarea
             value={content}
             onChange={handleContentChange}
+            onPaste={(e) => handlePaste(e, (value) => {
+              setContent(value);
+              updateMetrics(value);
+            })}
+            onKeyDown={handleKeyDown}
             placeholder="Content will be automatically populated from URLs, or paste your content here..."
             className="w-full h-48 bg-white border border-black/20 rounded-lg px-4 py-3 text-black text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
           />

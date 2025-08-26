@@ -345,6 +345,7 @@ export function Overview() {
             type: 'ai-visibility' as const,
             name: `AI Visibility Analysis - ${finalCompanyName}`,
             timestamp: new Date().toISOString(),
+            status: 'completed' as const,
             company: finalCompanyName,
             industry: industry || undefined,
             analysis: {
@@ -376,6 +377,12 @@ export function Overview() {
           };
           
           historyService.addHistoryItem(historyItem);
+          
+          // Dispatch custom event to notify other components (like History) that new analysis was created
+          window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+            detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
+          }));
+          
           console.log('[Overview] Analysis saved to history:', historyItem);
         } catch (e) {
           console.warn('Failed to save analysis to history:', e);

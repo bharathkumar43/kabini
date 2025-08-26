@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SessionData } from '../types';
 import { Filter, Calendar, Cpu, Link, ChevronDown, X, History as HistoryIcon } from 'lucide-react';
+import { useEmojiBlocking } from '../utils/useEmojiBlocking';
 
 interface QuestionHistorySidebarProps {
   questionSessions: SessionData[];
@@ -42,6 +43,9 @@ export function QuestionHistorySidebar({
   const [llmProviderFilter, setLlmProviderFilter] = useState(currentFilters?.llmProvider || '');
   const [llmModelFilter, setLlmModelFilter] = useState(currentFilters?.llmModel || '');
   const [blogLinkFilter, setBlogLinkFilter] = useState(currentFilters?.blogLink || '');
+  
+  // Enhanced emoji blocking hook
+  const { handleInputChange: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
 
   // Update local state when currentFilters change
   useEffect(() => {
@@ -289,7 +293,9 @@ export function QuestionHistorySidebar({
             <div className="space-y-2">
               <textarea
                 value={blogLinkFilter}
-                onChange={e => setBlogLinkFilter(e.target.value)}
+                onChange={(e) => handleEmojiFilteredInput(e, (value) => setBlogLinkFilter(value))}
+                onPaste={(e) => handlePaste(e, (value) => setBlogLinkFilter(value))}
+                onKeyDown={handleKeyDown}
                 placeholder="Paste one or more URLs (one per line or separated by commas)..."
                 className="w-full px-2 py-1 border rounded text-xs resize-none"
                 rows={3}
@@ -411,7 +417,9 @@ export function QuestionHistorySidebar({
         type="text"
         placeholder="Filter by date/time..."
         value={filter}
-        onChange={e => setFilter(e.target.value)}
+        onChange={(e) => handleEmojiFilteredInput(e, (value) => setFilter(value))}
+        onPaste={(e) => handlePaste(e, (value) => setFilter(value))}
+        onKeyDown={handleKeyDown}
         className="mb-3 px-3 py-2 border rounded w-full text-sm"
       />
 

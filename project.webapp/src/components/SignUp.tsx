@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import ErrorNotification from './ui/ErrorNotification';
 import PasswordStrengthIndicator from './ui/PasswordStrengthIndicator';
-import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import { useEmojiBlocking } from '../utils/useEmojiBlocking';
 import { validateProfessionalEmail, getEmailValidationMessage, formatEmail } from '../utils/emailValidation';
 
 const SignUp = () => {
@@ -24,6 +24,9 @@ const SignUp = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { login, error, clearError, isAuthenticated } = useAuth();
+  
+  // Enhanced emoji blocking hook
+  const { handleInputChangeAggressive: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
 
   // Effect to redirect after successful authentication
   useEffect(() => {
@@ -46,8 +49,8 @@ const SignUp = () => {
     // Check immediately
     checkAuthAndRedirect();
 
-    // Set up an interval to check authentication status
-    const interval = setInterval(checkAuthAndRedirect, 500);
+    // Set up an interval to check authentication status (more frequent for better responsiveness)
+    const interval = setInterval(checkAuthAndRedirect, 100);
 
     return () => clearInterval(interval);
   }, [navigate, isAuthenticated]);
@@ -185,21 +188,23 @@ const SignUp = () => {
     
     try {
       const response = await authService.register({
-        firstName: formData.firstName,
-        lastName: formData.lastName,
         email: formData.email,
-        password: formData.password
+        password: formData.password,
+        name: `${formData.firstName} ${formData.lastName}`,
+        displayName: `${formData.firstName} ${formData.lastName}`
       });
 
       if (response.success) {
-        console.log('[SignUp] Sign up successful, attempting login...');
-        // Automatically log in the user after successful signup
-        await login('register', {
-          email: formData.email, 
-          password: formData.password,
-          name: `${formData.firstName} ${formData.lastName}`,
-          displayName: `${formData.firstName} ${formData.lastName}`
-        });
+        console.log('[SignUp] Sign up successful, user is now logged in');
+        // User is already logged in after successful registration
+        // The authService.register already stored tokens and returned user data
+        // Clear any errors and redirect immediately
+        setAuthError(''); // Clear any previous errors
+        setValidationError(''); // Clear any validation errors
+        
+        // Force immediate navigation to overview
+        console.log('[SignUp] Forcing immediate navigation to overview...');
+        navigate('/overview', { replace: true });
       } else {
         setValidationError(response.error || 'Sign up failed. Please try again.');
       }
@@ -289,6 +294,9 @@ const SignUp = () => {
                   setFormData(prev => ({ ...prev, firstName: filteredValue }));
                 })}
                 onKeyDown={handleKeyDown}
+                onCompositionStart={(e) => e.preventDefault()}
+                onCompositionUpdate={(e) => e.preventDefault()}
+                onCompositionEnd={(e) => e.preventDefault()}
                 required
                 placeholder="Enter your first name *"
                 pattern="[A-Za-z]+"
@@ -315,6 +323,9 @@ const SignUp = () => {
                   setFormData(prev => ({ ...prev, lastName: filteredValue }));
                 })}
                 onKeyDown={handleKeyDown}
+                onCompositionStart={(e) => e.preventDefault()}
+                onCompositionUpdate={(e) => e.preventDefault()}
+                onCompositionEnd={(e) => e.preventDefault()}
                 required
                 placeholder="Enter your last name *"
                 pattern="[A-Za-z]+"
@@ -361,6 +372,9 @@ const SignUp = () => {
                 }
               })}
               onKeyDown={handleKeyDown}
+              onCompositionStart={(e) => e.preventDefault()}
+              onCompositionUpdate={(e) => e.preventDefault()}
+              onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Enter your email address *"
               className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
@@ -424,6 +438,9 @@ const SignUp = () => {
                   }
                 })}
                 onKeyDown={handleKeyDown}
+                onCompositionStart={(e) => e.preventDefault()}
+                onCompositionUpdate={(e) => e.preventDefault()}
+                onCompositionEnd={(e) => e.preventDefault()}
                 required
                 placeholder="Create a password *"
                 className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
@@ -463,6 +480,9 @@ const SignUp = () => {
                 setFormData(prev => ({ ...prev, confirmPassword: value }));
               })}
               onKeyDown={handleKeyDown}
+              onCompositionStart={(e) => e.preventDefault()}
+              onCompositionUpdate={(e) => e.preventDefault()}
+              onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Re-enter your password *"
               className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"

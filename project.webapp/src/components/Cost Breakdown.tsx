@@ -7,6 +7,7 @@ import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Calendar, Download, TrendingUp, TrendingDown, DollarSign, BarChart3, PieChart, Filter } from 'lucide-react';
+import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 
 interface CostData {
   id: string;
@@ -276,7 +277,9 @@ const CostBreakdown: React.FC = () => {
               <Input
                 placeholder="Search providers, models, sessions..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleEmojiFilteredInput(e, (value) => setSearchTerm(value))}
+                onPaste={(e) => handlePaste(e, (value) => setSearchTerm(value))}
+                onKeyDown={handleKeyDown}
               />
             </div>
           </div>
