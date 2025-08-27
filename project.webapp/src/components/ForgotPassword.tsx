@@ -68,52 +68,25 @@ const ForgotPassword = () => {
     setIsLoading(true);
     
     try {
-      const res = await fetch('http://localhost:5000/api/auth/forgot-password', {
+      const response = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
       });
-      
-      console.log('[ForgotPassword] API response status:', res.status);
-      
-      let data = {};
-      try {
-        const responseText = await res.text();
-        console.log('[ForgotPassword] Raw response text:', responseText);
-        
-        if (responseText) {
-          data = JSON.parse(responseText);
-          console.log('[ForgotPassword] Parsed response data:', data);
-        }
-      } catch (parseError) {
-        console.log('[ForgotPassword] Failed to parse response as JSON:', parseError);
-        data = {};
+
+      const data = await response.json();
+      console.log('[ForgotPassword] Response:', response.status, data);
+
+      if (response.ok) {
+        console.log('[ForgotPassword] Password reset email sent successfully');
+        setSubmitted(true);
+      } else {
+        console.error('[ForgotPassword] Failed to send reset email:', data.error);
+        setError(data.error || 'Failed to send reset email. Please try again.');
       }
       
-      // Handle different response statuses
-      if (res.status === 404) {
-        console.log('[ForgotPassword] No account found, setting invalid credentials message');
-        setError('Invalid credentials please check your credentials and try logging in');
-        return;
-      } else if (res.status === 401) {
-        console.log('[ForgotPassword] Unauthorized, setting invalid credentials message');
-        setError('Invalid credentials please check your credentials and try logging in');
-        return;
-      } else if (res.status === 400) {
-        console.log('[ForgotPassword] Bad request, setting invalid credentials message');
-        setError('Invalid credentials please check your credentials and try logging in');
-        return;
-      } else if (!res.ok) {
-        console.log('[ForgotPassword] API error, setting invalid credentials message');
-        setError('Invalid credentials please check your credentials and try logging in');
-        return;
-      }
-      
-      console.log('[ForgotPassword] Success, setting submitted state');
-      setSubmitted(true);
-      
-    } catch (err: any) {
-      console.log('[ForgotPassword] Network error caught:', err);
+    } catch (error: any) {
+      console.error('[ForgotPassword] Error during forgot password request:', error);
       setError('Network error. Please check your connection and try again.');
     } finally {
       setIsLoading(false);

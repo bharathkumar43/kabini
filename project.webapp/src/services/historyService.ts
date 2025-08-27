@@ -1,179 +1,129 @@
 import { HistoryItem, QAHistoryItem, AIVisibilityHistoryItem, ContentAnalysisHistoryItem, StructureAnalysisHistoryItem, SessionData } from '../types';
 import { authService } from './authService';
 
-// Get user-specific history key
-const getHistoryKey = (): string => {
-  // Try to get user ID from authService first (more reliable)
-  const userId = authService.getCurrentUserId();
-  if (userId) {
-    console.log('[HistoryService] Using user-specific history key for user:', userId);
-    return `comprehensive_history_${userId}`;
-  }
-  
-  // Fallback to localStorage (for backward compatibility)
-  try {
-    const user = localStorage.getItem('user');
-    if (user) {
-      const userData = JSON.parse(user);
-      if (userData.id) {
-        console.log('[HistoryService] Using localStorage user ID for history key:', userData.id);
-        return `comprehensive_history_${userData.id}`;
-      }
-    }
-  } catch (edit) {
-    console.warn('[HistoryService] Could not parse user data from localStorage');
-  }
-  
-  // Fallback to anonymous storage for backward compatibility
-  console.log('[HistoryService] Using anonymous history key (no user authenticated)');
-  return 'comprehensive_history';
-};
-
 export interface HistoryService {
-  addHistoryItem: (item: HistoryItem) => void;
-  getHistoryItems: () => HistoryItem[];
-  clearHistory: () => void;
-  deleteHistoryItem: (id: string) => void;
-  exportHistoryItem: (id: string) => { content: string; filename: string; mimeType: string } | null;
-  exportAllHistory: () => { content: string; filename: string; mimeType: string };
-  clearUserData: () => void;
+  addHistoryItem: (item: HistoryItem) => Promise<void>;
+  getHistoryItems: () => Promise<HistoryItem[]>;
+  clearHistory: () => Promise<void>;
+  deleteHistoryItem: (id: string) => Promise<void>;
+  exportHistoryItem: (id: string) => Promise<{ content: string; filename: string; mimeType: string } | null>;
+  exportAllHistory: () => Promise<{ content: string; filename: string; mimeType: string }>;
+  clearUserData: () => Promise<void>;
 }
 
 class LocalHistoryService implements HistoryService {
-  private getHistoryFromStorage(): HistoryItem[] {
+  private getStorageKey(key: string): string {
+    const userId = authService.getCurrentUserId();
+    return userId ? `${key}_${userId}` : `${key}_anonymous`;
+  }
+
+  private getHistoryKey(): string {
+    return this.getStorageKey('comprehensive_history');
+  }
+
+  async addHistoryItem(item: HistoryItem): Promise<void> {
     try {
-      const historyKey = getHistoryKey();
-      const stored = localStorage.getItem(historyKey);
-      return stored ? JSON.parse(stored) : [];
+      console.log('[HistoryService] Adding history item to localStorage:', item);
+      
+      const historyKey = this.getHistoryKey();
+      const existingHistory = this.getHistoryFromStorage(historyKey);
+      
+      // Add new item to the beginning
+      const updatedHistory = [item, ...existingHistory];
+      
+      // Save back to localStorage
+      localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
+      
+      console.log('[HistoryService] History item saved successfully to localStorage');
     } catch (error) {
-      console.error('Error loading history from storage:', error);
+      console.error('[HistoryService] Error saving history item to localStorage:', error);
+      throw error;
+    }
+  }
+
+  async getHistoryItems(): Promise<HistoryItem[]> {
+    try {
+      const historyKey = this.getHistoryKey();
+      const items = this.getHistoryFromStorage(historyKey);
+      console.log('[HistoryService] Retrieved history items from localStorage:', items.length);
+      return items;
+    } catch (error) {
+      console.error('[HistoryService] Error getting history items from localStorage:', error);
       return [];
     }
   }
 
-  private saveHistoryToStorage(items: HistoryItem[]): void {
+  async clearHistory(): Promise<void> {
     try {
-      const historyKey = getHistoryKey();
-      console.log('[HistoryService] Saving to storage:', items.length, 'items');
-      console.log('[HistoryService] Items being saved:', items);
-      localStorage.setItem(historyKey, JSON.stringify(items));
-      console.log('[HistoryService] Successfully saved to localStorage with key:', historyKey);
+      console.log('[HistoryService] Clearing history from localStorage...');
+      const historyKey = this.getHistoryKey();
+      localStorage.removeItem(historyKey);
+      console.log('[HistoryService] History cleared successfully from localStorage');
     } catch (error) {
-      console.error('Error saving history to storage:', error);
+      console.error('[HistoryService] Error clearing history from localStorage:', error);
+      throw error;
     }
   }
 
-  addHistoryItem(item: HistoryItem): void {
-    console.log('[HistoryService] Adding history item:', item);
-    const items = this.getHistoryFromStorage();
-    // Check if item already exists (by ID)
-    const existingIndex = items.findIndex(existing => existing.id === item.id);
-    
-    if (existingIndex >= 0) {
-      // Update existing item
-      items[existingIndex] = item;
-      console.log('[HistoryService] Updated existing item');
-    } else {
-      // Add new item at the beginning
-      items.unshift(item);
-      console.log('[HistoryService] Added new item, total items:', items.length);
-    }
-    
-    this.saveHistoryToStorage(items);
-  }
-
-  getHistoryItems(): HistoryItem[] {
-    const items = this.getHistoryFromStorage();
-    console.log('[HistoryService] Getting history items:', items.length, 'items');
-    
-    // Filter out any sample data (items with 'sample-' prefix)
-    const realItems = items.filter(item => !item.id.startsWith('sample-'));
-    
-    // Migrate existing AI Visibility Analysis items to include status field
-    const migratedItems = realItems.map(item => {
-      if (item.type === 'ai-visibility' && !item.status) {
-        console.log('[HistoryService] Migrating AI Visibility item to include status:', item.id);
-        return {
-          ...item,
-          status: 'completed' as const
-        };
-      }
-      return item;
-    });
-    
-    // Check if any items were migrated
-    const hasChanges = migratedItems.some((item, index) => item !== realItems[index]);
-    if (hasChanges) {
-      console.log('[HistoryService] Migrated items, saving updated history');
-      this.saveHistoryToStorage(migratedItems);
-      return migratedItems;
-    }
-    
-    if (realItems.length !== items.length) {
-      console.log('[HistoryService] Filtered out sample data, keeping only real items:', realItems.length);
-      this.saveHistoryToStorage(realItems);
-    }
-    
-    return realItems;
-  }
-
-  clearHistory(): void {
-    this.saveHistoryToStorage([]);
-  }
-
-  clearSampleData(): void {
-    const items = this.getHistoryFromStorage();
-    const realItems = items.filter(item => !item.id.startsWith('sample-'));
-    this.saveHistoryToStorage(realItems);
-    console.log('[HistoryService] Cleared sample data, kept', realItems.length, 'real items');
-  }
-
-  deleteHistoryItem(id: string): void {
-    const items = this.getHistoryFromStorage();
-    const filteredItems = items.filter(item => item.id !== id);
-    this.saveHistoryToStorage(filteredItems);
-  }
-
-  exportHistoryItem(id: string): { content: string; filename: string; mimeType: string } | null {
+  async deleteHistoryItem(id: string): Promise<void> {
     try {
-      console.log('[HistoryService] Exporting item:', id);
-      const items = this.getHistoryFromStorage();
-      console.log('[HistoryService] All items:', items);
-      const item = items.find(item => item.id === id);
+      console.log('[HistoryService] Deleting history item from localStorage:', id);
+      const historyKey = this.getHistoryKey();
+      const existingHistory = this.getHistoryFromStorage(historyKey);
       
+      const updatedHistory = existingHistory.filter(item => item.id !== id);
+      localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
+      
+      console.log('[HistoryService] History item deleted successfully from localStorage');
+    } catch (error) {
+      console.error('[HistoryService] Error deleting history item from localStorage:', error);
+      throw error;
+    }
+  }
+
+  async exportHistoryItem(id: string): Promise<{ content: string; filename: string; mimeType: string } | null> {
+    try {
+      console.log('[HistoryService] Exporting history item from localStorage:', id);
+      const historyKey = this.getHistoryKey();
+      const existingHistory = this.getHistoryFromStorage(historyKey);
+      
+      const item = existingHistory.find(item => item.id === id);
       if (!item) {
-        console.error('[HistoryService] Item not found:', id);
         return null;
       }
 
-      console.log('[HistoryService] Found item:', item);
-      const content = this.formatHistoryItemForExport(item);
-      const filename = `${item.type}_${item.id}_${new Date().toISOString().split('T')[0]}.json`;
+      const content = JSON.stringify(item, null, 2);
+      const filename = `${item.type}_${item.id}.json`;
       
+      console.log('[HistoryService] History item exported successfully from localStorage');
       return {
         content,
         filename,
         mimeType: 'application/json'
       };
     } catch (error) {
-      console.error('[HistoryService] Error exporting item:', error);
+      console.error('[HistoryService] Error exporting history item from localStorage:', error);
       return null;
     }
   }
 
-  exportAllHistory(): { content: string; filename: string; mimeType: string } {
+  async exportAllHistory(): Promise<{ content: string; filename: string; mimeType: string }> {
     try {
-      const items = this.getHistoryFromStorage();
-      const content = JSON.stringify(items, null, 2);
-      const filename = `complete_history_${new Date().toISOString().split('T')[0]}.json`;
+      console.log('[HistoryService] Exporting all history from localStorage...');
+      const historyKey = this.getHistoryKey();
+      const existingHistory = this.getHistoryFromStorage(historyKey);
       
+      const content = JSON.stringify(existingHistory, null, 2);
+      const filename = `all_history_${new Date().toISOString().split('T')[0]}.json`;
+      
+      console.log('[HistoryService] All history exported successfully from localStorage');
       return {
         content,
         filename,
         mimeType: 'application/json'
       };
     } catch (error) {
-      console.error('[HistoryService] Error exporting all history:', error);
+      console.error('[HistoryService] Error exporting all history from localStorage:', error);
       return {
         content: '[]',
         filename: 'empty_history.json',
@@ -182,43 +132,42 @@ class LocalHistoryService implements HistoryService {
     }
   }
 
-  private formatHistoryItemForExport(item: HistoryItem): string {
+  async clearUserData(): Promise<void> {
     try {
-      return JSON.stringify(item, null, 2);
+      console.log('[HistoryService] Clearing user data from localStorage...');
+      const userId = authService.getCurrentUserId();
+      
+      if (userId) {
+        // Clear all user-specific keys
+        const keysToRemove = [
+          this.getStorageKey('comprehensive_history'),
+          this.getStorageKey('qa_history'),
+          this.getStorageKey('ai_visibility_history'),
+          this.getStorageKey('content_analysis_history'),
+          this.getStorageKey('structure_analysis_history')
+        ];
+        
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+        });
+        
+        console.log('[HistoryService] User data cleared successfully from localStorage');
+      }
     } catch (error) {
-      console.error('[HistoryService] Error formatting item for export:', error);
-      return JSON.stringify({ error: 'Could not format item', id: item.id, type: item.type });
+      console.error('[HistoryService] Error clearing user data from localStorage:', error);
+      throw error;
     }
   }
 
-  clearUserData(): void {
+  private getHistoryFromStorage(key: string): HistoryItem[] {
     try {
-      const currentUserId = authService.getCurrentUserId();
-      if (currentUserId) {
-        // Clear current user's history
-        const userHistoryKey = `comprehensive_history_${currentUserId}`;
-        localStorage.removeItem(userHistoryKey);
-        console.log('[HistoryService] Cleared history data for user:', currentUserId);
-      }
-      
-      // Also clear any other user-specific data that might exist
-      const allKeys = Object.keys(localStorage);
-      const userHistoryKeys = allKeys.filter(key => key.startsWith('comprehensive_history_'));
-      
-      userHistoryKeys.forEach(key => {
-        try {
-          localStorage.removeItem(key);
-          console.log('[HistoryService] Cleared additional user history key:', key);
-        } catch (error) {
-          console.warn('[HistoryService] Could not clear key:', key, error);
-        }
-      });
-      
-      console.log('[HistoryService] All user-specific data cleared');
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
     } catch (error) {
-      console.error('[HistoryService] Error clearing user data:', error);
+      console.error('[HistoryService] Error parsing history from localStorage:', error);
+      return [];
     }
   }
 }
 
-export const historyService = new LocalHistoryService(); 
+export const historyService = new LocalHistoryService();

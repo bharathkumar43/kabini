@@ -83,8 +83,26 @@ interface ContentStructureAnalysisProps {
   url?: string;
 }
 
-const STRUCTURE_ANALYSIS_KEY = 'structure_analysis_state';
-const HISTORY_KEY = 'comprehensive_history';
+// Get user-specific keys for localStorage
+const getStructureAnalysisKey = (): string => {
+  const userId = authService.getCurrentUserId();
+  return userId ? `structure_analysis_state_${userId}` : 'structure_analysis_state_anonymous';
+};
+
+const getHistoryKey = (): string => {
+  const userId = authService.getCurrentUserId();
+  return userId ? `comprehensive_history_${userId}` : 'comprehensive_history_anonymous';
+};
+
+const getStructureLastSavedKey = (): string => {
+  const userId = authService.getCurrentUserId();
+  return userId ? `structure_last_saved_${userId}` : 'structure_last_saved_anonymous';
+};
+
+const getStructureLastPersistedKey = (): string => {
+  const userId = authService.getCurrentUserId();
+  return userId ? `structure_last_persisted_${userId}` : 'structure_last_persisted_anonymous';
+};
 
 // Simple hash function for content
 const hashContent = (content: string): string => {
@@ -125,7 +143,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
   const [disableAutoRestore, setDisableAutoRestore] = useState<boolean>(true);
 
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
-  const [historyItems, setHistoryItems] = useLocalStorage<StructureAnalysisHistoryItem[]>(HISTORY_KEY, []);
+  const [historyItems, setHistoryItems] = useLocalStorage<StructureAnalysisHistoryItem[]>(getHistoryKey(), []);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showQualityDetails, setShowQualityDetails] = useState<boolean>(false);
@@ -286,14 +304,14 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     }
 
     // Non-intrusive toggle instead of popup
-    try { localStorage.setItem('structure_last_saved', new Date().toISOString()); } catch {}
+            try { localStorage.setItem(getStructureLastSavedKey(), new Date().toISOString()); } catch {}
   };
 
   // Restore state on mount (lightweight only)
   useEffect(() => {
     // First, try to restore from the most recent analysis (regardless of content prop)
     const keys = Object.keys(localStorage);
-    const structureKeys = keys.filter(key => key.startsWith(STRUCTURE_ANALYSIS_KEY));
+            const structureKeys = keys.filter(key => key.startsWith(getStructureAnalysisKey()));
     
     if (structureKeys.length > 0) {
       // Get the most recent analysis by finding the one with the most recent timestamp
@@ -382,7 +400,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
         pastedContent,
         savedAt: Date.now(),
       } as any;
-      localStorage.setItem('structure_last_persisted', JSON.stringify(payload));
+              localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(payload));
       console.log('[Content Analysis] Analysis persisted for navigation');
     } catch (error) {
       console.error('[Content Analysis] Error persisting analysis:', error);
@@ -405,7 +423,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
             pastedContent,
             savedAt: Date.now(),
           } as any;
-          localStorage.setItem('structure_last_persisted', JSON.stringify(payload));
+          localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(payload));
           console.log('[Content Analysis] Analysis persisted on component unmount');
         } catch (error) {
           console.error('[Content Analysis] Error persisting analysis on unmount:', error);
@@ -495,7 +513,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
   useEffect(() => {
     if (pastedContent && pastedContent.trim().length > 0 && isComponentActive) {
       const contentHash = hashContent(pastedContent);
-      const storageKey = `${STRUCTURE_ANALYSIS_KEY}_${contentHash}`;
+              const storageKey = `${getStructureAnalysisKey()}_${contentHash}`;
 
       const stateToPersist = {
         urlInput,
@@ -517,7 +535,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       } catch (e) {
         // If storage fails (quota), clear older entries for this feature
         Object.keys(localStorage).forEach((k) => {
-          if (k.startsWith(STRUCTURE_ANALYSIS_KEY)) {
+          if (k.startsWith(getStructureAnalysisKey())) {
             try { localStorage.removeItem(k); } catch {}
           }
         });
@@ -1524,7 +1542,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     // Clear all structure analysis cache
     const keys = Object.keys(localStorage);
     keys.forEach(key => {
-      if (key.startsWith(STRUCTURE_ANALYSIS_KEY)) {
+              if (key.startsWith(getStructureAnalysisKey())) {
         localStorage.removeItem(key);
       }
     });
@@ -1589,7 +1607,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                   onClick={() => {
                     try {
                       setIsRestoring(true);
-                      const persisted = localStorage.getItem('structure_last_persisted');
+                      const persisted = localStorage.getItem(getStructureLastPersistedKey());
                       if (persisted) {
                         const parsed = JSON.parse(persisted);
                         if (parsed.analysis && parsed.savedAt) {

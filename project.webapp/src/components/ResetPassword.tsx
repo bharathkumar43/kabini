@@ -27,8 +27,12 @@ const ResetPassword = () => {
       setIsCheckingToken(false);
       return;
     }
-    setIsCheckingToken(false);
+    
+    // Since backend doesn't have token validation endpoint, 
+    // we'll show the form and let the backend validate on submit
+    console.log('[ResetPassword] Token found in URL, showing reset form');
     setIsValidToken(true);
+    setIsCheckingToken(false);
   }, [token]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,9 +92,17 @@ const ResetPassword = () => {
       return;
     }
 
+    if (!token) {
+      setValidationError("Invalid reset token. Please request a new password reset.");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/auth/reset-password', {
+      console.log('[ResetPassword] Attempting to reset password with token:', token);
+      
+      // Use direct fetch since we need to handle the response manually
+      const response = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -102,14 +114,18 @@ const ResetPassword = () => {
       });
 
       const data = await response.json();
+      console.log('[ResetPassword] Response:', response.status, data);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to reset password. Please try again.');
+      if (response.ok) {
+        console.log('[ResetPassword] Password reset successful');
+        setIsSuccess(true);
+      } else {
+        console.error('[ResetPassword] Password reset failed:', data.error);
+        setValidationError(data.error || 'Failed to reset password. Please try again.');
       }
-
-      setIsSuccess(true);
-    } catch (err: any) {
-      setValidationError(err.message || "Failed to reset password. Please try again.");
+    } catch (error: any) {
+      console.error('[ResetPassword] Error during password reset:', error);
+      setValidationError("Network error. Please check your connection and try again.");
     } finally {
       setIsLoading(false);
     }

@@ -664,15 +664,23 @@ function QAGenerationPage() {
       sessionData: sessionData
     };
     
-    historyService.addHistoryItem(qaHistoryItem);
-    
-    // Dispatch custom event to notify other components (like History) that new analysis was created
-    window.dispatchEvent(new CustomEvent('new-analysis-created', { 
-      detail: { type: 'qa', timestamp: new Date().toISOString() } 
-    }));
-    
-    // Record a non-intrusive save flag instead of a popup
-    try { localStorage.setItem('qa_last_saved', new Date().toISOString()); } catch {}
+    try {
+      await historyService.addHistoryItem(qaHistoryItem);
+      
+      // Dispatch custom event to notify other components (like History) that new analysis was created
+      window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+        detail: { type: 'qa', timestamp: new Date().toISOString() } 
+      }));
+      
+      // Record a non-intrusive save flag instead of a popup
+      try { localStorage.setItem('qa_last_saved', new Date().toISOString()); } catch {}
+    } catch (error) {
+      console.error('[App] Failed to save history item:', error);
+      // Still dispatch the event even if history save fails
+      window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+        detail: { type: 'qa', timestamp: new Date().toISOString() } 
+      }));
+    }
     
     // Update session if exists
     if (currentSession && user) {

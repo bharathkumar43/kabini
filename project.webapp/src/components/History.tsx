@@ -78,33 +78,46 @@ export function History({ qaItems, onExport }: HistoryProps) {
 
   // Load history items from service
   useEffect(() => {
-    try {
-      const items = historyService.getHistoryItems();
-      console.log('[History] Loaded items:', items.length, items);
-      
-      // Filter out any corrupted items
-      const validItems = items.filter(item => 
-        item && 
-        typeof item === 'object' && 
-        item.id && 
-        item.type && 
-        item.name && 
-        item.timestamp
-      );
-      
-      console.log('[History] Valid items:', validItems.length, validItems);
-      setHistoryItems(validItems);
-    } catch (error) {
-      console.error('[History] Error loading history items:', error);
-      setHistoryItems([]);
-    }
+    const loadHistoryItems = async () => {
+      try {
+        const items = await historyService.getHistoryItems();
+        console.log('[History] Loaded items:', items.length, items);
+        
+        // Filter out any corrupted items
+        const validItems = items.filter(item => 
+          item && 
+          typeof item === 'object' && 
+          item.id && 
+          item.type && 
+          item.name && 
+          item.timestamp
+        );
+        
+        console.log('[History] Valid items:', validItems.length, validItems);
+        setHistoryItems(validItems);
+      } catch (error) {
+        console.error('[History] Error loading history items:', error);
+        setHistoryItems([]);
+      }
+    };
+
+    loadHistoryItems();
   }, [refreshKey]);
 
   // Load history items when component mounts
   useEffect(() => {
-    console.log('[History] Component mounted, loading initial history items');
-    const items = historyService.getHistoryItems();
-    setHistoryItems(items);
+    const loadInitialHistory = async () => {
+      console.log('[History] Component mounted, loading initial history items');
+      try {
+        const items = await historyService.getHistoryItems();
+        setHistoryItems(items);
+      } catch (error) {
+        console.error('[History] Error loading initial history items:', error);
+        setHistoryItems([]);
+      }
+    };
+    
+    loadInitialHistory();
   }, []);
 
   // Sync with qaItems prop changes (when new analysis is created)
@@ -136,11 +149,15 @@ export function History({ qaItems, onExport }: HistoryProps) {
     window.addEventListener('storage', handleStorageChange);
     
     // Check for changes only when the component is focused
-    const handleFocus = () => {
-      const currentItems = historyService.getHistoryItems();
-      if (currentItems.length !== historyItems.length) {
-        console.log('[History] Item count changed on focus, refreshing history');
-        setHistoryItems(currentItems);
+    const handleFocus = async () => {
+      try {
+        const currentItems = await historyService.getHistoryItems();
+        if (currentItems.length !== historyItems.length) {
+          console.log('[History] Item count changed on focus, refreshing history');
+          setHistoryItems(currentItems);
+        }
+      } catch (error) {
+        console.error('[History] Error checking history on focus:', error);
       }
     };
 
