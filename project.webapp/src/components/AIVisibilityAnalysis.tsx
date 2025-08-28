@@ -334,7 +334,7 @@ function CompetitorBenchmarkCard({ competitors, industry }: { competitors: any[]
   );
 }
 
-export function Overview() {
+export function AIVisibilityAnalysis() {
   const { user } = useAuth();
   const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
   // keep but unused in this page variant
@@ -928,8 +928,8 @@ export function Overview() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Overview</h1>
-          <p className="text-gray-600 mt-2">Welcome to kabini.ai - Your AI-Powered Content Enhancement Platform</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">AI Visibility Analysis</h1>
+          <p className="text-gray-600 mt-2">Comprehensive market analysis and competitive intelligence platform</p>
         </div>
       </div>
 

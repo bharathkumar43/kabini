@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, BarChart3, FileText, History as HistoryIcon, DollarSign, Zap, Menu, X, Target, Globe, Plus, Loader2, RefreshCw, LogOut } from 'lucide-react';
+import { User, BarChart3, FileText, History as HistoryIcon, DollarSign, Zap, Menu, X, Target, Globe, Plus, Loader2, RefreshCw, LogOut, Eye } from 'lucide-react';
 import { ContentInput } from './components/ContentInput';
 import { historyService } from './services/historyService';
 import { Statistics } from './components/Statistics';
@@ -28,6 +28,7 @@ const hashContent = (content: string): string => {
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Overview } from './components/Overview.tsx';
 import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
+import { AIVisibilityAnalysis } from './components/AIVisibilityAnalysis';
 
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
 // Content structure pages disabled
@@ -47,6 +48,7 @@ const ENHANCE_CONTENT_CACHE_KEY = 'enhance_content_cache_';
 
 const NAV_ITEMS = [
   { label: 'Overview', icon: <Zap />, path: '/overview' },
+  { label: 'AI Visibility Analysis', icon: <Eye />, path: '/ai-visibility-analysis' },
   { label: 'Enhance Content', icon: <FileText />, path: '/enhance-content' },
   // { label: 'Content Analysis', icon: <BarChart3 />, path: '/content-analysis' },
   { label: 'Structure Analysis', icon: <Target />, path: '/content-structure-analysis' },
@@ -1385,6 +1387,7 @@ function AppContent() {
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto text-black bg-white">
           <Routes>
             <Route path="/overview" element={<Overview />} />
+            <Route path="/ai-visibility-analysis" element={<AIVisibilityAnalysis />} />
             <Route path="/qa-generation" element={<QAGenerationPage />} />
             <Route path="/enhance-content" element={<QAGenerationPage />} />
             {/* Content Analysis disabled */}
