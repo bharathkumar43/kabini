@@ -28,7 +28,7 @@ const hashContent = (content: string): string => {
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Overview } from './components/Overview.tsx';
 import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
-import { AIVisibilityAnalysis } from './components/AIVisibilityAnalysis';
+import { CompetitorInsight } from './components/AIVisibilityAnalysis';
 
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
 // Content structure pages disabled
@@ -47,11 +47,11 @@ const ENHANCE_CONTENT_KEY = 'enhance_content_state';
 const ENHANCE_CONTENT_CACHE_KEY = 'enhance_content_cache_';
 
 const NAV_ITEMS = [
-  { label: 'Overview', icon: <Zap />, path: '/overview' },
-  { label: 'AI Visibility Analysis', icon: <Eye />, path: '/ai-visibility-analysis' },
-  { label: 'Enhance Content', icon: <FileText />, path: '/enhance-content' },
+  { label: 'Dashboard', icon: <Zap />, path: '/overview' },
+          { label: 'Competitor Insight', icon: <Eye />, path: '/ai-visibility-analysis' },
+  { label: 'Content Analyzer', icon: <FileText />, path: '/enhance-content' },
   // { label: 'Content Analysis', icon: <BarChart3 />, path: '/content-analysis' },
-  { label: 'Structure Analysis', icon: <Target />, path: '/content-structure-analysis' },
+  { label: 'Performance Report', icon: <Target />, path: '/content-structure-analysis' },
   // { label: 'Smart Competitor Analysis', icon: <BarChart3 />, path: '/smart-competitor-analysis' },
   { label: 'History', icon: <HistoryIcon />, path: '/history' },
   { label: 'Statistics', icon: <BarChart3 />, path: '/statistics' },
@@ -1384,10 +1384,10 @@ function AppContent() {
       />
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
         <Topbar setIsOpen={setSidebarOpen} onLogout={handleLogout} />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto text-black bg-white">
+        <main className="flex-1 p-2 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto text-black bg-white">
           <Routes>
             <Route path="/overview" element={<Overview />} />
-            <Route path="/ai-visibility-analysis" element={<AIVisibilityAnalysis />} />
+            <Route path="/ai-visibility-analysis" element={<CompetitorInsight />} />
             <Route path="/qa-generation" element={<QAGenerationPage />} />
             <Route path="/enhance-content" element={<QAGenerationPage />} />
             {/* Content Analysis disabled */}

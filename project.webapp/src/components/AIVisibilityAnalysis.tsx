@@ -136,51 +136,14 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
         <div className={`text-lg font-semibold ${getScoreColor(displayScore)} mb-3`}>
           {getScoreLabel(displayScore)}
         </div>
-        {industry && (
-          <div className="text-sm text-green-600 font-medium mb-3">
-            Industry: {industry}
-          </div>
-        )}
         
-        {/* SEMrush Metrics Display */}
-        {metrics && (
-          <div className="text-xs text-gray-600 space-y-1 mb-3 text-left">
-            <div className="flex justify-between">
-              <span>Brand Mentions:</span>
-              <span className="font-medium">{metrics.brandMentions.toFixed(5)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Competitor Median:</span>
-              <span className="font-medium">{metrics.medianCompetitorMentions.toFixed(5)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Share of Voice:</span>
-              <span className="font-medium">{metrics.shareOfVoice.toFixed(5)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Avg Position:</span>
-              <span className="font-medium">{metrics.averagePosition.toFixed(5)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Sentiment:</span>
-              <span className={`font-medium ${
-                metrics.sentiment === 'Positive' ? 'text-green-600' : 
-                metrics.sentiment === 'Negative' ? 'text-red-600' : 'text-yellow-600'
-              }`}>
-                {metrics.sentiment}
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Detailed metrics removed for cleaner UI */}
         
-        <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+        <div className="w-full bg-gray-200 rounded-full h-3">
           <div 
             className={`h-3 rounded-full ${getProgressColor(displayScore)} transition-all duration-500`}
             style={{ width: `${Math.min(100, Math.max(0, displayScore))}%` }}
           ></div>
-        </div>
-        <div className="text-xs text-gray-500 mb-2">
-          {score === 0 ? 'No data available' : `Raw score: ${score.toFixed(1)}/10`}
         </div>
       </div>
     </DashboardCard>
@@ -257,17 +220,7 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
           );
         })}
         
-        <div className="pt-2 border-t border-gray-200">
-          <div className="text-center">
-            <div className="text-lg font-semibold text-blue-600">{availableServices}/{totalServices}</div>
-            <div className="text-sm text-gray-600">AI Models Available</div>
-            {aiScores && (
-              <div className="text-xs text-gray-400 mt-1">
-                Based on actual AI analysis scores
-              </div>
-            )}
-          </div>
-        </div>
+
       </div>
     </DashboardCard>
   );
@@ -305,36 +258,15 @@ function CompetitorBenchmarkCard({ competitors, industry }: { competitors: any[]
         <div className="text-gray-600 mb-2">
           {benchmark.rank} in your industry
         </div>
-        {industry && (
-          <div className="text-sm text-purple-600 font-medium mb-3">
-            Industry: {industry}
-          </div>
-        )}
         <div className="text-lg font-semibold text-gray-700 mb-3">
           Score: {benchmark.score}/100
-        </div>
-        <div className="text-sm text-gray-500 mb-3">
-          Raw: {benchmark.rawScore.toFixed(1)}/10
-        </div>
-        <div className="flex justify-center space-x-1 mb-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className={`w-3 h-8 rounded-sm ${
-                i < filledBars ? 'bg-purple-500' : 'bg-gray-200'
-              }`}
-            ></div>
-          ))}
-        </div>
-        <div className="text-sm text-gray-600">
-          {competitors?.length || 0} competitors analyzed
         </div>
       </div>
     </DashboardCard>
   );
 }
 
-export function AIVisibilityAnalysis() {
+export function CompetitorInsight() {
   const { user } = useAuth();
   const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
   // keep but unused in this page variant
@@ -342,10 +274,10 @@ export function AIVisibilityAnalysis() {
   const [currentSession] = useLocalStorage<SessionData | null>(CURRENT_SESSION_KEY, null);
   const navigate = useNavigate();
   
-  // Unified analysis state
+  // Independent analysis state for Competitor Insight page
   const [inputValue, setInputValue] = useState(() => {
     try {
-      const saved = localStorage.getItem('overview_market_analysis');
+      const saved = localStorage.getItem('ai_visibility_analysis');
       if (saved) {
         const parsed = JSON.parse(saved);
         return parsed.originalInput || '';
@@ -353,11 +285,11 @@ export function AIVisibilityAnalysis() {
       return '';
     } catch { return ''; }
   });
-  const [analysisType, setAnalysisType] = useState<'root-domain' | 'subdomain' | 'subfolder'>('root-domain');
+  const [analysisType, setAnalysisType] = useState<'root-domain' | 'exact-url'>('root-domain');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [inputType, setInputType] = useState<'company' | 'url'>(() => {
     try {
-      const saved = localStorage.getItem('overview_market_analysis');
+      const saved = localStorage.getItem('ai_visibility_analysis');
       if (saved) {
         const parsed = JSON.parse(saved);
         return parsed.inputType || 'company';
@@ -367,7 +299,7 @@ export function AIVisibilityAnalysis() {
   });
   const [analysisResult, setAnalysisResult] = useState<any | null>(() => {
     try {
-      const saved = localStorage.getItem('overview_market_analysis');
+      const saved = localStorage.getItem('ai_visibility_analysis');
       if (saved) {
         const parsed = JSON.parse(saved);
         // Extract the actual analysis data from the cached structure
@@ -397,10 +329,10 @@ export function AIVisibilityAnalysis() {
   // Restore cached analysis data on component mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('overview_market_analysis');
+      const saved = localStorage.getItem('ai_visibility_analysis');
       if (saved) {
         const parsed = JSON.parse(saved);
-        console.log('[Overview] Restoring cached analysis data:', parsed);
+        console.log('[AIVisibilityAnalysis] Restoring cached analysis data:', parsed);
         
         // Restore all cached values
         if (parsed.originalInput) setInputValue(parsed.originalInput);
@@ -408,10 +340,10 @@ export function AIVisibilityAnalysis() {
         if (parsed.analysisType) setAnalysisType(parsed.analysisType);
         if (parsed.data) setAnalysisResult(parsed.data);
         
-        console.log('[Overview] Cached data restored successfully');
+        console.log('[AIVisibilityAnalysis] Cached data restored successfully');
       }
     } catch (error) {
-      console.error('[Overview] Error restoring cached data:', error);
+      console.error('[AIVisibilityAnalysis] Error restoring cached data:', error);
     }
   }, []);
 
@@ -535,7 +467,7 @@ export function AIVisibilityAnalysis() {
   };
 
   // Detect URL type automatically
-  const detectUrlType = (url: string): 'root-domain' | 'subdomain' | 'subfolder' => {
+  const detectUrlType = (url: string): 'root-domain' | 'exact-url' => {
     try {
       // Remove protocol and www
       let cleanUrl = url.replace(/^https?:\/\//, '').replace(/^www\./, '');
@@ -544,18 +476,12 @@ export function AIVisibilityAnalysis() {
       const urlParts = cleanUrl.split('/');
       const domainPart = urlParts[0]; // Get the domain part
       
-      // Check if it's a subdomain (has more than 2 dots in domain)
-      const domainDots = (domainPart.match(/\./g) || []).length;
-      
-      if (domainDots > 1) {
-        // More than 1 dot means subdomain (e.g., blog.cloudfuze.com)
-        return 'subdomain';
-      } else if (urlParts.length > 1 && urlParts[1].trim() !== '') {
-        // Has path after domain (e.g., cloudfuze.com/blog)
-        return 'subfolder';
-      } else {
-        // Just domain (e.g., cloudfuze.com)
+      // Check if it's a root domain (just domain, no path)
+      if (urlParts.length === 1 || (urlParts.length > 1 && urlParts[1].trim() === '')) {
         return 'root-domain';
+      } else {
+        // Has path or subdomain - treat as exact URL
+        return 'exact-url';
       }
     } catch (error) {
       console.error('Error detecting URL type:', error);
@@ -682,15 +608,15 @@ export function AIVisibilityAnalysis() {
   // Clear cached analysis data
   const clearAnalysisData = () => {
     try {
-      localStorage.removeItem('overview_market_analysis');
+      localStorage.removeItem('ai_visibility_analysis');
       setAnalysisResult(null);
       setInputValue('');
       setInputType('company');
       setAnalysisError(null);
       setShowSuccessMessage(false);
-      console.log('[Overview] Analysis data cleared');
+      console.log('[AIVisibilityAnalysis] Analysis data cleared');
     } catch (error) {
-      console.error('[Overview] Error clearing analysis data:', error);
+      console.error('[AIVisibilityAnalysis] Error clearing analysis data:', error);
     }
   };
 
@@ -724,8 +650,9 @@ export function AIVisibilityAnalysis() {
       const abortController = new AbortController();
       setAbortController(abortController);
       
-      console.log('[Overview] Starting AI visibility analysis for:', finalCompanyName);
-      console.log('[Overview] Detected industry:', detectedIndustry);
+      console.log('[CompetitorInsight] Starting competitor analysis for:', finalCompanyName);
+      console.log('[CompetitorInsight] Detected industry:', detectedIndustry);
+      console.log('[CompetitorInsight] API call parameters:', { finalCompanyName, detectedIndustry });
       
       const analysisResults = await apiService.getAIVisibilityAnalysis(
         finalCompanyName,
@@ -733,10 +660,10 @@ export function AIVisibilityAnalysis() {
         { signal: abortController.signal }
       );
       
-      console.log('[Overview] Analysis results received:', analysisResults);
+      console.log('[AIVisibilityAnalysis] Analysis results received:', analysisResults);
       
       if (analysisResults.success && analysisResults.data) {
-        console.log('[Overview] Setting analysis result:', analysisResults.data);
+        console.log('[CompetitorInsight] Setting analysis result:', analysisResults.data);
         
         // Add detected industry to the analysis result
         const enhancedResult = {
@@ -756,7 +683,7 @@ export function AIVisibilityAnalysis() {
           const historyItem = {
             id: `ai-visibility-${Date.now()}`,
             type: 'ai-visibility' as const,
-            name: `AI Visibility Analysis - ${finalCompanyName}`,
+            name: `Competitor Analysis - ${finalCompanyName}`,
             timestamp: new Date().toISOString(),
             status: 'completed' as const,
             company: finalCompanyName,
@@ -791,9 +718,9 @@ export function AIVisibilityAnalysis() {
               detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
             }));
             
-            console.log('[Overview] Analysis saved to history:', historyItem);
+            console.log('[CompetitorInsight] Analysis saved to history:', historyItem);
           } catch (error) {
-            console.error('[Overview] Failed to save analysis to history:', error);
+            console.error('[CompetitorInsight] Failed to save analysis to history:', error);
             // Still dispatch the event even if history save fails
             window.dispatchEvent(new CustomEvent('new-analysis-created', { 
               detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
@@ -805,7 +732,7 @@ export function AIVisibilityAnalysis() {
         
         // Cache the results
         try {
-          localStorage.setItem('overview_market_analysis', JSON.stringify({
+          localStorage.setItem('ai_visibility_analysis', JSON.stringify({
             company: finalCompanyName,
             originalInput: inputValue,
             inputType: detectedInputType,
@@ -844,100 +771,216 @@ export function AIVisibilityAnalysis() {
 
   // Helper to get AI Visibility Score from analysis result using actual API structure
   const getAIVisibilityScore = (result: any) => {
-    // Check for direct score fields first
-    if (result?.aiVisibilityScore !== undefined && result?.aiVisibilityScore !== null) {
+    // Check for direct AI visibility score first
+    if (result.aiVisibilityScore !== undefined && result.aiVisibilityScore !== null) {
       return result.aiVisibilityScore;
     }
-    if (result?.totalScore !== undefined && result?.totalScore !== null) {
+    
+    // Check for total score
+    if (result.totalScore !== undefined && result.totalScore !== null) {
       return result.totalScore;
     }
-    if (result?.visibilityScore !== undefined && result?.visibilityScore !== null) {
+    
+    // Check for visibility score
+    if (result.visibilityScore !== undefined && result.visibilityScore !== null) {
       return result.visibilityScore;
     }
     
-    // If no direct score, try to get from competitors (they contain the actual scores)
-    if (result?.competitors && result.competitors.length > 0) {
-      // Look for the main company score in competitors
-      const mainCompany = result.competitors.find((comp: any) => 
-        comp.name?.toLowerCase() === result.company?.toLowerCase()
-      );
+    // Fallback: calculate average from competitor scores if available
+    if (result.competitors && Array.isArray(result.competitors) && result.competitors.length > 0) {
+      const scores = result.competitors
+        .map((comp: any) => comp.aiScores ? Object.values(comp.aiScores).filter((score: any) => typeof score === 'number' && score > 0) : [])
+        .flat()
+        .filter((score: any) => typeof score === 'number' && score > 0);
       
-      if (mainCompany?.totalScore !== undefined && mainCompany?.totalScore !== null) {
-        return mainCompany.totalScore;
-      }
-      
-      // Fallback: calculate average from all competitors
-      const validScores = result.competitors
-        .filter((comp: any) => comp.totalScore !== undefined && comp.totalScore !== null)
-        .map((comp: any) => comp.totalScore);
-      
-      if (validScores.length > 0) {
-        const avgScore = validScores.reduce((sum: number, score: number) => sum + score, 0) / validScores.length;
-        return avgScore;
+      if (scores.length > 0) {
+        const average = scores.reduce((sum: number, score: any) => sum + score, 0) / scores.length;
+        return Math.round(average * 10) / 10; // Round to 1 decimal place
       }
     }
     
-    return 0; // Default fallback
+    return 0;
   };
 
   // Helper to get detailed AI Visibility metrics from actual API structure
   const getAIVisibilityMetrics = (result: any) => {
-    if (!result?.competitors || result.competitors.length === 0) {
-      return null;
-    }
-
-    // Find the main company data in competitors
-    const mainCompany = result.competitors.find((comp: any) => 
+    // Look for the main company's data in competitors array
+    const mainCompany = result.competitors?.find((comp: any) => 
       comp.name?.toLowerCase() === result.company?.toLowerCase()
     );
     
-    if (!mainCompany) {
-      return null;
+    if (mainCompany) {
+      return {
+        brandMentions: Number((mainCompany.brandMentions || 0).toFixed(5)),
+        medianCompetitorMentions: Number((mainCompany.medianCompetitorMentions || 0).toFixed(5)),
+        shareOfVoice: Number((mainCompany.shareOfVoice || 0).toFixed(5)),
+        averagePosition: Number((mainCompany.averagePosition || 0).toFixed(5)),
+        volume: mainCompany.volume || 0,
+        brandSentiment: mainCompany.brandSentiment || 'Neutral',
+        platformBreakdown: mainCompany.platformBreakdown || {},
+        geoBreakdown: mainCompany.geoBreakdown || {}
+      };
     }
-
-    // Extract metrics from the actual API structure
-    const totalScore = mainCompany.totalScore || 0;
-    const aiScores = mainCompany.aiScores || {};
-    const breakdowns = mainCompany.breakdowns || {};
     
-    // Calculate average AI score across all platforms
-    const platformScores = Object.values(aiScores).filter(score => typeof score === 'number');
-    const averageAIScore = platformScores.length > 0 
-      ? platformScores.reduce((sum: number, score: number) => sum + score, 0) / platformScores.length 
-      : 0;
-    
-    // Get Gemini breakdown (most detailed data available)
-    const geminiBreakdown = breakdowns.gemini || {};
-    
+    // Fallback to result-level metrics if available
     return {
-      aiVisibilityScore: Math.min(10, Math.max(0, totalScore)),
-      brandMentions: Number((geminiBreakdown.mentionsScore || 0).toFixed(5)),
-      medianCompetitorMentions: Number((Math.round(averageAIScore * 10) / 10).toFixed(5)),
-      shareOfVoice: Number((Math.round((totalScore / 10) * 100 * 100) / 100).toFixed(5)),
-      averagePosition: Number((geminiBreakdown.positionScore || 0).toFixed(5)),
-      searchVolume: 'N/A', // Not available in current API
-      sentiment: geminiBreakdown.sentimentScore > 0.5 ? 'Positive' : 
-                 geminiBreakdown.sentimentScore < 0.3 ? 'Negative' : 'Neutral',
-      platformBreakdown: aiScores,
-      totalMentions: Number((geminiBreakdown.mentionsScore || 0).toFixed(5))
+      brandMentions: Number((result.brandMentions || 0).toFixed(5)),
+      medianCompetitorMentions: Number((result.medianCompetitorMentions || 0).toFixed(5)),
+      shareOfVoice: Number((result.shareOfVoice || 0).toFixed(5)),
+      averagePosition: Number((result.averagePosition || 0).toFixed(5)),
+      volume: result.volume || 0,
+      brandSentiment: result.brandSentiment || 'Neutral',
+      platformBreakdown: result.platformBreakdown || {},
+      geoBreakdown: result.geoBreakdown || {}
     };
   };
 
+  // Sentiment Analysis Component
+  function SentimentAnalysisCard({ competitors, company }: { 
+    competitors: any[], 
+    company?: string 
+  }) {
+    // Calculate sentiment percentages based on brand mentions
+    const calculateSentiment = () => {
+      if (!competitors || competitors.length === 0) {
+        return { positive: 0, neutral: 0, negative: 0, total: 0, drivers: { positive: [], neutral: [], negative: [] } };
+      }
+
+      let totalMentions = 0;
+      let positiveMentions = 0;
+      let neutralMentions = 0;
+      let negativeMentions = 0;
+      
+      const positiveDrivers: string[] = [];
+      const neutralDrivers: string[] = [];
+      const negativeDrivers: string[] = [];
+
+      competitors.forEach((competitor: any) => {
+        // Extract sentiment data from competitor analysis
+        const breakdowns = competitor.breakdowns || {};
+        const geminiBreakdown = breakdowns.gemini || {};
+        
+        // Count mentions by sentiment
+        const mentions = geminiBreakdown.mentionsScore || 0;
+        const sentiment = geminiBreakdown.sentimentScore || 0.5;
+        
+        totalMentions += mentions;
+        
+        // Categorize sentiment (0-0.3: negative, 0.3-0.7: neutral, 0.7-1: positive)
+        if (sentiment < 0.3) {
+          negativeMentions += mentions;
+          negativeDrivers.push(competitor.name || 'Unknown');
+        } else if (sentiment > 0.7) {
+          positiveMentions += mentions;
+          positiveDrivers.push(competitor.name || 'Unknown');
+        } else {
+          neutralMentions += mentions;
+          neutralDrivers.push(competitor.name || 'Unknown');
+        }
+      });
+
+      // Calculate percentages
+      const positivePercent = totalMentions > 0 ? (positiveMentions / totalMentions) * 100 : 0;
+      const neutralPercent = totalMentions > 0 ? (neutralMentions / totalMentions) * 100 : 0;
+      const negativePercent = totalMentions > 0 ? (negativeMentions / totalMentions) * 100 : 0;
+
+      return {
+        positive: Math.round(positivePercent * 100) / 100,
+        neutral: Math.round(neutralPercent * 100) / 100,
+        negative: Math.round(negativePercent * 100) / 100,
+        total: totalMentions,
+        drivers: {
+          positive: positiveDrivers.slice(0, 3), // Top 3 positive drivers
+          neutral: neutralDrivers.slice(0, 3),   // Top 3 neutral drivers
+          negative: negativeDrivers.slice(0, 3)  // Top 3 negative drivers
+        }
+      };
+    };
+
+    const sentiment = calculateSentiment();
+    const dominantSentiment = sentiment.positive > sentiment.negative ? 'Positive' : 
+                             sentiment.negative > sentiment.positive ? 'Negative' : 'Neutral';
+    const sentimentColor = sentiment.positive > sentiment.negative ? 'text-green-600' : 
+                          sentiment.negative > sentiment.positive ? 'text-red-600' : 'text-yellow-600';
+
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
+          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          {/* Overall Sentiment */}
+          <div className="text-center">
+            <div className={`text-2xl font-bold ${sentimentColor}`}>
+              {dominantSentiment}
+            </div>
+            <div className="text-sm text-gray-600">
+              Overall Brand Sentiment
+            </div>
+          </div>
+
+          {/* Sentiment Percentages */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Positive</span>
+              <div className="flex items-center space-x-2">
+                <div className="w-20 bg-gray-200 rounded-full h-2">
+                  <div className="bg-green-500 h-2 rounded-full" style={{ width: `${sentiment.positive}%` }}></div>
+                </div>
+                <span className="text-sm font-medium text-gray-900">{sentiment.positive}%</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Neutral</span>
+              <div className="flex items-center space-x-2">
+                <div className="w-20 bg-gray-200 rounded-full h-2">
+                  <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${sentiment.neutral}%` }}></div>
+                </div>
+                <span className="text-sm font-medium text-gray-900">{sentiment.neutral}%</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Negative</span>
+              <div className="flex items-center space-x-2">
+                <div className="w-20 bg-gray-200 rounded-full h-2">
+                  <div className="bg-red-500 h-2 rounded-full" style={{ width: `${sentiment.negative}%` }}></div>
+                </div>
+                <span className="text-sm font-medium text-gray-900">{sentiment.negative}%</span>
+              </div>
+            </div>
+          </div>
+
+          
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">AI Visibility Analysis</h1>
-          <p className="text-gray-600 mt-2">Comprehensive market analysis and competitive intelligence platform</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
+            Welcome {user?.displayName?.split(' ')[0] || user?.name?.split(' ')[0] || 'User'}
+          </h1>
+          <p className="text-gray-600 mt-2">Deep competitive analysis and market intelligence platform</p>
         </div>
       </div>
 
-      {/* Unified Website Analysis Dashboard Section */}
-      <div className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
+      {/* Competitor Analysis Dashboard Section */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3">Website Analysis Dashboard</h2>
-          <p className="text-gray-600 text-lg">Enter your website URL or company name to get instant AI visibility insights and market positioning.</p>
+          <h2 className="text-3xl font-bold text-gray-900 mb-3">Competitor Analysis Dashboard</h2>
+          <p className="text-gray-600 text-lg">Enter your website URL or company name to get instant competitor insights and market positioning.</p>
         </div>
         
         <div className="flex flex-col lg:flex-row items-stretch gap-4 mb-8">
@@ -981,7 +1024,7 @@ export function AIVisibilityAnalysis() {
                   onClick={() => setShowDropdown(!showDropdown)}
                   className="px-4 py-4 border-2 border-blue-600 bg-white text-gray-700 font-medium text-lg h-[60px] min-w-[140px] flex items-center justify-between hover:bg-gray-50 transition-colors rounded-r-xl"
                 >
-                  <span>{analysisType === 'root-domain' ? 'Root Domain' : analysisType === 'subdomain' ? 'Subdomain' : 'Subfolder'}</span>
+                  <span>{analysisType === 'root-domain' ? 'Root Domain' : 'Exact URL'}</span>
                   <svg className={`w-5 h-5 transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -1012,35 +1055,16 @@ export function AIVisibilityAnalysis() {
                       <button
                         type="button"
                         onClick={() => {
-                          setAnalysisType('subdomain');
+                          setAnalysisType('exact-url');
                           setShowDropdown(false);
                         }}
                         className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors ${
-                          analysisType === 'subdomain' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                          analysisType === 'exact-url' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span>Subdomain</span>
-                          {analysisType === 'subdomain' && (
-                            <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAnalysisType('subfolder');
-                          setShowDropdown(false);
-                        }}
-                        className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors ${
-                          analysisType === 'subfolder' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>Subfolder</span>
-                          {analysisType === 'subfolder' && (
+                          <span>Exact URL</span>
+                          {analysisType === 'exact-url' && (
                             <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
@@ -1089,43 +1113,11 @@ export function AIVisibilityAnalysis() {
           <div className="mb-6 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">✅ Analysis completed successfully! Results are ready below.</div>
         )}
 
-        {/* Dashboard Cards - Show when we have analysis results */}
-        {analysisResult && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <AIVisibilityScoreCard 
-              score={getAIVisibilityScore(analysisResult)} 
-              industry={analysisResult?.industry}
-              metrics={getAIVisibilityMetrics(analysisResult)}
-            />
-            <LLMPresenceCard 
-              serviceStatus={analysisResult?.serviceStatus} 
-              aiScores={analysisResult?.competitors?.[0]?.aiScores}
-            />
-            <CompetitorBenchmarkCard 
-              competitors={analysisResult?.competitors || []}
-              industry={analysisResult?.industry}
-            />
-          </div>
-        )}
+        {/* Dashboard Cards Removed - Keeping only the analysis results */}
 
         {/* Analysis Results and Competitor Table (post-analysis) */}
         {analysisResult && (
           <div className="space-y-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold">Analysis Results for <span className="text-blue-700">{analysisResult.company}</span></h3>
-                  {analysisResult.originalInput && analysisResult.originalInput !== analysisResult.company && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      📍 Analyzed from: <span className="font-medium">{analysisResult.originalInput}</span>
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded hover:bg-gray-50 hover:text-gray-900" onClick={clearAnalysisData}>Clear</button>
-                </div>
-              </div>
-            </div>
             
             {/* Add error boundary for AIVisibilityTable */}
             <div className="bg-white rounded-lg shadow p-6">
@@ -1141,9 +1133,9 @@ export function AIVisibilityAnalysis() {
                       </svg>
                     </div>
                     <div className="ml-3">
-                      <h3 className="text-sm font-medium text-blue-800">AI Visibility Analysis Complete</h3>
+                      <h3 className="text-sm font-medium text-blue-800">Competitor Analysis Complete</h3>
                       <p className="text-sm text-blue-700 mt-1">
-                        Your AI Visibility analysis has been completed successfully. 
+                        Your competitor analysis has been completed successfully. 
                         {analysisResult.competitors && analysisResult.competitors.length > 0 
                           ? ` Found ${analysisResult.competitors.length} competitors for analysis.`
                           : ' No competitors found for this analysis.'
@@ -1154,6 +1146,12 @@ export function AIVisibilityAnalysis() {
                 </div>
               )}
             </div>
+            
+
+            
+
+
+
           </div>
         )}
       </div>

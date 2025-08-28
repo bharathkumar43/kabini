@@ -6,6 +6,8 @@ const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL;
 class ApiService {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
+    console.log('[ApiService] Making request to:', url);
+    
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -15,9 +17,20 @@ class ApiService {
       ...options,
     });
 
+    console.log('[ApiService] Response status:', response.status);
+    console.log('[ApiService] Response headers:', response.headers);
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('[ApiService] Non-JSON response received:', text.substring(0, 200));
+      throw new Error(`Expected JSON response but got: ${contentType}`);
     }
 
     return response.json();

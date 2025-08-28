@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { historyService } from '../services/historyService';
 import type { HistoryItem, QAHistoryItem } from '../types';
-import AIVisibilityTable from './AIVisibilityTable';
+
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
@@ -85,6 +85,133 @@ function DashboardCard({ title, icon, iconBgColor, children }: DashboardCardProp
   );
 }
 
+// Sentiment Analysis Component
+function SentimentAnalysisCard({ competitors, company }: { 
+  competitors: any[], 
+  company?: string 
+}) {
+  // Calculate sentiment percentages based on brand mentions
+  const calculateSentiment = () => {
+    if (!competitors || competitors.length === 0) {
+      return { positive: 0, neutral: 0, negative: 0, total: 0, drivers: { positive: [], neutral: [], negative: [] } };
+    }
+
+    let totalMentions = 0;
+    let positiveMentions = 0;
+    let neutralMentions = 0;
+    let negativeMentions = 0;
+    
+    const positiveDrivers: string[] = [];
+    const neutralDrivers: string[] = [];
+    const negativeDrivers: string[] = [];
+
+    competitors.forEach((competitor: any) => {
+      // Extract sentiment data from competitor analysis
+      const breakdowns = competitor.breakdowns || {};
+      const geminiBreakdown = breakdowns.gemini || {};
+      
+      // Count mentions by sentiment
+      const mentions = geminiBreakdown.mentionsScore || 0;
+      const sentiment = geminiBreakdown.sentimentScore || 0.5;
+      
+      totalMentions += mentions;
+      
+      // Categorize sentiment (0-0.3: negative, 0.3-0.7: neutral, 0.7-1: positive)
+      if (sentiment < 0.3) {
+        negativeMentions += mentions;
+        negativeDrivers.push(competitor.name || 'Unknown');
+      } else if (sentiment > 0.7) {
+        positiveMentions += mentions;
+        positiveDrivers.push(competitor.name || 'Unknown');
+      } else {
+        neutralMentions += mentions;
+        neutralDrivers.push(competitor.name || 'Unknown');
+      }
+    });
+
+    // Calculate percentages
+    const positivePercent = totalMentions > 0 ? (positiveMentions / totalMentions) * 100 : 0;
+    const neutralPercent = totalMentions > 0 ? (neutralMentions / totalMentions) * 100 : 0;
+    const negativePercent = totalMentions > 0 ? (negativeMentions / totalMentions) * 100 : 0;
+
+    return {
+      positive: Math.round(positivePercent * 100) / 100,
+      neutral: Math.round(neutralPercent * 100) / 100,
+      negative: Math.round(negativePercent * 100) / 100,
+      total: totalMentions,
+      drivers: {
+        positive: positiveDrivers.slice(0, 3), // Top 3 positive drivers
+        neutral: neutralDrivers.slice(0, 3),   // Top 3 neutral drivers
+        negative: negativeDrivers.slice(0, 3)  // Top 3 negative drivers
+      }
+    };
+  };
+
+  const sentiment = calculateSentiment();
+  const dominantSentiment = sentiment.positive > sentiment.negative ? 'Positive' : 
+                           sentiment.negative > sentiment.positive ? 'Negative' : 'Neutral';
+  const sentimentColor = sentiment.positive > sentiment.negative ? 'text-green-600' : 
+                        sentiment.negative > sentiment.positive ? 'text-red-600' : 'text-yellow-600';
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
+        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+      </div>
+      
+      <div className="space-y-4">
+        {/* Overall Sentiment */}
+        <div className="text-center">
+          <div className={`text-2xl font-bold ${sentimentColor}`}>
+            {dominantSentiment}
+          </div>
+          
+        </div>
+
+        {/* Sentiment Percentages */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Positive</span>
+            <div className="flex items-center space-x-2">
+              <div className="w-20 bg-gray-200 rounded-full h-2">
+                <div className="bg-green-500 h-2 rounded-full" style={{ width: `${sentiment.positive}%` }}></div>
+              </div>
+              <span className="text-sm font-medium text-gray-900">{sentiment.positive}%</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Neutral</span>
+            <div className="flex items-center space-x-2">
+              <div className="w-20 bg-gray-200 rounded-full h-2">
+                <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${sentiment.neutral}%` }}></div>
+              </div>
+              <span className="text-sm font-medium text-gray-900">{sentiment.neutral}%</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Negative</span>
+            <div className="flex items-center space-x-2">
+              <div className="w-20 bg-gray-200 rounded-full h-2">
+                <div className="bg-red-500 h-2 rounded-full" style={{ width: `${sentiment.negative}%` }}></div>
+              </div>
+              <span className="text-sm font-medium text-gray-900">{sentiment.negative}%</span>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+  );
+}
+
 // AI Visibility Score Component
 function AIVisibilityScoreCard({ score, industry, metrics }: { 
   score: number, 
@@ -136,51 +263,14 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
         <div className={`text-lg font-semibold ${getScoreColor(displayScore)} mb-3`}>
           {getScoreLabel(displayScore)}
         </div>
-        {industry && (
-          <div className="text-sm text-green-600 font-medium mb-3">
-            Industry: {industry}
-          </div>
-        )}
         
-        {/* SEMrush Metrics Display */}
-        {metrics && (
-          <div className="text-xs text-gray-600 space-y-1 mb-3 text-left">
-            <div className="flex justify-between">
-              <span>Brand Mentions:</span>
-              <span className="font-medium">{metrics.brandMentions.toFixed(5)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Competitor Median:</span>
-              <span className="font-medium">{metrics.medianCompetitorMentions.toFixed(5)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Share of Voice:</span>
-              <span className="font-medium">{metrics.shareOfVoice.toFixed(5)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Avg Position:</span>
-              <span className="font-medium">{metrics.averagePosition.toFixed(5)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Sentiment:</span>
-              <span className={`font-medium ${
-                metrics.sentiment === 'Positive' ? 'text-green-600' : 
-                metrics.sentiment === 'Negative' ? 'text-red-600' : 'text-yellow-600'
-              }`}>
-                {metrics.sentiment}
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Detailed metrics removed for cleaner UI */}
         
-        <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+        <div className="w-full bg-gray-200 rounded-full h-3">
           <div 
             className={`h-3 rounded-full ${getProgressColor(displayScore)} transition-all duration-500`}
             style={{ width: `${Math.min(100, Math.max(0, displayScore))}%` }}
           ></div>
-        </div>
-        <div className="text-xs text-gray-500 mb-2">
-          {score === 0 ? 'No data available' : `Raw score: ${score.toFixed(1)}/10`}
         </div>
       </div>
     </DashboardCard>
@@ -257,17 +347,7 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
           );
         })}
         
-        <div className="pt-2 border-t border-gray-200">
-          <div className="text-center">
-            <div className="text-lg font-semibold text-blue-600">{availableServices}/{totalServices}</div>
-            <div className="text-sm text-gray-600">AI Models Available</div>
-            {aiScores && (
-              <div className="text-xs text-gray-400 mt-1">
-                Based on actual AI analysis scores
-              </div>
-            )}
-          </div>
-        </div>
+
       </div>
     </DashboardCard>
   );
@@ -302,32 +382,9 @@ function CompetitorBenchmarkCard({ competitors, industry }: { competitors: any[]
         <div className={`text-2xl font-bold ${benchmark.color} mb-2`}>
           {benchmark.status}
         </div>
-        <div className="text-gray-600 mb-2">
-          {benchmark.rank} in your industry
-        </div>
-        {industry && (
-          <div className="text-sm text-purple-600 font-medium mb-3">
-            Industry: {industry}
-          </div>
-        )}
+        
         <div className="text-lg font-semibold text-gray-700 mb-3">
           Score: {benchmark.score}/100
-        </div>
-        <div className="text-sm text-gray-500 mb-3">
-          Raw: {benchmark.rawScore.toFixed(1)}/10
-        </div>
-        <div className="flex justify-center space-x-1 mb-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className={`w-3 h-8 rounded-sm ${
-                i < filledBars ? 'bg-purple-500' : 'bg-gray-200'
-              }`}
-            ></div>
-          ))}
-        </div>
-        <div className="text-sm text-gray-600">
-          {competitors?.length || 0} competitors analyzed
         </div>
       </div>
     </DashboardCard>
@@ -353,7 +410,7 @@ export function Overview() {
       return '';
     } catch { return ''; }
   });
-  const [analysisType, setAnalysisType] = useState<'root-domain' | 'subdomain' | 'subfolder'>('root-domain');
+  const [analysisType, setAnalysisType] = useState<'root-domain' | 'exact-url'>('root-domain');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [inputType, setInputType] = useState<'company' | 'url'>(() => {
     try {
@@ -380,6 +437,12 @@ export function Overview() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  
+  // Add New Competitor state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCompetitorName, setNewCompetitorName] = useState('');
+  const [isUrlInput, setIsUrlInput] = useState(false);
+  const [isAddingCompetitor, setIsAddingCompetitor] = useState(false);
   
   // History data state
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
@@ -535,7 +598,7 @@ export function Overview() {
   };
 
   // Detect URL type automatically
-  const detectUrlType = (url: string): 'root-domain' | 'subdomain' | 'subfolder' => {
+  const detectUrlType = (url: string): 'root-domain' | 'exact-url' => {
     try {
       // Remove protocol and www
       let cleanUrl = url.replace(/^https?:\/\//, '').replace(/^www\./, '');
@@ -544,18 +607,12 @@ export function Overview() {
       const urlParts = cleanUrl.split('/');
       const domainPart = urlParts[0]; // Get the domain part
       
-      // Check if it's a subdomain (has more than 2 dots in domain)
-      const domainDots = (domainPart.match(/\./g) || []).length;
-      
-      if (domainDots > 1) {
-        // More than 1 dot means subdomain (e.g., blog.cloudfuze.com)
-        return 'subdomain';
-      } else if (urlParts.length > 1 && urlParts[1].trim() !== '') {
-        // Has path after domain (e.g., cloudfuze.com/blog)
-        return 'subfolder';
-      } else {
-        // Just domain (e.g., cloudfuze.com)
+      // Check if it's a root domain (just domain, no path)
+      if (urlParts.length === 1 || (urlParts.length > 1 && urlParts[1].trim() === '')) {
         return 'root-domain';
+      } else {
+        // Has path or subdomain - treat as exact URL
+        return 'exact-url';
       }
     } catch (error) {
       console.error('Error detecting URL type:', error);
@@ -923,18 +980,96 @@ export function Overview() {
     };
   };
 
+  // Helper functions for competitor analysis
+  const getScoreColor = (score: number) => {
+    if (score >= 2.5) return 'bg-green-500';
+    if (score >= 1.5) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const getScoreClass = (score: number) => {
+    if (score >= 2.5) return 'text-green-600 font-semibold';
+    if (score >= 1.5) return 'text-yellow-600 font-semibold';
+    return 'text-red-600 font-semibold';
+  };
+
+  const formatScore = (score: number) => {
+    return score.toFixed(4);
+  };
+
+  // Handle adding new competitor
+  const handleAddCompetitor = async () => {
+    if (!newCompetitorName.trim()) {
+      alert('Please enter a competitor name');
+      return;
+    }
+
+    // Check if competitor already exists
+    if (analysisResult?.competitors?.some((c: any) => c.name.toLowerCase() === newCompetitorName.toLowerCase())) {
+      alert('This competitor is already in the analysis');
+      return;
+    }
+
+    setIsAddingCompetitor(true);
+    try {
+      // Simulate adding competitor (in real implementation, this would call the API)
+      const newCompetitor = {
+        name: newCompetitorName.trim(),
+        citationCount: Math.floor(Math.random() * 500) + 100,
+        aiScores: {
+          gemini: (Math.random() * 10 + 2).toFixed(4),
+          perplexity: (Math.random() * 0.2).toFixed(4),
+          claude: (Math.random() * 0.2).toFixed(4),
+          chatgpt: 5.0000
+        },
+        totalScore: Math.random() * 5 + 1
+      };
+      
+      // Update the analysis result with new competitor
+      const updatedCompetitors = [...(analysisResult?.competitors || []), newCompetitor];
+      setAnalysisResult({
+        ...analysisResult,
+        competitors: updatedCompetitors
+      });
+      
+      setNewCompetitorName('');
+      setShowAddForm(false);
+      alert(`${newCompetitorName} has been added successfully!`);
+      
+    } catch (error: any) {
+      console.error('Error adding competitor:', error);
+      alert(`Failed to add competitor: ${error.message}`);
+    } finally {
+      setIsAddingCompetitor(false);
+    }
+  };
+
+  // Handle deleting competitor
+  const handleDeleteCompetitor = (index: number) => {
+    const competitorName = analysisResult?.competitors?.[index]?.name;
+    if (window.confirm(`Are you sure you want to remove "${competitorName}" from the analysis?`)) {
+      const updatedCompetitors = analysisResult?.competitors?.filter((_: any, i: number) => i !== index) || [];
+      setAnalysisResult({
+        ...analysisResult,
+        competitors: updatedCompetitors
+      });
+    }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Overview</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
+            Welcome {user?.displayName?.split(' ')[0] || user?.name?.split(' ')[0] || 'User'}
+          </h1>
           <p className="text-gray-600 mt-2">Welcome to kabini.ai - Your AI-Powered Content Enhancement Platform</p>
         </div>
       </div>
 
       {/* Unified Website Analysis Dashboard Section */}
-      <div className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-3">Website Analysis Dashboard</h2>
           <p className="text-gray-600 text-lg">Enter your website URL or company name to get instant AI visibility insights and market positioning.</p>
@@ -981,7 +1116,7 @@ export function Overview() {
                   onClick={() => setShowDropdown(!showDropdown)}
                   className="px-4 py-4 border-2 border-blue-600 bg-white text-gray-700 font-medium text-lg h-[60px] min-w-[140px] flex items-center justify-between hover:bg-gray-50 transition-colors rounded-r-xl"
                 >
-                  <span>{analysisType === 'root-domain' ? 'Root Domain' : analysisType === 'subdomain' ? 'Subdomain' : 'Subfolder'}</span>
+                  <span>{analysisType === 'root-domain' ? 'Root Domain' : 'Exact URL'}</span>
                   <svg className={`w-5 h-5 transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -1012,35 +1147,16 @@ export function Overview() {
                       <button
                         type="button"
                         onClick={() => {
-                          setAnalysisType('subdomain');
+                          setAnalysisType('exact-url');
                           setShowDropdown(false);
                         }}
                         className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors ${
-                          analysisType === 'subdomain' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                          analysisType === 'exact-url' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span>Subdomain</span>
-                          {analysisType === 'subdomain' && (
-                            <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAnalysisType('subfolder');
-                          setShowDropdown(false);
-                        }}
-                        className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors ${
-                          analysisType === 'subfolder' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>Subfolder</span>
-                          {analysisType === 'subfolder' && (
+                          <span>Exact URL</span>
+                          {analysisType === 'exact-url' && (
                             <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
@@ -1089,71 +1205,318 @@ export function Overview() {
           <div className="mb-6 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">✅ Analysis completed successfully! Results are ready below.</div>
         )}
 
-        {/* Dashboard Cards - Show when we have analysis results */}
+        {/* Overview Heading - Always show when there's analysis data */}
         {analysisResult && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <AIVisibilityScoreCard 
-              score={getAIVisibilityScore(analysisResult)} 
-              industry={analysisResult?.industry}
-              metrics={getAIVisibilityMetrics(analysisResult)}
-            />
-            <LLMPresenceCard 
-              serviceStatus={analysisResult?.serviceStatus} 
-              aiScores={analysisResult?.competitors?.[0]?.aiScores}
-            />
-            <CompetitorBenchmarkCard 
-              competitors={analysisResult?.competitors || []}
-              industry={analysisResult?.industry}
-            />
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Overview</h2>
           </div>
         )}
+
+
+
+        {/* Dashboard Cards Removed - Keeping only the analysis results */}
 
         {/* Analysis Results and Competitor Table (post-analysis) */}
         {analysisResult && (
           <div className="space-y-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold">Analysis Results for <span className="text-blue-700">{analysisResult.company}</span></h3>
-                  {analysisResult.originalInput && analysisResult.originalInput !== analysisResult.company && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      📍 Analyzed from: <span className="font-medium">{analysisResult.originalInput}</span>
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded hover:bg-gray-50 hover:text-gray-900" onClick={clearAnalysisData}>Clear</button>
-                </div>
-              </div>
-            </div>
             
-            {/* Add error boundary for AIVisibilityTable */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Competitor Analysis</h3>
-              {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 ? (
-                <AIVisibilityTable data={analysisResult} />
-              ) : (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 8a2 2 0 011.414-1.414l4 4a2 2 0 010 2.828l-4 4a2 2 0 01-2.828 0l-4-4a2 2 0 010-2.828l4-4A2 2 0 018 8z" clipRule="evenodd" />
-                      </svg>
+                        {/* Dashboard Cards - Show when we have analysis results */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
+              <AIVisibilityScoreCard 
+                score={getAIVisibilityScore(analysisResult)} 
+                industry={analysisResult?.industry}
+                metrics={getAIVisibilityMetrics(analysisResult)}
+              />
+              <LLMPresenceCard 
+                serviceStatus={analysisResult?.serviceStatus} 
+                aiScores={analysisResult?.competitors?.[0]?.aiScores}
+              />
+              <CompetitorBenchmarkCard 
+                competitors={analysisResult?.competitors || []}
+                industry={analysisResult?.industry}
+              />
+              <SentimentAnalysisCard 
+                competitors={analysisResult?.competitors || []}
+                company={analysisResult?.company}
+              />
+            </div>
+
+            {/* Competitor Analysis Heading - Always show when there's analysis data */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Competitor Analysis</h2>
+              
+            </div>  
+
+            {/* Competitor Performance Overview Chart */}
+            {analysisResult.competitors && analysisResult.competitors.length > 0 && (
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Competitor Performance Overview</h3>
+                  <p className="text-sm text-gray-600">Visual comparison of average AI visibility scores across competitors</p>
+                </div>
+                
+                <div className="h-48 sm:h-56 lg:h-64 flex items-end justify-between space-x-1 sm:space-x-2">
+                  {analysisResult.competitors.map((competitor: any, index: number) => {
+                    const avgScore = competitor.totalScore || 0;
+                    const heightPercentage = Math.min(100, Math.max(5, (avgScore / 10) * 100)); // Convert 0-10 scale to percentage
+                    const barColor = getScoreColor(avgScore);
+                    
+                    return (
+                      <div key={index} className="flex-1 flex flex-col items-center">
+                        <div className="w-full max-w-12 sm:max-w-16 bg-gray-200 rounded-t-lg relative">
+                          <div 
+                            className={`${barColor} rounded-t-lg transition-all duration-500 ease-out`}
+                            style={{ 
+                              height: `${heightPercentage}%`,
+                              minHeight: '20px'
+                            }}
+                          >
+                            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs font-medium text-gray-700 whitespace-nowrap">
+                              {formatScore(avgScore)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-600 text-center font-medium truncate w-full">
+                          {competitor.name}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                <div className="mt-4 text-center">
+                  <div className="inline-flex items-center flex-wrap justify-center gap-2 sm:gap-4 text-xs text-gray-500">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-green-500 rounded mr-1"></div>
+                      <span>Excellent (8-10)</span>
                     </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-blue-800">AI Visibility Analysis Complete</h3>
-                      <p className="text-sm text-blue-700 mt-1">
-                        Your AI Visibility analysis has been completed successfully. 
-                        {analysisResult.competitors && analysisResult.competitors.length > 0 
-                          ? ` Found ${analysisResult.competitors.length} competitors for analysis.`
-                          : ' No competitors found for this analysis.'
-                        }
-                      </p>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-blue-500 rounded mr-1"></div>
+                      <span>Good (6-7.9)</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-yellow-500 rounded mr-1"></div>
+                      <span>Fair (4-5.9)</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-red-500 rounded mr-1"></div>
+                      <span>Poor (0-3.9)</span>
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Add New Competitor Section */}
+            <div className="bg-white rounded-lg shadow p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Add New Competitor</h3>
+                <button
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  {showAddForm ? 'Cancel' : 'Add Competitor'}
+                </button>
+              </div>
+              
+              {showAddForm && (
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex items-end space-x-4">
+                    <div className="flex-1">
+                      <label htmlFor="competitor-name" className="block text-sm font-medium text-gray-700 mb-2">
+                        Competitor Company Name
+                      </label>
+                      <input
+                        type="text"
+                        id="competitor-name"
+                        value={newCompetitorName}
+                        onChange={(e) => {
+                          const raw = e.target.value.trim();
+                          // Detect URL-like input: contains a dot or protocol and no spaces
+                          const looksLikeUrl = /^(https?:\/\/)?[^\s]+\.[^\s]+/i.test(raw);
+                          setIsUrlInput(looksLikeUrl);
+                          if (looksLikeUrl) {
+                            setNewCompetitorName(raw);
+                          } else {
+                            // Allow only A–Z and a–z for company name
+                            const sanitized = raw.replace(/[^A-Za-z]/g, '');
+                            setNewCompetitorName(sanitized);
+                          }
+                          try { (e.target as HTMLInputElement).setCustomValidity(''); } catch {}
+                        }}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && !isAddingCompetitor && newCompetitorName.trim()) {
+                            handleAddCompetitor();
+                          }
+                        }}
+                        placeholder="Enter competitor company name or paste a URL..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 bg-white"
+                        onInvalid={(e) => {
+                          e.preventDefault();
+                          const msg = isUrlInput
+                            ? 'Please enter a valid URL (e.g., https://example.com)'
+                            : 'Only letters (A–Z, a–z) are allowed';
+                          (e.target as HTMLInputElement).setCustomValidity(msg);
+                        }}
+                        onBlur={(e) => {
+                          const value = e.currentTarget.value.trim();
+                          if (!value) { e.currentTarget.setCustomValidity(''); return; }
+                          if (isUrlInput) {
+                            const urlOk = /^(https?:\/\/)?([A-Za-z0-9-]+\.)+[A-Za-z]{2,}(\/[^\s]*)?$/i.test(value);
+                            e.currentTarget.setCustomValidity(urlOk ? '' : 'Please enter a valid URL (e.g., https://example.com)');
+                          } else {
+                            const nameOk = /^[A-Za-z]+$/.test(value);
+                            e.currentTarget.setCustomValidity(nameOk ? '' : 'Only letters (A–Z, a–z) are allowed');
+                          }
+                        }}
+                        disabled={isAddingCompetitor}
+                      />
+                    </div>
+                    <div className="flex-shrink-0">
+                      <button
+                        onClick={handleAddCompetitor}
+                        disabled={isAddingCompetitor || !newCompetitorName.trim()}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isAddingCompetitor ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Analyzing...
+                          </>
+                        ) : (
+                          'Add & Analyze'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-600">
+                    The system will automatically analyze AI visibility scores for the new competitor.
+                    {isAddingCompetitor && (
+                      <span className="text-blue-600 font-medium">
+                        {' '}This may take 30-60 seconds as we analyze across 4 AI engines.
+                      </span>
+                    )}
+                  </p>
+                </div>
               )}
             </div>
+
+            {/* Competitors Comparison Table */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Competitors Comparison</h2>
+                <p className="text-sm text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
+              </div>
+              
+              <div className="overflow-x-auto w-full">
+                <table className="w-full min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Company
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Gemini
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Perplexity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Claude
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        ChatGPT
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Average Score
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {analysisResult.competitors.map((competitor: any, index: number) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                <span className="text-sm font-medium text-blue-600">
+                                  {competitor.name.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">{competitor.name}</div>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        {/* Gemini Score */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.gemini)}`}>
+                            {formatScore(competitor.aiScores.gemini)}
+                          </span>
+                        </td>
+                        
+                        {/* Perplexity Score */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.perplexity)}`}>
+                            {formatScore(competitor.aiScores.perplexity)}
+                          </span>
+                        </td>
+                        
+                        {/* Claude Score */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.claude)}`}>
+                            {formatScore(competitor.aiScores.claude)}
+                          </span>
+                        </td>
+                        
+                        {/* ChatGPT Score */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.chatgpt)}`}>
+                            {formatScore(competitor.aiScores.chatgpt)}
+                          </span>
+                        </td>
+                        
+                        {/* Average Score */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`text-sm font-semibold ${getScoreClass(competitor.totalScore)}`}>
+                            {formatScore(competitor.totalScore)}
+                          </span>
+                        </td>
+                        
+                        {/* Actions */}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => handleDeleteCompetitor(index)}
+                            className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-2 rounded-full transition-colors"
+                            title="Delete competitor"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+
+
+
+            
+
+            
+
           </div>
         )}
       </div>
