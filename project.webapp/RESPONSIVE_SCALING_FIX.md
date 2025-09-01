@@ -79,3 +79,4 @@ To verify the fix:
 - Consider adding user preference for scaling levels
 - Test across different devices and screen resolutions
 - Ensure accessibility standards are maintained
+
