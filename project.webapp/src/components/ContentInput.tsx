@@ -219,17 +219,17 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
   };
 
   return (
-    <div className="card bg-white border border-primary/10 shadow-xl">
-      <div className="flex items-center gap-2 mb-6">
-        <FileText className="w-8 h-8 text-black drop-shadow" />
-        <h2 className="text-3xl font-extrabold text-black tracking-tight">Content Input</h2>
+    <div className="card bg-white border border-gray-200 rounded-xl shadow-sm max-w-4xl">
+      <div className="flex items-center gap-3 mb-6">
+        <FileText className="w-6 h-6 text-gray-700" />
+        <h2 className="text-2xl font-bold text-gray-900">Content Enhancement</h2>
       </div>
       
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Multi-URL Input Section */}
         <div>
-          <label className="block text-base font-semibold text-black mb-3 flex items-center gap-2">
-            <Globe className="w-5 h-5 text-black" />
+          <label className="block text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Globe className="w-5 h-5 text-gray-700" />
             Add URLs to crawl (multiple URLs supported)
           </label>
           <div className="space-y-3">
@@ -247,14 +247,14 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
                 onKeyDown={handleKeyDown}
                 required
                 placeholder="https://example.com/article *"
-                className="flex-1 bg-white border border-black/20 rounded-lg px-4 py-3 text-black text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               />
               <button
                 onClick={addUrl}
                 disabled={!newUrl.trim()}
-                className="bg-black text-white font-bold px-6 py-2.5 rounded-lg hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-base shadow"
+                className="bg-black text-white font-semibold px-6 py-3 rounded-lg hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-base shadow"
               >
-                <Plus className="w-5 h-5 text-white" />
+                <Plus className="w-4 h-4 text-white" />
                 Add
               </button>
             </div>
@@ -269,7 +269,7 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
                     extractContentFromUrl(urlData, urls.length);
                     setNewUrl('');
                   }}
-                  className="bg-black text-white px-4 py-2 rounded text-sm font-semibold hover:bg-gray-800 transition-colors shadow flex items-center gap-2"
+                  className="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors shadow flex items-center gap-2"
                 >
                   <FileText className="w-4 h-4" />
                   Extract
@@ -282,7 +282,7 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
                     setNewUrl('');
                   }}
                   disabled={crawling}
-                  className="bg-red-600 text-white px-6 py-2 rounded text-sm font-bold hover:bg-red-700 transition-colors shadow-lg disabled:opacity-50 flex items-center gap-2 border-2 border-red-800 transform hover:scale-105"
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors shadow disabled:opacity-50 flex items-center gap-2"
                 >
                   {crawling ? (
                     <>
@@ -292,7 +292,7 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
                   ) : (
                     <>
                       <Globe className="w-4 h-4" />
-                      CRAWL WEBSITE
+                      Crawl Website
                     </>
                   )}
                 </button>
@@ -304,9 +304,9 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
           {urls.length > 0 && (
             <div className="space-y-2 mb-4">
               {urls.map((urlData, index) => (
-                  <div key={index} className="flex items-center gap-3 p-4 bg-gray-100 rounded-lg border border-black/10">
+                  <div key={index} className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
                     <div className="flex-1 min-w-0">
-                      <div className="text-base text-black font-medium truncate">{urlData.url}</div>
+                      <div className="text-base text-gray-900 font-medium truncate">{urlData.url}</div>
                       {urlData.status === 'error' && (
                         <div className="text-xs text-red-600 mt-1">{urlData.error}</div>
                       )}
@@ -315,17 +315,26 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
                       {/* Force show both buttons always */}
                       <button
                         onClick={() => extractContentFromUrl(urlData, index)}
-                        className="bg-black text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-gray-800 transition-colors shadow flex items-center gap-2"
+                        className="bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-gray-700 transition-colors shadow flex items-center gap-2"
                       >
-                        <FileText className="w-4 h-4" />
-                        Extract
+                        {urlData.status === 'extracting' ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Extracting...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-4 h-4" />
+                            Extract
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => crawlWebsite(urlData, index)}
                         disabled={crawling}
-                        className="bg-red-600 text-white px-6 py-2 rounded text-sm font-bold hover:bg-red-700 transition-colors shadow-lg disabled:opacity-50 flex items-center gap-2 border-2 border-red-800 transform hover:scale-105"
+                        className="bg-red-600 text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-red-700 transition-colors shadow disabled:opacity-50 flex items-center gap-2"
                       >
-                        {crawling ? (
+                        {urlData.status === 'extracting' ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
                             Crawling...
@@ -333,16 +342,14 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
                         ) : (
                           <>
                             <Globe className="w-4 h-4" />
-                            CRAWL WEBSITE
+                            Crawl
                           </>
                         )}
                       </button>
                       
-                      
-                      
                       {/* Show loading spinner during extraction */}
                       {urlData.status === 'extracting' && (
-                        <Loader2 className="w-5 h-5 animate-spin text-black" />
+                        <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
                       )}
                       
                       {/* Show success indicator */}
@@ -356,20 +363,20 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
                       )}
                       <button
                         onClick={() => removeUrl(index)}
-                        className="text-red-600 hover:text-red-400 transition-colors"
+                        className="text-red-600 hover:text-red-400 transition-colors p-1"
                       >
-                        <X className="w-5 h-5 text-black" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                ))}
+              ))}
             </div>
           )}
         </div>
 
-        {/* Content Textarea */}
+        {/* Content Input */}
         <div>
-          <label className="block text-base font-semibold text-black mb-3">
+          <label className="block text-base font-semibold text-gray-900 mb-3">
             Content (from URLs + manual input)
           </label>
           <textarea
@@ -381,48 +388,48 @@ export function ContentInput({ onGenerateQA, isProcessing, setIsProcessing, prov
             })}
             onKeyDown={handleKeyDown}
             placeholder="Content will be automatically populated from URLs, or paste your content here..."
-            className="w-full h-48 bg-white border border-black/20 rounded-lg px-4 py-3 text-black text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
+            className="w-full h-48 bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
           />
         </div>
 
         {/* Generate Button */}
         <div className="flex items-center justify-between gap-4 mt-4">
-          <div className="text-base text-black font-medium">
+          <div className="text-sm text-gray-600 font-medium">
             {urls.length} URL{urls.length !== 1 ? 's' : ''} • {content.length} characters
           </div>
           <div className="flex gap-3">
             <button
               onClick={handleGenerateQA}
               disabled={isProcessing || !content.trim()}
-              className="bg-black text-white font-bold py-3 px-10 rounded-lg hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 text-lg shadow"
+              className="bg-black text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-base shadow"
             >
               {isProcessing ? (
                 <>
-                  <Loader2 className="w-6 h-6 animate-spin text-white" />
+                  <Loader2 className="w-5 h-5 animate-spin text-white" />
                   Generating Q&A...
                 </>
               ) : (
                 <>
-                  <Zap className="w-6 h-6 text-white" />
-                  Generate Q&A
+                  <Zap className="w-5 h-5 text-white" />
+                  Generate AI Questions
                 </>
               )}
             </button>
             {/* Content Analysis disabled */}
             <button
               disabled
-              className="bg-blue-600/50 text-white font-bold py-3 px-8 rounded-lg cursor-not-allowed flex items-center gap-3 text-lg shadow"
+              className="bg-gray-400 text-white font-semibold py-3 px-4 rounded-lg cursor-not-allowed flex items-center gap-2 text-base shadow"
               title="Content Analysis is disabled"
             >
-              <BarChart3 className="w-6 h-6 text-white" />
+              <BarChart3 className="w-5 h-5 text-white" />
               Content Analysis (disabled)
             </button>
             <button
               onClick={() => navigate('/content-structure-analysis', { state: { content, url: urls[0]?.url } })}
               disabled={!content.trim()}
-              className="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 text-lg shadow"
+              className="bg-green-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-base shadow"
             >
-              <Target className="w-6 h-6 text-white" />
+              <Target className="w-5 h-5 text-white" />
               Structure Analysis
             </button>
 

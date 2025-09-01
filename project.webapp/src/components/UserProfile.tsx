@@ -38,16 +38,16 @@ export function UserProfile() {
         className="flex items-center gap-3 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-lg border border-gray-200 hover:bg-white hover:shadow-md transition-all duration-200"
       >
         {/* Avatar */}
-        <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+        <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white text-sm font-semibold">
           {getInitials(user.displayName || user.name)}
         </div>
         
         {/* User Info */}
         <div className="text-left">
-          <div className="text-sm font-medium text-gray-800 truncate max-w-32">
+          <div className="text-sm font-medium text-black truncate max-w-32">
             {user.displayName || user.name}
           </div>
-          <div className="text-xs text-gray-500 truncate max-w-32">
+          <div className="text-xs text-gray-600 truncate max-w-32">
             {user.email}
           </div>
         </div>
@@ -66,17 +66,17 @@ export function UserProfile() {
           {/* User Header */}
           <div className="px-4 py-3 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+              <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white font-semibold">
                 {getInitials(user.displayName || user.name)}
               </div>
               <div>
-                <div className="font-medium text-gray-800">
+                <div className="font-medium text-black">
                   {user.displayName || user.name}
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-gray-600">
                   {user.email}
                 </div>
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="text-xs text-gray-500 mt-1">
                   Tenant: {user.tenantId}
                 </div>
               </div>
@@ -86,12 +86,12 @@ export function UserProfile() {
           {/* User Roles */}
           {user.roles && user.roles.length > 0 && (
             <div className="px-4 py-2 border-b border-gray-100">
-              <div className="text-xs text-gray-500 mb-1">Roles</div>
+              <div className="text-xs text-gray-600 mb-1">Roles</div>
               <div className="flex flex-wrap gap-1">
                 {user.roles.map((role, index) => (
                   <span
                     key={index}
-                    className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full"
+                    className="px-2 py-1 bg-gray-100 text-black text-xs rounded-full"
                   >
                     {role}
                   </span>
@@ -107,7 +107,7 @@ export function UserProfile() {
                 // TODO: Implement settings
                 setIsDropdownOpen(false);
               }}
-              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-black hover:bg-gray-50 transition-colors"
             >
               <Settings className="w-4 h-4" />
               Settings
@@ -115,7 +115,7 @@ export function UserProfile() {
             
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-black hover:bg-gray-50 transition-colors"
             >
               <LogOut className="w-4 h-4" />
               Sign Out

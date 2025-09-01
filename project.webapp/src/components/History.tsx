@@ -1210,82 +1210,80 @@ export function History({ qaItems, onExport }: HistoryProps) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4">
-      
-
+    <div className="max-w-7xl mx-auto py-6 px-4">
       
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-primary mb-4">Comprehensive History</h1>
-        <p className="text-gray-600">View and manage all your analysis history including Q&A, AI visibility, content analysis, and structure analysis</p>
+      <div className="mb-6">
+        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Comprehensive History</h1>
+        <p className="text-gray-600 text-base lg:text-lg">View and manage all your analysis history including Q&A, AI visibility, content analysis, and structure analysis</p>
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-        <div className="bg-white rounded-lg p-6 border border-black/10 text-black text-center">
-          <div className="text-lg font-bold">Total Items</div>
-          <div className="text-3xl font-extrabold">{filteredItems.length}</div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-lg p-4 border border-gray-200 text-center shadow-sm">
+          <div className="text-sm font-semibold text-gray-700 mb-1">Total Items</div>
+          <div className="text-2xl font-bold text-gray-900">{filteredItems.length}</div>
         </div>
-        <div className="bg-white rounded-lg p-6 border border-black/10 text-black text-center">
-          <div className="text-lg font-bold">Q&A Sessions</div>
-          <div className="text-3xl font-extrabold">
+        <div className="bg-white rounded-lg p-4 border border-gray-200 text-center shadow-sm">
+          <div className="text-sm font-semibold text-gray-700 mb-1">Q&A Sessions</div>
+          <div className="text-2xl font-bold text-gray-900">
             {filteredItems.filter(item => item.type === 'qa').length}
           </div>
         </div>
-        <div className="bg-white rounded-lg p-6 border border-black/10 text-black text-center">
-          <div className="text-lg font-bold">AI Visibility</div>
-          <div className="text-3xl font-extrabold">
+        <div className="bg-white rounded-lg p-4 border border-gray-200 text-center shadow-sm">
+          <div className="text-sm font-semibold text-gray-700 mb-1">AI Visibility</div>
+          <div className="text-2xl font-bold text-gray-900">
             {filteredItems.filter(item => item.type === 'ai-visibility').length}
           </div>
         </div>
-        <div className="bg-white rounded-lg p-6 border border-black/10 text-black text-center">
-          <div className="text-lg font-bold">Selected Items</div>
-          <div className="text-3xl font-extrabold">{selectedItems.size}</div>
-        </div>
-        <div className="bg-white rounded-lg p-6 border border-black/10 text-black text-center">
-          <div className="space-y-2">
-            <button
-              onClick={handleExport}
-              className="bg-black text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-gray-800 transition flex items-center gap-2 w-full justify-center"
-            >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </button>
-            <button
-              onClick={handleExportJSON}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-700 transition flex items-center gap-2 w-full justify-center"
-            >
-              <Download className="h-4 w-4" />
-              Export JSON
-            </button>
-            <button
-              onClick={() => {
-                localStorage.removeItem('comprehensive_history');
-                setHistoryItems([]);
-                setFilteredItems([]);
-                setGroupedItems([]);
-                alert('History cleared. Please refresh the page.');
-              }}
-              className="bg-orange-600 text-white px-3 py-2 rounded-lg font-bold shadow hover:bg-orange-700 transition flex items-center gap-2 w-full justify-center"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Reset History
-            </button>
-          </div>
+        <div className="bg-white rounded-lg p-4 border border-gray-200 text-center shadow-sm">
+          <div className="text-sm font-semibold text-gray-700 mb-1">Selected Items</div>
+          <div className="text-2xl font-bold text-gray-900">{selectedItems.size}</div>
         </div>
       </div>
 
+      {/* Action Buttons */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <button
+          onClick={handleExport}
+          className="bg-black text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-gray-800 transition flex items-center gap-2 justify-center"
+        >
+          <Download className="h-4 w-4" />
+          Export CSV
+        </button>
+        <button
+          onClick={handleExportJSON}
+          className="bg-black text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-gray-800 transition flex items-center gap-2 justify-center"
+        >
+          <Download className="h-4 w-4" />
+          Export JSON
+        </button>
+        <button
+          onClick={() => {
+            localStorage.removeItem('comprehensive_history');
+            setHistoryItems([]);
+            setFilteredItems([]);
+            setGroupedItems([]);
+            alert('History cleared. Please refresh the page.');
+          }}
+          className="bg-black text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-gray-800 transition flex items-center gap-2 justify-center"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Reset History
+        </button>
+      </div>
+
       {/* Filters Section */}
-      <div className="bg-white rounded-lg border border-black/10 p-6 mb-8 overflow-visible relative">
+      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 overflow-visible relative">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-black flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Filter className="h-5 w-5" />
             Filters & Organization
           </h2>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setFilters(prev => ({ ...prev, showFilters: !prev.showFilters }))}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg flex items-center gap-2 transition"
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg flex items-center gap-2 transition text-sm"
             >
               {filters.showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               {filters.showFilters ? 'Hide' : 'Show'} Filters
@@ -1298,7 +1296,7 @@ export function History({ qaItems, onExport }: HistoryProps) {
                 setHistoryItems(items);
                 setRefreshKey(prev => prev + 1);
               }}
-              className="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-2 rounded-lg flex items-center gap-2 transition"
+              className="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-2 rounded-lg flex items-center gap-2 transition text-sm"
             >
               <RefreshCw className="h-4 w-4" />
               Refresh
@@ -1430,26 +1428,26 @@ export function History({ qaItems, onExport }: HistoryProps) {
       </div>
 
       {/* Grouped Items */}
-      <div className="space-y-6">
+      <div className="space-y-4">
         {groupedItems.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg border border-black/10">
-            <HistoryIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <div className="py-12 bg-white rounded-lg border border-gray-200 shadow-sm">
+            <HistoryIcon className="h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No history found</h3>
             <p className="text-gray-500">Try adjusting your filters or create some analysis first.</p>
           </div>
         ) : (
           groupedItems.map((group) => (
-            <div key={group.groupKey} className="bg-white rounded-lg border border-black/10 overflow-hidden">
+            <div key={group.groupKey} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
               {/* Group Header */}
               <div 
-                className="p-6 cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-200"
+                className="p-4 cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-200"
                 onClick={() => toggleGroup(group.groupKey)}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {getGroupIcon(group.groupType)}
                     <div>
-                      <h3 className="text-lg font-bold text-black">{group.groupTitle}</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">{group.groupTitle}</h3>
                       <div className="flex items-center gap-4 text-sm text-gray-600">
                         <span>{group.items.length} items</span>
                         <span>{group.totalItems} total</span>
@@ -1468,18 +1466,18 @@ export function History({ qaItems, onExport }: HistoryProps) {
 
               {/* Group Content */}
               {expandedGroups.has(group.groupKey) && (
-                <div className="p-6 space-y-4">
+                <div className="p-4 space-y-3">
                   {group.items.map((item) => {
                     try {
                       return (
-                        <div key={item.id} className="border border-gray-200 rounded-lg p-4">
+                        <div key={item.id} className="border border-gray-200 rounded-lg p-3">
                           {renderHistoryItem(item)}
                         </div>
                       );
                     } catch (error) {
                       console.error('[History] Error rendering item in group:', error, item);
                       return (
-                        <div key={item.id} className="border border-red-200 rounded-lg p-4 bg-red-50">
+                        <div key={item.id} className="border border-red-200 rounded-lg p-3 bg-red-50">
                           <div className="text-red-600">Error rendering item: {error.message}</div>
                           <div className="text-xs text-red-500 mt-2">Item ID: {item.id}</div>
                         </div>

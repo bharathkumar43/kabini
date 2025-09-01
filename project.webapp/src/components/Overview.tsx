@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { historyService } from '../services/historyService';
+import { sessionManager } from '../services/sessionManager';
 import type { HistoryItem, QAHistoryItem } from '../types';
 
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
@@ -465,26 +466,26 @@ export function Overview() {
     console.log('[Overview] Loaded history items:', items.length);
   }, [refreshKey]);
 
-  // Restore cached analysis data on component mount
+  // Restore cached data on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('overview_market_analysis');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        console.log('[Overview] Restoring cached analysis data:', parsed);
-        
-        // Restore all cached values
-        if (parsed.originalInput) setInputValue(parsed.originalInput);
-        if (parsed.inputType) setInputType(parsed.inputType);
-        if (parsed.analysisType) setAnalysisType(parsed.analysisType);
-        if (parsed.data) setAnalysisResult(parsed.data);
-        
-        console.log('[Overview] Cached data restored successfully');
-      }
-    } catch (error) {
-      console.error('[Overview] Error restoring cached data:', error);
+    const session = sessionManager.getLatestAnalysisSession('overview', user?.id);
+    if (session) {
+      setInputValue(session.inputValue || '');
+      setInputType(session.inputType || 'company');
+      setAnalysisResult(session.data);
+      console.log('[Overview] Restored analysis session:', session);
+    } else {
+      console.log('[Overview] No previous analysis session found - starting fresh');
     }
-  }, []);
+  }, [user?.id]);
+
+  // Check if this is a fresh session (no previous data)
+  const [isFreshSession, setIsFreshSession] = useState(false);
+  
+  useEffect(() => {
+    const session = sessionManager.getLatestAnalysisSession('overview', user?.id);
+    setIsFreshSession(!session);
+  }, [user?.id]);
 
   // Listen for storage changes to auto-refresh
   useEffect(() => {

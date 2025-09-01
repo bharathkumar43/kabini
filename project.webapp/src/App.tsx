@@ -12,6 +12,7 @@ import { useAuth } from './contexts/AuthContext';
 import { calculateCost } from './utils/pricing';
 import { History } from './components/History';
 import { apiService } from './services/apiService';
+import { performFullCleanup } from './utils/sessionCleanup';
 
 // Utility function to hash content for cache keys
 const hashContent = (content: string): string => {
@@ -83,15 +84,15 @@ function Sidebar({ isOpen, setIsOpen, onLogout, user, currentPath }: SidebarProp
       )}
       
       {/* Sidebar */}
-      <aside className={`fixed md:static inset-y-0 left-0 z-50 bg-white w-64 min-h-screen flex flex-col border-r border-gray-200 shadow-lg transform transition-transform duration-300 md:transform-none ${
+      <aside className={`fixed md:static inset-y-0 left-0 z-50 bg-white w-56 min-h-screen flex flex-col border-r border-gray-200 shadow-lg transform transition-transform duration-300 md:transform-none sidebar-responsive ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
-        <div className="flex items-center justify-between p-4 border-b border-primary/10">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-lg flex items-center justify-center flex-shrink-0">
+        <div className="flex items-center justify-between p-3 border-b border-primary/10 header-responsive">
+          <div className="flex items-center gap-3 flex-1 min-w-0 logo-container">
+            <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-lg flex items-center justify-center flex-shrink-0 logo-icon">
               <Zap className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-bold text-primary tracking-wide truncate">kabini.ai</span>
+            <span className="text-lg font-bold text-primary tracking-wide truncate logo-text">kabini.ai</span>
           </div>
           <button 
             className="md:hidden text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors p-1.5 rounded-md flex items-center justify-center flex-shrink-0 ml-2" 
@@ -106,51 +107,46 @@ function Sidebar({ isOpen, setIsOpen, onLogout, user, currentPath }: SidebarProp
           </button>
         </div>
         
-        <nav className="flex-1 flex flex-col gap-1 mt-6 px-2">
+        <nav className="flex-1 flex flex-col gap-1 mt-4 px-2 nav-responsive">
           {NAV_ITEMS.map((item) => {
             const isActive = currentPath === item.path;
-            const isBlueBg = isActive;
             return (
               <button
                 key={item.path}
-                className={`flex items-center gap-3 px-4 py-2 rounded-lg font-semibold transition-colors duration-200 text-left ${
-                  isBlueBg
-                    ? 'bg-primary text-white border-l-4 border-primary shadow'
-                    : 'bg-white text-black hover:bg-primary/10 hover:text-primary'
-                }`}
+                className={`nav-item-responsive ${isActive ? 'active' : ''}`}
                 onClick={() => handleNavigation(item.path)}
               >
-                <span className={`w-5 h-5 ${isBlueBg ? 'text-white' : 'text-primary'}`}>{item.icon}</span>
+                {item.icon}
                 {item.label}
               </button>
             );
           })}
         </nav>
         
-        <div className="mt-auto px-4 py-4 border-t border-primary/10">
+        <div className="mt-auto user-profile-section">
           {/* User Profile Section */}
-          <div className="flex items-center gap-3 w-full mb-4">
-            <User className="w-6 h-6 text-primary flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="font-bold text-slate-900 text-sm truncate">
+          <div className="user-profile-info">
+            <div className="user-avatar">
+              <User />
+            </div>
+            <div className="user-details">
+              <div className="user-name">
                 {user?.displayName || user?.name || 'User'}
               </div>
-              <div className="text-xs text-primary truncate">
+              <div className="user-email">
                 {user?.email || ''}
               </div>
             </div>
           </div>
           
           {/* Logout Button - Clearly Separated */}
-          <div className="border-t border-gray-200 pt-4">
-            <button 
-              className="w-full bg-white hover:bg-gray-50 text-blue-600 hover:text-blue-700 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md border border-blue-200 hover:border-blue-300" 
-              onClick={onLogout}
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </button>
-          </div>
+          <button 
+            className="logout-button" 
+            onClick={onLogout}
+          >
+            <LogOut />
+            Logout
+          </button>
         </div>
       </aside>
     </>
@@ -159,17 +155,17 @@ function Sidebar({ isOpen, setIsOpen, onLogout, user, currentPath }: SidebarProp
 
 function Topbar({ setIsOpen, onLogout }: { setIsOpen: (open: boolean) => void; onLogout: () => void }) {
   return (
-    <header className="w-full bg-white border-b border-primary/10 flex items-center justify-between px-4 sm:px-8 py-4 relative z-30">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-lg flex items-center justify-center">
+    <header className="w-full bg-white border-b border-primary/10 flex items-center justify-between px-3 sm:px-6 py-3 relative z-30 header-responsive">
+      <div className="logo-container">
+        <div className="logo-icon bg-gradient-to-r from-primary to-accent rounded-lg">
           <Zap className="w-5 h-5 text-white" />
         </div>
-        <span className="text-xl font-extrabold text-primary tracking-wide">kabini.ai</span>
+        <span className="logo-text text-xl font-extrabold tracking-wide">kabini.ai</span>
       </div>
       <div className="flex items-center gap-2">
         {/* Logout button for mobile */}
         <button 
-          className="md:hidden bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 hover:border-red-300 transition-all flex items-center gap-2" 
+          className="md:hidden bg-black border border-black text-white px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-800 hover:border-gray-800 transition-all flex items-center gap-2" 
           onClick={onLogout}
           aria-label="Logout"
         >
@@ -185,9 +181,9 @@ function Topbar({ setIsOpen, onLogout }: { setIsOpen: (open: boolean) => void; o
         >
           {/* Hamburger menu icon - always visible with explicit styling */}
           <div className="relative w-6 h-6">
-            <div className="absolute w-5 h-1 bg-blue-600 rounded-full top-1 left-0.5"></div>
-            <div className="absolute w-5 h-1 bg-blue-600 rounded-full top-3 left-0.5"></div>
-            <div className="absolute w-5 h-1 bg-blue-600 rounded-full top-5 left-0.5"></div>
+            <div className="absolute w-5 h-1 bg-black rounded-full top-1 left-0.5"></div>
+            <div className="absolute w-5 h-1 bg-black rounded-full top-3 left-0.5"></div>
+            <div className="absolute w-5 h-1 bg-black rounded-full top-5 left-0.5"></div>
           </div>
         </button>
       </div>
@@ -197,7 +193,7 @@ function Topbar({ setIsOpen, onLogout }: { setIsOpen: (open: boolean) => void; o
 
 function Footer() {
   return (
-    <footer className="w-full bg-white border-t border-primary/10 text-center text-primary py-4 text-sm">
+    <footer className="w-full bg-white border-t border-primary/10 text-center text-primary py-3 text-sm">
       © {new Date().getFullYear()} kabini.ai. All rights reserved.
     </footer>
   );
@@ -1736,6 +1732,9 @@ function AppContent() {
   
   console.log('[App] User is authenticated, showing main app');
 
+  // Note: Analysis data cleanup is now handled in AuthContext on login/logout
+  // This prevents aggressive clearing that could cause blank pages
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -1753,25 +1752,27 @@ function AppContent() {
         user={user} // Pass the logged-in user
         currentPath={location.pathname}
       />
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden content-responsive">
         <Topbar setIsOpen={setSidebarOpen} onLogout={handleLogout} />
-        <main className="flex-1 p-2 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto text-black bg-white">
-          <Routes>
-            <Route path="/overview" element={<Overview />} />
-            <Route path="/ai-visibility-analysis" element={<CompetitorInsight />} />
-            <Route path="/qa-generation" element={<QAGenerationPage />} />
-            <Route path="/enhance-content" element={<QAGenerationPage />} />
-            {/* Content Analysis disabled */}
-            {/* <Route path="/content-analysis" element={<CompetitorBenchmarking competitorDomains={competitorDomains} />} /> */}
-    
-            {/* <Route path="/smart-competitor-analysis" element={<SmartCompetitorAnalysis />} /> */}
-            <Route path="/content-structure-analysis" element={<ContentStructureAnalysisRoute />} />
-            {/* <Route path="/content-structure-landing" element={<ContentStructureLanding />} /> */}
-            <Route path="/history" element={<History qaItems={sessions.flatMap(s => s.qaData)} onExport={downloadFile} />} />
-            <Route path="/statistics" element={<Statistics sessions={sessions} currentSession={currentSession} />} />
-            <Route path="/CloudFuzeLLMQA" element={<Navigate to="/overview" replace />} />
-            <Route path="/" element={<Navigate to="/overview" replace />} />
-          </Routes>
+        <main className="flex-1 p-responsive-md overflow-x-hidden overflow-y-auto text-black bg-white main-content-responsive">
+          <div className="main-content-container">
+            <Routes>
+              <Route path="/overview" element={<Overview />} />
+              <Route path="/ai-visibility-analysis" element={<CompetitorInsight />} />
+              <Route path="/qa-generation" element={<QAGenerationPage />} />
+              <Route path="/enhance-content" element={<QAGenerationPage />} />
+              {/* Content Analysis disabled */}
+              {/* <Route path="/content-analysis" element={<CompetitorBenchmarking competitorDomains={competitorDomains} />} /> */}
+      
+              {/* <Route path="/smart-competitor-analysis" element={<SmartCompetitorAnalysis />} /> */}
+              <Route path="/content-structure-analysis" element={<ContentStructureAnalysisRoute />} />
+              {/* <Route path="/content-structure-landing" element={<ContentStructureLanding />} /> */}
+              <Route path="/history" element={<History qaItems={sessions.flatMap(s => s.qaData)} onExport={downloadFile} />} />
+              <Route path="/statistics" element={<Statistics sessions={sessions} currentSession={currentSession} />} />
+              <Route path="/CloudFuzeLLMQA" element={<Navigate to="/overview" replace />} />
+              <Route path="/" element={<Navigate to="/overview" replace />} />
+            </Routes>
+          </div>
         </main>
         <Footer />
       </div>

@@ -119,7 +119,7 @@ export function Results({
       <div className="flex flex-wrap gap-3 mb-6">
         <button
           onClick={onExportCSV}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-lg transition-colors"
         >
           <Download className="w-4 h-4" />
           Export CSV
@@ -127,7 +127,7 @@ export function Results({
         
         <button
           onClick={onExportJSON}
-          className="flex items-center gap-2 px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-lg transition-colors"
         >
           <Download className="w-4 h-4" />
           Export JSON
@@ -135,7 +135,7 @@ export function Results({
         
         <button
           onClick={onGenerateReport}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-lg transition-colors"
         >
           <BarChart className="w-4 h-4" />
           Generate Report
@@ -143,7 +143,7 @@ export function Results({
         
         <button
           onClick={onSaveSession}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-lg transition-colors"
         >
           <Save className="w-4 h-4" />
           Save Session

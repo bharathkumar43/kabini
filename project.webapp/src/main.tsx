@@ -4,6 +4,8 @@ import App from './App.tsx';
 import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 
+// Responsive scaling is now handled through proper CSS sizing, not transforms
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>

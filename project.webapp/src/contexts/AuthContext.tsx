@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, ReactNode } fr
 import { User, AuthState, LoginResponse } from '../types';
 import { authService } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
+import { performFullCleanup } from '../utils/sessionCleanup';
 
 // Action types
 type AuthAction =
@@ -163,6 +164,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       console.log('🔐 AuthContext: Starting login with method:', method);
       
+      // Clear analysis data for fresh session (but preserve essential app data)
+      performFullCleanup();
+      
       // Clear any stale authentication data before starting new login
       console.log('🔐 AuthContext: Clearing stale authentication data...');
       authService.clearTokens();
@@ -289,6 +293,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = async () => {
     try {
       await authService.logout();
+      
+      // Clear analysis data for fresh session (but preserve essential app data)
+      performFullCleanup();
       
       // Clear user data from localStorage
       try {

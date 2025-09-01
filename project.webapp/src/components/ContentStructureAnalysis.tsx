@@ -1558,103 +1558,95 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     const hasCachedAnalysis = false;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
-        <div className="max-w-7xl mx-auto">
-          {/* URL Input for Structure Analysis */}
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-black mb-2">New Content Structure Analysis</h2>
-            <p className="text-gray-600">Enter a URL or paste content to analyze its structure</p>
+      <div className="min-h-screen bg-white">
+        <div className="max-w-6xl mx-auto p-6">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-black mb-2">Content Structure Analysis</h1>
+            <p className="text-gray-600 text-lg">Analyze your content for SEO and LLM optimization</p>
           </div>
           
-          <div className="mb-8 flex flex-col md:flex-row items-center gap-4">
-            <input
-              type="url"
-              value={urlInput}
-              onChange={(e) => handleEmojiFilteredInput(e, (value) => {
-                setUrlInput(value);
-                setLastUserActivity(Date.now());
-                setIsComponentActive(true);
-              })}
-              onPaste={(e) => handlePaste(e, (value) => {
-                setUrlInput(value);
-                setLastUserActivity(Date.now());
-                setIsComponentActive(true);
-              })}
-              onKeyDown={handleKeyDown}
-              onFocus={() => {
-                setLastUserActivity(Date.now());
-                setIsComponentActive(true);
-              }}
-              required
-              placeholder="Paste a URL to analyze its structure... *"
-              className="flex-1 px-4 py-3 border border-blue-400 rounded-lg text-blue-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-base"
-              disabled={isUrlLoading}
-            />
-            <button
-              onClick={handleAnalyzeUrl}
-              disabled={isUrlLoading || !urlInput.trim()}
-              className="bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors font-semibold disabled:opacity-50"
-            >
-              {isUrlLoading ? 'Analyzing...' : 'Analyze URL'}
-            </button>
-          </div>
-          {urlError && <div className="text-red-600 mb-4">{urlError}</div>}
-          <div className="text-center py-20">
-            <h2 className="text-2xl font-bold text-black mb-2">No Analysis Available</h2>
-            <p className="text-gray-600 mb-4">Please provide content to analyze.</p>
-              <div className="mb-6 flex justify-center gap-4">
-                <button
-                  onClick={() => {
-                    try {
-                      setIsRestoring(true);
-                      const persisted = localStorage.getItem(getStructureLastPersistedKey());
-                      if (persisted) {
-                        const parsed = JSON.parse(persisted);
-                        if (parsed.analysis && parsed.savedAt) {
-                          const isRecent = (Date.now() - parsed.savedAt) < (24 * 60 * 60 * 1000);
-                          if (isRecent) {
-                            setAnalysis(parsed.analysis);
-                            if (parsed.fullPageHtml) setFullPageHtml(parsed.fullPageHtml);
-                            if (parsed.improvedFullPageHtml) setImprovedFullPageHtml(parsed.improvedFullPageHtml);
-                            if (parsed.analysis.originalContent) setPastedContent(parsed.analysis.originalContent);
-                            if (parsed.analysis.crawledUrl) setUrlInput(parsed.analysis.crawledUrl);
-                            if (parsed.activeTab) setActiveTab(parsed.activeTab);
-                            if (parsed.codeViewType) setCodeViewType(parsed.codeViewType);
-                            setSuccessMessage('📊 Local analysis restored successfully!');
-                            setTimeout(() => setSuccessMessage(null), 3000);
-                          } else {
-                            localStorage.removeItem('structure_last_persisted');
-                            alert('No recent local analysis found.');
-                          }
-                        } else {
-                          alert('No local analysis found.');
-                        }
-                      } else {
-                        alert('No local analysis found.');
-                      }
-                    } catch (error) {
-                      console.error('Failed to restore local analysis:', error);
-                      alert('Failed to restore local analysis. Please try again.');
-                    } finally {
-                      setIsRestoring(false);
-                    }
-                  }}
-                  disabled={isRestoring}
-                  className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {isRestoring ? 'Restoring...' : 'Restore Last Analysis'}
-                </button>
-
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left Panel - Input Section */}
+            <div>
+              <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                <h2 className="text-xl font-semibold text-black mb-4">New Analysis</h2>
+                <p className="text-gray-600 mb-6">Enter a URL to analyze its content structure</p>
+                
+                <div className="space-y-4">
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => handleEmojiFilteredInput(e, (value) => {
+                      setUrlInput(value);
+                      setLastUserActivity(Date.now());
+                      setIsComponentActive(true);
+                    })}
+                    onPaste={(e) => handlePaste(e, (value) => {
+                      setUrlInput(value);
+                      setLastUserActivity(Date.now());
+                      setIsComponentActive(true);
+                    })}
+                    onKeyDown={handleKeyDown}
+                    onFocus={() => {
+                      setLastUserActivity(Date.now());
+                      setIsComponentActive(true);
+                    }}
+                    required
+                    placeholder="Paste a URL to analyze..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-base"
+                    disabled={isUrlLoading}
+                  />
+                  <button
+                    onClick={handleAnalyzeUrl}
+                    disabled={isUrlLoading || !urlInput.trim()}
+                    className="w-full bg-black text-white px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors font-semibold disabled:opacity-50"
+                  >
+                    {isUrlLoading ? 'Analyzing...' : 'Analyze URL'}
+                  </button>
+                </div>
+                
+                {urlError && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {urlError}
+                  </div>
+                )}
               </div>
-            <div className="flex gap-4 justify-center">
-              {hasCachedAnalysis && (
-                <button
-                  onClick={() => window.location.reload()}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Restore Previous Analysis
-                </button>
-              )}
+            </div>
+            
+            {/* Right Panel - Information & Preview */}
+            <div>
+              <div className="bg-white rounded-xl p-8 border border-gray-200 h-full">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <BarChart3 className="w-8 h-8 text-gray-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-black mb-3">Ready to Analyze</h2>
+                  <p className="text-gray-600 mb-6 text-lg">Enter a URL in the left panel to start your content structure analysis</p>
+                  
+                  <div className="grid grid-cols-1 gap-6 text-left">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-black mb-2">What You'll Get</h3>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        <li>• SEO optimization insights</li>
+                        <li>• Content structure analysis</li>
+                        <li>• LLM-friendly improvements</li>
+                        <li>• Actionable recommendations</li>
+                      </ul>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-black mb-2">Analysis Features</h3>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        <li>• Content quality scoring</li>
+                        <li>• GEO score breakdown</li>
+                        <li>• Structure suggestions</li>
+                        <li>• Code generation</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1672,8 +1664,8 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
         autoCloseDelay={4000}
       />
       
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="min-h-screen bg-white">
+      <div className="max-w-6xl mx-auto p-6">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -1684,7 +1676,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
           <div className="flex gap-2 lg:gap-3 flex-shrink-0 items-center">
               <button
               onClick={handleNewAnalysis}
-              className="bg-blue-600 text-white px-3 lg:px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold text-sm lg:text-base"
+              className="bg-black text-white px-3 lg:px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors font-semibold text-sm lg:text-base"
             >
               New Analysis
             </button>
@@ -1840,7 +1832,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                   className={`flex items-center gap-1 lg:gap-2 py-2 lg:py-4 px-2 lg:px-4 rounded-lg font-bold text-xs lg:text-sm transition-colors whitespace-nowrap 
                     ${activeTab === tab.id
                       ? 'bg-white text-black'
-                      : 'bg-blue-600 text-black opacity-80 hover:opacity-100'}
+                      : 'bg-black text-white opacity-80 hover:opacity-100'}
                   `}
                 >
                   <tab.icon className="w-3 h-3 lg:w-4 lg:h-4" />
@@ -1955,21 +1947,21 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                   <div className="flex gap-3">
                     <button
                       onClick={runFullEnhancedPage}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2"
+                      className="bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors font-semibold flex items-center gap-2"
                     >
                       <Play className="w-4 h-4" />
                       Run Full Page
                     </button>
                     <button
                       onClick={comparePages}
-                      className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-semibold flex items-center gap-2"
+                      className="bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors font-semibold flex items-center gap-2"
                     >
                       <Eye className="w-4 h-4" />
                       Compare Pages
                     </button>
                     <button
                       onClick={applySuggestions}
-                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold flex items-center gap-2"
+                      className="bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors font-semibold flex items-center gap-2"
                     >
                       <Zap className="w-4 h-4" />
                       Apply All Suggestions
@@ -2028,7 +2020,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                           <div className="flex gap-2">
                             <button
                               onClick={() => applySingleSuggestion(suggestion)}
-                              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
+                              className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium flex items-center gap-2"
                             >
                               <Zap className="w-4 h-4" />
                               Apply This Suggestion
@@ -2070,7 +2062,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                       </button>
                         <button
                           onClick={copyAndRunCode}
-                          className="bg-blue-600 text-white px-2 lg:px-4 py-1 lg:py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1 lg:gap-2 text-xs lg:text-sm"
+                          className="bg-black text-white px-2 lg:px-4 py-1 lg:py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-1 lg:gap-2 text-xs lg:text-sm"
                         >
                           <Play className="w-3 h-3 lg:w-4 lg:h-4" />
                           <span className="hidden sm:inline">Copy & Run</span>
@@ -2153,10 +2145,10 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
             )}
 
                           {/* Analytics Tab (live page analytics) - COMMENTED OUT AND REMOVED */}
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </>
   );
 } 

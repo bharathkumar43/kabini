@@ -94,10 +94,10 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 px-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4 relative overflow-hidden">
       {/* Enhanced background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-300/30 via-indigo-300/30 to-purple-300/30"></div>
-      <div className="absolute inset-0 bg-gradient-to-tr from-cyan-200/20 via-blue-200/20 to-indigo-200/20"></div>
+      <div className="absolute inset-0 bg-gray-200/30"></div>
+      <div className="absolute inset-0 bg-gray-300/20"></div>
       
       {/* Animation Style 1: Floating Orbs with Pulse */}
       <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-blue-400/40 to-cyan-400/40 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
@@ -111,10 +111,10 @@ const ForgotPassword = () => {
       <div className="w-full max-w-md mx-auto p-8 bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl border border-white/30 relative z-10 bg-gradient-to-br from-white/95 via-white/90 to-white/95">
         {/* Header Section */}
         <div className="text-center mb-10">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+          <div className="w-24 h-24 bg-black rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
             <User className="w-12 h-12 text-white" />
           </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">Forgot your password?</h1>
+          <h1 className="text-4xl font-bold text-black mb-3">Forgot your password?</h1>
           <p className="text-gray-600 text-lg">Enter your email address and we'll send you a link to reset your password.</p>
         </div>
 
@@ -128,7 +128,7 @@ const ForgotPassword = () => {
             </div>
             <button
               onClick={() => navigate('/login')}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
+              className="w-full bg-black text-white font-bold py-4 px-6 rounded-xl hover:bg-gray-800 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
             >
               <ArrowLeft className="w-5 h-5" />
               Back to Login
@@ -169,7 +169,7 @@ const ForgotPassword = () => {
               onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Enter your email address *"
-              className="w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all border-gray-300"
+              className="w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all border-gray-300"
               />
               
               {/* Remove inline error message - now using ErrorNotification toggle */}
@@ -180,7 +180,7 @@ const ForgotPassword = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
+              className="w-full bg-black text-white font-bold py-4 px-6 rounded-xl hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
             >
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send Reset Link'}
             </button>
@@ -188,7 +188,7 @@ const ForgotPassword = () => {
             <button
               type="button"
               onClick={() => navigate('/login')}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
+              className="w-full bg-black text-white font-bold py-4 px-6 rounded-xl hover:bg-gray-800 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
             >
               <ArrowLeft className="w-5 h-5" />
               Back to Login

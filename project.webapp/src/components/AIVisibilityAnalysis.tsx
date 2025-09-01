@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { historyService } from '../services/historyService';
+import { sessionManager } from '../services/sessionManager';
 import type { HistoryItem, QAHistoryItem } from '../types';
 import AIVisibilityTable from './AIVisibilityTable';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
@@ -54,7 +55,7 @@ function FeatureCard({ title, description, button, onClick, icon, visual }: Feat
         <p className="mb-4 text-gray-600">{description}</p>
       </div>
       <button
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mt-auto"
+                      className="bg-black text-white px-4 py-2 rounded hover:bg-gray-800 mt-auto"
         onClick={onClick}
       >
         {button}
@@ -277,35 +278,22 @@ export function CompetitorInsight() {
   // Independent analysis state for Competitor Insight page
   const [inputValue, setInputValue] = useState(() => {
     try {
-      const saved = localStorage.getItem('ai_visibility_analysis');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.originalInput || '';
-      }
-      return '';
+      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
+      return session?.inputValue || '';
     } catch { return ''; }
   });
   const [analysisType, setAnalysisType] = useState<'root-domain' | 'exact-url'>('root-domain');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [inputType, setInputType] = useState<'company' | 'url'>(() => {
     try {
-      const saved = localStorage.getItem('ai_visibility_analysis');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.inputType || 'company';
-      }
-      return 'company';
+      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
+      return (session?.inputType as 'company' | 'url') || 'company';
     } catch { return 'company'; }
   });
   const [analysisResult, setAnalysisResult] = useState<any | null>(() => {
     try {
-      const saved = localStorage.getItem('ai_visibility_analysis');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Extract the actual analysis data from the cached structure
-        return parsed.data || parsed;
-      }
-      return null;
+      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
+      return session?.data || null;
     } catch { return null; }
   });
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -329,23 +317,28 @@ export function CompetitorInsight() {
   // Restore cached analysis data on component mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('ai_visibility_analysis');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        console.log('[AIVisibilityAnalysis] Restoring cached analysis data:', parsed);
+      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
+      if (session) {
+        console.log('[AIVisibilityAnalysis] Restoring cached analysis data:', session);
         
         // Restore all cached values
-        if (parsed.originalInput) setInputValue(parsed.originalInput);
-        if (parsed.inputType) setInputType(parsed.inputType);
-        if (parsed.analysisType) setAnalysisType(parsed.analysisType);
-        if (parsed.data) setAnalysisResult(parsed.data);
+        if (session.inputValue) setInputValue(session.inputValue);
+        if (session.inputType) setInputType(session.inputType as 'company' | 'url');
+        if (session.analysisType) setAnalysisType(session.analysisType as 'root-domain' | 'exact-url');
+        
+        // Ensure we're setting the correct data structure
+        if (session.data) {
+          setAnalysisResult(session.data);
+          // If we have cached results, show success message
+          setShowSuccessMessage(true);
+        }
         
         console.log('[AIVisibilityAnalysis] Cached data restored successfully');
       }
     } catch (error) {
       console.error('[AIVisibilityAnalysis] Error restoring cached data:', error);
     }
-  }, []);
+  }, [user?.id]);
 
   // Listen for storage changes to auto-refresh
   useEffect(() => {
@@ -372,6 +365,11 @@ export function CompetitorInsight() {
       clearInterval(interval);
     };
   }, [historyItems.length]);
+
+  // Debug effect to monitor analysis result changes
+  useEffect(() => {
+    console.log('[AIVisibilityAnalysis] Analysis result changed:', analysisResult);
+  }, [analysisResult]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -608,7 +606,7 @@ export function CompetitorInsight() {
   // Clear cached analysis data
   const clearAnalysisData = () => {
     try {
-      localStorage.removeItem('ai_visibility_analysis');
+      sessionManager.clearSessionsByType('ai-visibility');
       setAnalysisResult(null);
       setInputValue('');
       setInputType('company');
@@ -674,8 +672,16 @@ export function CompetitorInsight() {
           analysisType: analysisType // Add analysis type to the cached data
         };
         
-        setAnalysisResult(enhancedResult);
-        setShowSuccessMessage(true);
+        // Force a re-render by updating state
+        setAnalysisResult(null); // Clear first
+        setTimeout(() => {
+          setAnalysisResult(enhancedResult);
+          setShowSuccessMessage(true);
+          console.log('[CompetitorInsight] State updated, analysis result set:', enhancedResult);
+          
+          // Force a re-render by updating a dummy state
+          setRefreshKey(prev => prev + 1);
+        }, 100);
         
         // Save to history
         try {
@@ -730,17 +736,17 @@ export function CompetitorInsight() {
           console.warn('Failed to save analysis to history:', e);
         }
         
-        // Cache the results
+        // Cache the results using session manager
         try {
-          localStorage.setItem('ai_visibility_analysis', JSON.stringify({
-            company: finalCompanyName,
-            originalInput: inputValue,
-            inputType: detectedInputType,
-            industry: detectedIndustry,
-            analysisType: analysisType, // Cache analysis type
-            data: enhancedResult,
-            timestamp: Date.now()
-          }));
+          sessionManager.saveAnalysisSession(
+            'ai-visibility',
+            enhancedResult,
+            inputValue,
+            analysisType,
+            detectedInputType,
+            detectedIndustry,
+            user?.id
+          );
         } catch (e) {
           console.warn('Failed to cache analysis results:', e);
         }
@@ -1089,7 +1095,7 @@ export function CompetitorInsight() {
             <button
               onClick={startAnalysis}
               disabled={isAnalyzing || !inputValue.trim()}
-              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-8 py-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors shadow-lg w-full lg:w-auto min-w-[140px] h-[60px]"
+              className="bg-black hover:bg-gray-800 disabled:bg-gray-400 text-white px-8 py-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors shadow-lg w-full lg:w-auto min-w-[140px] h-[60px]"
             >
               {isAnalyzing ? (
                 <>
@@ -1106,7 +1112,7 @@ export function CompetitorInsight() {
             {isAnalyzing && (
               <button
                 onClick={() => { try { abortController?.abort(); } catch {}; setIsAnalyzing(false); }}
-                className="bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition-colors w-full lg:w-auto min-w-[120px] h-[60px]"
+                className="bg-black text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors w-full lg:w-auto min-w-[120px] h-[60px]"
               >
                 Stop
               </button>
@@ -1131,7 +1137,7 @@ export function CompetitorInsight() {
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Competitor Analysis</h3>
               {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 ? (
-                <AIVisibilityTable data={analysisResult} />
+                <AIVisibilityTable key={`analysis-${refreshKey}`} data={analysisResult} />
               ) : (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-center">

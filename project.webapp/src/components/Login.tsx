@@ -17,7 +17,7 @@ const Login = () => {
   const [validationErrors, setValidationErrors] = useState<{ email?: string; password?: string }>({});
   const [authError, setAuthError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { login, error, clearError, isAuthenticated } = useAuth();
+  const { login, error, clearError, isAuthenticated, user } = useAuth();
   
   // Enhanced emoji blocking hook
   const { handleInputChangeAggressive: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
@@ -33,7 +33,7 @@ const Login = () => {
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
       // Use the AuthContext state instead of checking authService directly
-      if (isAuthenticated) {
+      if (isAuthenticated && user) {
         console.log('[Login] User is authenticated via AuthContext, redirecting to overview...');
         navigate('/overview', { replace: true });
         return;
@@ -59,7 +59,7 @@ const Login = () => {
       setAuthError(null);
       setIsLoading(false);
     };
-  }, [navigate, isAuthenticated]);
+  }, [navigate, isAuthenticated, user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -356,15 +356,15 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 px-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4 relative overflow-hidden">
       {/* Enhanced background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-300/30 via-indigo-300/30 to-purple-300/30"></div>
-      <div className="absolute inset-0 bg-gradient-to-tr from-cyan-200/20 via-blue-200/20 to-indigo-200/20"></div>
+      <div className="absolute inset-0 bg-gray-200/30"></div>
+      <div className="absolute inset-0 bg-gray-300/20"></div>
       
       {/* Animation Style 1: Floating Orbs with Pulse */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-blue-400/40 to-cyan-400/40 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
-      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-gradient-to-tl from-purple-400/40 to-pink-400/40 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 animate-pulse" style={{animationDelay: '1s'}}></div>
-      <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-gradient-to-r from-indigo-400/35 to-blue-400/35 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 animate-pulse" style={{animationDelay: '2s'}}></div>
+      <div className="absolute top-0 left-0 w-96 h-96 bg-gray-400/40 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
+      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-gray-500/40 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 animate-pulse" style={{animationDelay: '1s'}}></div>
+      <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-gray-600/35 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 animate-pulse" style={{animationDelay: '2s'}}></div>
       
       {/* Animation Style 2: Bouncing Elements */}
       <div className="absolute top-1/4 right-1/4 w-32 h-32 bg-gradient-to-br from-cyan-300/30 to-blue-300/30 rounded-full blur-2xl animate-bounce" style={{animationDelay: '0.5s'}}></div>
@@ -389,10 +389,10 @@ const Login = () => {
       <div className="w-full max-w-lg mx-auto p-8 bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl border border-white/30 relative z-10 bg-gradient-to-br from-white/95 via-white/90 to-white/95">
         {/* Header Section */}
         <div className="text-center mb-10">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+          <div className="w-24 h-24 bg-black rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
             <User className="w-12 h-12 text-white" />
           </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">Welcome to kabini.ai</h1>
+          <h1 className="text-4xl font-bold text-black mb-3">Welcome to kabini.ai</h1>
           <p className="text-gray-600 text-lg">Sign in to your account to continue</p>
         </div>
 
@@ -435,7 +435,7 @@ const Login = () => {
               required
               inputMode="email"
               autoComplete="email"
-              className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+              className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${
                 validationErrors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
               }`}
               placeholder="Enter your email address *"
@@ -484,7 +484,7 @@ const Login = () => {
               onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Enter your password *"
-              className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+              className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${
                 validationErrors.password ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
               }`}
             />
@@ -512,7 +512,7 @@ const Login = () => {
           {/* Primary Sign In Button */}
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
+            className="w-full bg-black text-white font-bold py-4 px-6 rounded-xl hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
             disabled={isLoading}
           >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
@@ -521,21 +521,21 @@ const Login = () => {
 
         {/* Links as Text */}
         <div className="mt-6 text-center space-y-2">
-          <button
-            type="button"
-            onClick={() => navigate('/forgot-password')}
-            className="text-sm"
-          >
-            Forgot your password?
-          </button>
           <div>
-            <button
-              type="button"
+            <span
+              onClick={() => navigate('/forgot-password')}
+              className="text-sm text-black hover:text-gray-700 underline hover:no-underline transition-colors cursor-pointer"
+            >
+              Forgot your password?
+            </span>
+          </div>
+          <div>
+            <span
               onClick={() => navigate('/signup')}
-              className="text-sm"
+              className="text-sm text-black hover:text-gray-700 underline hover:no-underline transition-colors cursor-pointer"
             >
               Don&apos;t have an account? Sign up
-            </button>
+            </span>
           </div>
         </div>
 
@@ -553,7 +553,7 @@ const Login = () => {
           <button 
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full bg-white border-2 border-gray-300 text-gray-700 font-semibold py-4 px-6 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-white border-2 border-gray-300 text-black font-semibold py-4 px-6 rounded-xl hover:bg-gray-50 hover:border-gray-400 hover:text-black transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
@@ -571,7 +571,7 @@ const Login = () => {
           <button 
             onClick={handleMicrosoftSignIn}
             disabled={isLoading}
-            className="w-full bg-white border-2 border-gray-300 text-gray-700 font-semibold py-4 px-6 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-white border-2 border-gray-300 text-black font-semibold py-4 px-6 rounded-xl hover:bg-gray-50 hover:border-gray-400 hover:text-black transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <img src="/microsoft.svg" alt="Microsoft" className="w-6 h-6" />
             Sign in with Microsoft

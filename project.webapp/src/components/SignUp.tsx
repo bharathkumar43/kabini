@@ -264,10 +264,10 @@ const SignUp = () => {
       <div className="w-full max-w-md mx-auto p-8 bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl border border-white/30 relative z-10 bg-gradient-to-br from-white/95 via-white/90 to-white/95">
         {/* Header Section */}
         <div className="text-center mb-10">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+          <div className="w-24 h-24 bg-black rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
             <User className="w-12 h-12 text-white" />
           </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">Create your account</h1>
+          <h1 className="text-4xl font-bold text-black mb-3">Create your account</h1>
           <p className="text-gray-600 text-lg">Sign up to get started with kabini.ai</p>
         </div>
 
@@ -301,7 +301,7 @@ const SignUp = () => {
                 placeholder="Enter your first name *"
                 pattern="[A-Za-z]+"
                 autoComplete="given-name"
-                className="w-full px-4 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
               />
             </div>
             <div>
@@ -330,7 +330,7 @@ const SignUp = () => {
                 placeholder="Enter your last name *"
                 pattern="[A-Za-z]+"
                 autoComplete="family-name"
-                className="w-full px-4 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
               />
             </div>
           </div>
@@ -377,7 +377,7 @@ const SignUp = () => {
               onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Enter your email address *"
-              className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+              className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${
                 validationError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
               }`}
             />
@@ -443,7 +443,7 @@ const SignUp = () => {
                 onCompositionEnd={(e) => e.preventDefault()}
                 required
                 placeholder="Create a password *"
-                className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
               />
               <button
                 type="button"
@@ -485,7 +485,7 @@ const SignUp = () => {
               onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Re-enter your password *"
-              className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
             />
             <button
               type="button"
@@ -502,20 +502,20 @@ const SignUp = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
+            className="w-full bg-black text-white font-bold py-4 px-6 rounded-xl hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
           >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Create Account'}
           </button>
         </form>
 
-          <button
-            type="button"
-            onClick={() => navigate('/login')}
-          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02] mt-6"
-          >
-          <ArrowLeft className="w-5 h-5" />
-            Already have an account? Sign in
-          </button>
+          <div className="mt-6 text-center">
+            <span
+              onClick={() => navigate('/login')}
+              className="text-sm text-black hover:text-gray-700 underline hover:no-underline transition-colors cursor-pointer"
+            >
+              Already have an account? Sign in
+            </span>
+          </div>
       </div>
       
       {/* Error Notification - Only for authentication errors, not email validation */}

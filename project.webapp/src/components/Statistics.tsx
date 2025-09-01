@@ -33,8 +33,9 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
 
   // Load history items and sessions from service
   useEffect(() => {
-    const loadData = () => {
-      const items = historyService.getHistoryItems();
+    const loadData = async () => {
+      try {
+        const items = await historyService.getHistoryItems();
       setHistoryItems(items);
       
       // Also get sessions from localStorage as backup
@@ -54,6 +55,10 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
         } catch (e) {
           console.error('[Statistics] Error parsing current session:', e);
         }
+        }
+      } catch (error) {
+        console.error('[Statistics] Error loading history items:', error);
+        setHistoryItems([]);
       }
     };
     
@@ -111,13 +116,17 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
     const currentSessionInterval = setInterval(checkCurrentSessionChanges, 1000);
     
     // Also check for changes every 2 seconds (fallback for other data)
-    const interval = setInterval(() => {
-      const currentItems = historyService.getHistoryItems();
+    const interval = setInterval(async () => {
+      try {
+        const currentItems = await historyService.getHistoryItems();
       const currentSessions = JSON.parse(localStorage.getItem('sessions') || '[]');
       
       if (currentItems.length !== historyItems.length || currentSessions.length !== localSessions.length) {
         console.log('[Statistics] Data changed, refreshing statistics');
         setRefreshKey(prev => prev + 1);
+        }
+      } catch (error) {
+        console.error('[Statistics] Error checking for data changes:', error);
       }
     }, 2000);
 
@@ -130,7 +139,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
 
 
 
-  // Calculate comprehensive real statistics
+  // Calculate comprehensive real statistics from ALL analysis types
   const calculateRealStatistics = () => {
     // Get all QA sessions from multiple sources
     const allSessions: SessionData[] = [
@@ -144,6 +153,25 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
         const qaItem = item as QAHistoryItem;
         allSessions.push(qaItem.sessionData);
       }
+    });
+    
+    // Get AI Visibility analysis data
+    const aiVisibilityItems = historyItems.filter(item => item.type === 'ai-visibility');
+    const aiVisibilityAnalyses = aiVisibilityItems.map(item => item as AIVisibilityHistoryItem);
+    
+    // Get Content Analysis data
+    const contentAnalysisItems = historyItems.filter(item => item.type === 'content-analysis');
+    const contentAnalyses = contentAnalysisItems.map(item => item as ContentAnalysisHistoryItem);
+    
+    // Get Structure Analysis data
+    const structureAnalysisItems = historyItems.filter(item => item.type === 'structure-analysis');
+    const structureAnalyses = structureAnalysisItems.map(item => item as StructureAnalysisHistoryItem);
+    
+    console.log('[Statistics] Analysis types found:', {
+      qaSessions: allSessions.length,
+      aiVisibilityAnalyses: aiVisibilityAnalyses.length,
+      contentAnalyses: contentAnalyses.length,
+      structureAnalyses: structureAnalyses.length
     });
     
     // Remove duplicates based on session ID
@@ -166,7 +194,11 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
       });
     });
 
-    if (uniqueSessions.length === 0) {
+    // Check if we have any data from any analysis type
+    const hasAnyData = uniqueSessions.length > 0 || aiVisibilityAnalyses.length > 0 || 
+                      contentAnalyses.length > 0 || structureAnalyses.length > 0;
+    
+    if (!hasAnyData) {
       return {
         totalQuestions: 0,
         totalCost: 0,
@@ -186,16 +218,53 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
         sentimentDistribution: { positive: 0, negative: 0, neutral: 0 },
         geoScoreAverage: 0,
         semanticRelevanceAverage: 0,
-        vectorSimilarityAverage: 0
+        vectorSimilarityAverage: 0,
+        // New metrics for other analysis types
+        totalAIVisibilityAnalyses: 0,
+        totalContentAnalyses: 0,
+        totalStructureAnalyses: 0,
+        averageVisibilityScore: 0,
+        averageSEOScore: 0,
+        averageReadabilityScore: 0,
+        totalSuggestions: 0
       };
     }
 
-    // Calculate basic metrics
+    // Calculate basic metrics from QA sessions
     const totalQuestions = uniqueSessions.reduce((sum, session) => sum + session.qaData.length, 0);
     const totalCost = uniqueSessions.reduce((sum, session) => sum + parseFloat(session.statistics?.totalCost || '0'), 0);
     const totalTokens = uniqueSessions.reduce((sum, session) => 
       sum + session.qaData.reduce((sessionSum, qa) => sessionSum + qa.totalTokens, 0), 0
     );
+    
+    // Calculate input and output tokens
+    const inputTokens = uniqueSessions.reduce((sum, session) => 
+      sum + session.qaData.reduce((sessionSum, qa) => sessionSum + qa.inputTokens, 0), 0
+    );
+    const outputTokens = uniqueSessions.reduce((sum, session) => 
+      sum + session.qaData.reduce((sessionSum, qa) => sessionSum + qa.outputTokens, 0), 0
+    );
+    
+    // Calculate metrics from AI Visibility analyses
+    const totalAIVisibilityAnalyses = aiVisibilityAnalyses.length;
+    const averageVisibilityScore = aiVisibilityAnalyses.length > 0 
+      ? aiVisibilityAnalyses.reduce((sum, analysis) => 
+          sum + (analysis.analysis.summary.averageVisibilityScore || 0), 0) / aiVisibilityAnalyses.length 
+      : 0;
+    
+    // Calculate metrics from Content Analysis
+    const totalContentAnalyses = contentAnalyses.length;
+    const averageSEOScore = contentAnalyses.length > 0 
+      ? contentAnalyses.reduce((sum, analysis) => sum + (analysis.analysis.seoScore || 0), 0) / contentAnalyses.length 
+      : 0;
+    const averageReadabilityScore = contentAnalyses.length > 0 
+      ? contentAnalyses.reduce((sum, analysis) => sum + (analysis.analysis.readabilityScore || 0), 0) / contentAnalyses.length 
+      : 0;
+    
+    // Calculate metrics from Structure Analysis
+    const totalStructureAnalyses = structureAnalyses.length;
+    const totalSuggestions = structureAnalyses.reduce((sum, analysis) => 
+      sum + (analysis.analysis.suggestions?.length || 0), 0);
     
     console.log('[Statistics] Calculated metrics:', {
       totalQuestions,
@@ -240,13 +309,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
       }
     });
 
-    // Calculate token breakdown
-    const inputTokens = uniqueSessions.reduce((sum, session) => 
-      sum + session.qaData.reduce((sessionSum, qa) => sessionSum + qa.inputTokens, 0), 0
-    );
-    const outputTokens = uniqueSessions.reduce((sum, session) => 
-      sum + session.qaData.reduce((sessionSum, qa) => sessionSum + qa.outputTokens, 0), 0
-    );
+
 
     // Calculate sentiment distribution using overall website content
     const sentimentDistribution = { positive: 0, negative: 0, neutral: 0 };
@@ -374,7 +437,15 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
       sentimentDistribution,
       geoScoreAverage,
       semanticRelevanceAverage,
-      vectorSimilarityAverage
+      vectorSimilarityAverage,
+      // New metrics from other analysis types
+      totalAIVisibilityAnalyses,
+      totalContentAnalyses,
+      totalStructureAnalyses,
+      averageVisibilityScore,
+      averageSEOScore,
+      averageReadabilityScore,
+      totalSuggestions
     };
   };
 
@@ -408,11 +479,10 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
     const labels: string[] = [];
     const values: number[] = [];
     const colors = [
-      '#00ff88', '#00d4aa', '#00b8cc', '#009cee', '#0080ff', '#0064ff', '#0048ff',
-      '#ff6b6b', '#ffa726', '#ffcc02', '#66bb6a', '#26a69a', '#42a5f5', '#ab47bc',
-      '#ec407a', '#ff7043', '#ffca28', '#8bc34a', '#26c6da', '#5c6bc0', '#7e57c2',
-      '#ef5350', '#ff9800', '#ffc107', '#4caf50', '#00bcd4', '#3f51b5', '#9c27b0',
-      '#f44336', '#ff5722', '#ffeb3b', '#8bc34a', '#00bcd4', '#2196f3', '#9c27b0'
+      '#000000', '#333333', '#666666', '#999999', '#cccccc', '#e6e6e6', '#f0f0f0',
+      '#1a1a1a', '#404040', '#595959', '#737373', '#8c8c8c', '#a6a6a6', '#bfbfbf',
+      '#d9d9d9', '#e6e6e6', '#f2f2f2', '#f5f5f5', '#f8f8f8', '#fafafa', '#fcfcfc',
+      '#000000', '#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080', '#999999'
     ];
 
     // Get all sessions from both prop and history
@@ -622,7 +692,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
 
   // Provider distribution data
   const providerData = stats.providerDistribution;
-  const providerColors = ['#00ff88', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57'];
+  const providerColors = ['#000000', '#333333', '#666666', '#999999', '#cccccc', '#e6e6e6'];
   
   // Helper function to get display name for providers
   const getProviderDisplayName = (provider: string): string => {
@@ -665,451 +735,38 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
       
       {/* Main Statistics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-        <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <div className="text-xl sm:text-2xl font-bold text-blue-700">
-            {(() => {
-              // Try multiple localStorage keys to find current session data
-              let currentSessionFromStorage = null;
-              let totalQuestionsInSession = 0;
-              
-              // Check all possible session storage locations
-              const possibleKeys = ['llm_qa_current_session', 'current_session', 'qa_session', 'enhance_content_state'];
-              
-              for (const key of possibleKeys) {
-                try {
-                  const stored = localStorage.getItem(key);
-                  if (stored) {
-                    const parsed = JSON.parse(stored);
-                    console.log(`[Statistics] Found data in ${key}:`, {
-                      hasQaData: !!parsed.qaData,
-                      qaDataLength: parsed.qaData?.length,
-                      hasQaItems: !!parsed.qaItems,
-                      qaItemsLength: parsed.qaItems?.length
-                    });
-                    
-                    // Check for qaData or qaItems
-                    if (parsed.qaData && Array.isArray(parsed.qaData) && parsed.qaData.length > 0) {
-                      totalQuestionsInSession = Math.max(totalQuestionsInSession, parsed.qaData.length);
-                      currentSessionFromStorage = parsed;
-                    } else if (parsed.qaItems && Array.isArray(parsed.qaItems) && parsed.qaItems.length > 0) {
-                      totalQuestionsInSession = Math.max(totalQuestionsInSession, parsed.qaItems.length);
-                      currentSessionFromStorage = parsed;
-                    }
-                  }
-                } catch (e) {
-                  console.error(`[Statistics] Error parsing ${key}:`, e);
-                }
-              }
-              
-              console.log('[Statistics] Current Questions Debug:', {
-                hasCurrentSession: !!currentSession,
-                currentSessionId: currentSession?.id,
-                propQaDataLength: currentSession?.qaData?.length,
-                hasStorageSession: !!currentSessionFromStorage,
-                totalQuestionsFound: totalQuestionsInSession,
-                overallStats: stats.totalQuestions
-              });
-              
-              // Use the highest count found
-              if (totalQuestionsInSession > 0) {
-                console.log('[Statistics] Using localStorage session data:', totalQuestionsInSession, 'questions');
-                return totalQuestionsInSession;
-              }
-              
-              // Fallback to prop data
-              if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData)) {
-                console.log('[Statistics] Using current session prop data:', currentSession.qaData.length, 'questions');
-                return currentSession.qaData.length;
-              }
-              
-              // Check if there are any questions in the enhance content cache
-              try {
-                const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('enhance_content_cache_'));
-                for (const cacheKey of cacheKeys) {
-                  const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-                  if (cached.qaItems && Array.isArray(cached.qaItems) && cached.qaItems.length > 0) {
-                    console.log('[Statistics] Using cached enhance content data:', cached.qaItems.length, 'questions');
-                    return cached.qaItems.length;
-                  }
-                }
-              } catch (e) {
-                console.error('[Statistics] Error checking enhance content cache:', e);
-              }
-              
-              console.log('[Statistics] Using overall stats fallback:', stats.totalQuestions, 'questions');
-              return stats.totalQuestions;
-            })()}
+        {/* Total Questions */}
+        <div className="text-center p-3 sm:p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="text-xl sm:text-2xl font-bold text-black">
+            {stats.totalQuestions}
           </div>
-          <div className="text-xs sm:text-sm text-blue-600 font-medium">
-            {(() => {
-              // Check if we have any session data
-              let hasSessionData = false;
-              
-              // Check prop data
-              if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData) && currentSession.qaData.length > 0) {
-                hasSessionData = true;
-              }
-              
-              // Check localStorage data
-              const possibleKeys = ['llm_qa_current_session', 'current_session', 'qa_session', 'enhance_content_state'];
-              for (const key of possibleKeys) {
-                try {
-                  const stored = localStorage.getItem(key);
-                  if (stored) {
-                    const parsed = JSON.parse(stored);
-                    if ((parsed.qaData && Array.isArray(parsed.qaData) && parsed.qaData.length > 0) ||
-                        (parsed.qaItems && Array.isArray(parsed.qaItems) && parsed.qaItems.length > 0)) {
-                      hasSessionData = true;
-                      break;
-                    }
-                  }
-                } catch (e) {
-                  // Ignore errors
-                }
-              }
-              
-              // Check enhance content cache
-              try {
-                const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('enhance_content_cache_'));
-                for (const cacheKey of cacheKeys) {
-                  const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-                  if (cached.qaItems && Array.isArray(cached.qaItems) && cached.qaItems.length > 0) {
-                    hasSessionData = true;
-                    break;
-                  }
-                }
-              } catch (e) {
-                // Ignore errors
-              }
-              
-              return hasSessionData ? 'Current Questions' : 'Total Questions';
-            })()}
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">Total Questions</div>
           </div>
-          {(() => {
-            // Check if we should show Live Session indicator
-            let hasSessionData = false;
-            
-            if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData) && currentSession.qaData.length > 0) {
-              hasSessionData = true;
-            }
-            
-            const possibleKeys = ['llm_qa_current_session', 'current_session', 'qa_session', 'enhance_content_state'];
-            for (const key of possibleKeys) {
-              try {
-                const stored = localStorage.getItem(key);
-                if (stored) {
-                  const parsed = JSON.parse(stored);
-                  if ((parsed.qaData && Array.isArray(parsed.qaData) && parsed.qaData.length > 0) ||
-                      (parsed.qaItems && Array.isArray(parsed.qaItems) && parsed.qaItems.length > 0)) {
-                    hasSessionData = true;
-                    break;
-                  }
-                }
-              } catch (e) {
-                // Ignore errors
-              }
-            }
-            
-            return hasSessionData ? <div className="text-xs text-blue-500 mt-1">Live Session</div> : null;
-          })()}
+        {/* Total Analyses */}
+        <div className="text-center p-3 sm:p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="text-xl sm:text-2xl font-bold text-black">
+            {stats.totalAIVisibilityAnalyses + stats.totalContentAnalyses + stats.totalStructureAnalyses}
         </div>
-        <div className="text-center p-3 sm:p-4 bg-green-50 rounded-lg border border-green-200">
-          <div className="text-xl sm:text-2xl font-bold text-green-700">
-            {(() => {
-              // Try multiple localStorage keys to find current session data
-              let currentSessionFromStorage = null;
-              let totalAccuracyInSession = 0;
-              let validAccuracyCount = 0;
-              
-              // Check all possible session storage locations
-              const possibleKeys = ['llm_qa_current_session', 'current_session', 'qa_session', 'enhance_content_state'];
-              
-              for (const key of possibleKeys) {
-                try {
-                  const stored = localStorage.getItem(key);
-                  if (stored) {
-                    const parsed = JSON.parse(stored);
-                    console.log(`[Statistics] Accuracy - Found data in ${key}:`, {
-                      hasQaData: !!parsed.qaData,
-                      qaDataLength: parsed.qaData?.length,
-                      hasQaItems: !!parsed.qaItems,
-                      qaItemsLength: parsed.qaItems?.length
-                    });
-                    
-                    // Check for qaData or qaItems
-                    const qaItems = parsed.qaData || parsed.qaItems;
-                    if (qaItems && Array.isArray(qaItems) && qaItems.length > 0) {
-                      const answeredQuestions = qaItems.filter(qa => qa.answer && qa.answer.trim() !== '');
-                      console.log(`[Statistics] Accuracy - Found ${answeredQuestions.length} answered questions in ${key}`);
-                      
-                      if (answeredQuestions.length > 0) {
-                        let sessionAccuracy = 0;
-                        let sessionValidCount = 0;
-                        
-                        answeredQuestions.forEach(qa => {
-                          console.log(`[Statistics] Accuracy - Processing QA:`, {
-                            hasAnswer: !!qa.answer,
-                            accuracyType: typeof qa.accuracy,
-                            accuracyValue: qa.accuracy,
-                            geoScore: qa.geoScore
-                          });
-                          
-                          if (qa.accuracy !== undefined && qa.accuracy !== null) {
-                            let accuracyValue = 0;
-                            if (typeof qa.accuracy === 'string') {
-                              accuracyValue = parseFloat(qa.accuracy.replace('%', ''));
-                            } else if (typeof qa.accuracy === 'number') {
-                              accuracyValue = qa.accuracy;
-                            } else if (qa.accuracy && typeof qa.accuracy === 'object' && qa.accuracy.accuracy !== undefined) {
-                              accuracyValue = parseFloat(qa.accuracy.accuracy.toString().replace('%', ''));
-                            }
-                            
-                            if (!isNaN(accuracyValue)) {
-                              sessionAccuracy += accuracyValue;
-                              sessionValidCount++;
-                              console.log(`[Statistics] Accuracy - Valid accuracy found: ${accuracyValue}%`);
-                            }
-                          }
-                        });
-                        
-                        if (sessionValidCount > 0) {
-                          const averageAccuracy = sessionAccuracy / sessionValidCount;
-                          console.log(`[Statistics] Accuracy - Session average: ${averageAccuracy.toFixed(1)}%`);
-                          
-                          // Update global counters
-                          totalAccuracyInSession += sessionAccuracy;
-                          validAccuracyCount += sessionValidCount;
-                          currentSessionFromStorage = parsed;
-                        }
-                      }
-                    }
-                  }
-                } catch (e) {
-                  console.error(`[Statistics] Error parsing ${key} for accuracy:`, e);
-                }
-              }
-              
-              // Check enhance content cache
-              try {
-                const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('enhance_content_cache_'));
-                for (const cacheKey of cacheKeys) {
-                  const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-                  if (cached.qaItems && Array.isArray(cached.qaItems) && cached.qaItems.length > 0) {
-                    const answeredQuestions = cached.qaItems.filter(qa => qa.answer && qa.answer.trim() !== '');
-                    console.log(`[Statistics] Accuracy - Found ${answeredQuestions.length} answered questions in cache ${cacheKey}`);
-                    
-                    if (answeredQuestions.length > 0) {
-                      let cacheAccuracy = 0;
-                      let cacheValidCount = 0;
-                      
-                      answeredQuestions.forEach(qa => {
-                        if (qa.accuracy !== undefined && qa.accuracy !== null) {
-                          let accuracyValue = 0;
-                          if (typeof qa.accuracy === 'string') {
-                            accuracyValue = parseFloat(qa.accuracy.replace('%', ''));
-                          } else if (typeof qa.accuracy === 'number') {
-                            accuracyValue = qa.accuracy;
-                          } else if (qa.accuracy && typeof qa.accuracy === 'object' && qa.accuracy.accuracy !== undefined) {
-                            accuracyValue = parseFloat(qa.accuracy.accuracy.toString().replace('%', ''));
-                          }
-                          
-                          if (!isNaN(accuracyValue)) {
-                            cacheAccuracy += accuracyValue;
-                            cacheValidCount++;
-                          }
-                        }
-                      });
-                      
-                      if (cacheValidCount > 0) {
-                        const averageAccuracy = cacheAccuracy / cacheValidCount;
-                        console.log(`[Statistics] Accuracy - Cache average: ${averageAccuracy.toFixed(1)}%`);
-                        
-                        // Update global counters
-                        totalAccuracyInSession += cacheAccuracy;
-                        validAccuracyCount += cacheValidCount;
-                      }
-                    }
-                  }
-                }
-              } catch (e) {
-                console.error('[Statistics] Error checking enhance content cache for accuracy:', e);
-              }
-              
-              console.log('[Statistics] Accuracy Debug:', {
-                hasCurrentSession: !!currentSession,
-                currentSessionId: currentSession?.id,
-                propQaDataLength: currentSession?.qaData?.length,
-                hasStorageSession: !!currentSessionFromStorage,
-                totalAccuracyFound: totalAccuracyInSession,
-                validAccuracyCount: validAccuracyCount,
-                overallStats: stats.averageAccuracy
-              });
-              
-              // Use the calculated accuracy from localStorage if available
-              if (validAccuracyCount > 0) {
-                const averageAccuracy = totalAccuracyInSession / validAccuracyCount;
-                console.log('[Statistics] Using localStorage accuracy data:', averageAccuracy.toFixed(1) + '%');
-                return averageAccuracy.toFixed(1);
-              }
-              
-              // Fallback to prop data
-              if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData) && currentSession.qaData.length > 0) {
-                const answeredQuestions = currentSession.qaData.filter(qa => qa.answer && qa.answer.trim() !== '');
-                if (answeredQuestions.length > 0) {
-                  let totalAccuracy = 0;
-                  let validAccuracyCount = 0;
-                  
-                  answeredQuestions.forEach(qa => {
-                    if (qa.accuracy !== undefined && qa.accuracy !== null) {
-                      let accuracyValue = 0;
-                      if (typeof qa.accuracy === 'string') {
-                        accuracyValue = parseFloat(qa.accuracy.replace('%', ''));
-                      } else if (typeof qa.accuracy === 'number') {
-                        accuracyValue = qa.accuracy;
-                      } else if (qa.accuracy && typeof qa.accuracy === 'object' && qa.accuracy.accuracy !== undefined) {
-                        accuracyValue = parseFloat(qa.accuracy.accuracy.toString().replace('%', ''));
-                      }
-                      
-                      if (!isNaN(accuracyValue)) {
-                        totalAccuracy += accuracyValue;
-                        validAccuracyCount++;
-                      }
-                    }
-                  });
-                  
-                  if (validAccuracyCount > 0) {
-                    const averageAccuracy = totalAccuracy / validAccuracyCount;
-                    console.log('[Statistics] Using current session prop accuracy data:', averageAccuracy.toFixed(1) + '%');
-                    return averageAccuracy.toFixed(1);
-                  }
-                }
-                
-                // Fallback: try to use geoScore if available
-                const questionsWithGeoScore = currentSession.qaData.filter(qa => qa.geoScore !== undefined && qa.geoScore !== null);
-                if (questionsWithGeoScore.length > 0) {
-                  const totalGeoScore = questionsWithGeoScore.reduce((sum, qa) => sum + (qa.geoScore || 0), 0);
-                  const averageGeoScore = totalGeoScore / questionsWithGeoScore.length;
-                  const convertedAccuracy = (averageGeoScore * 20).toFixed(1); // Convert 0-5 scale to 0-100
-                  console.log('[Statistics] Using geoScore fallback accuracy:', convertedAccuracy + '%');
-                  return convertedAccuracy;
-                }
-                
-                console.log('[Statistics] Using default accuracy for answered questions: 75.0%');
-                return '75.0'; // Default accuracy for answered questions
-              }
-              
-              console.log('[Statistics] Using overall stats accuracy fallback:', stats.averageAccuracy || '0');
-              return stats.averageAccuracy || '0';
-            })()}
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">Total Analyses</div>
           </div>
-          <div className="text-xs sm:text-sm text-green-600 font-medium">
-            {(() => {
-              // Check if we have any session data
-              let hasSessionData = false;
-              
-              // Check prop data
-              if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData) && currentSession.qaData.length > 0) {
-                hasSessionData = true;
-              }
-              
-              // Check localStorage data
-              const possibleKeys = ['llm_qa_current_session', 'current_session', 'qa_session', 'enhance_content_state'];
-              for (const key of possibleKeys) {
-                try {
-                  const stored = localStorage.getItem(key);
-                  if (stored) {
-                    const parsed = JSON.parse(stored);
-                    if ((parsed.qaData && Array.isArray(parsed.qaData) && parsed.qaData.length > 0) ||
-                        (parsed.qaItems && Array.isArray(parsed.qaItems) && parsed.qaItems.length > 0)) {
-                      hasSessionData = true;
-                      break;
-                    }
-                  }
-                } catch (e) {
-                  // Ignore errors
-                }
-              }
-              
-              // Check enhance content cache
-              try {
-                const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('enhance_content_cache_'));
-                for (const cacheKey of cacheKeys) {
-                  const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-                  if (cached.qaItems && Array.isArray(cached.qaItems) && cached.qaItems.length > 0) {
-                    hasSessionData = true;
-                    break;
-                  }
-                }
-              } catch (e) {
-                // Ignore errors
-              }
-              
-              return hasSessionData ? 'Current Accuracy' : 'Avg Accuracy';
-            })()}
+        {/* Average Accuracy */}
+        <div className="text-center p-3 sm:p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="text-xl sm:text-2xl font-bold text-black">
+            {stats.avgAccuracy.toFixed(1)}%
           </div>
-          {(() => {
-            // Check if we should show Live Session indicator
-            let hasSessionData = false;
-            
-            if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData) && currentSession.qaData.length > 0) {
-              hasSessionData = true;
-            }
-            
-            const possibleKeys = ['llm_qa_current_session', 'current_session', 'qa_session', 'enhance_content_state'];
-            for (const key of possibleKeys) {
-              try {
-                const stored = localStorage.getItem(key);
-                if (stored) {
-                  const parsed = JSON.parse(stored);
-                  if ((parsed.qaData && Array.isArray(parsed.qaData) && parsed.qaData.length > 0) ||
-                      (parsed.qaItems && Array.isArray(parsed.qaItems) && parsed.qaItems.length > 0)) {
-                    hasSessionData = true;
-                    break;
-                  }
-                }
-              } catch (e) {
-                // Ignore errors
-              }
-            }
-            
-            return hasSessionData ? <div className="text-xs text-green-500 mt-1">Live Session</div> : null;
-          })()}
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">Avg Accuracy</div>
         </div>
-        <div className="text-center p-3 sm:p-4 bg-purple-50 rounded-lg border border-purple-200">
-          <div className="text-xl sm:text-2xl font-bold text-purple-700">
-            ${(() => {
-              if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData) && currentSession.qaData.length > 0) {
-                const totalCost = currentSession.qaData.reduce((sum, qa) => sum + (qa.cost || 0), 0);
-                return totalCost.toFixed(5);
-              }
-              return parseFloat(stats.totalCost).toFixed(5);
-            })()}
-          </div>
-          <div className="text-xs sm:text-sm text-purple-600 font-medium">
-            {(currentSession && currentSession.qaData && Array.isArray(currentSession.qaData)) ? 'Current Cost' : 'Total Cost'}
-          </div>
-          {(currentSession && currentSession.qaData && Array.isArray(currentSession.qaData)) && (
-            <div className="text-xs text-purple-500 mt-1">Live Session</div>
-          )}
+        
+        {/* Total Cost */}
+        <div className="text-center p-3 sm:p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="text-xl sm:text-2xl font-bold text-black">
+            ${parseFloat(stats.totalCost).toFixed(5)}
         </div>
-        <div className="text-center p-3 sm:p-4 bg-orange-50 rounded-lg border border-orange-200">
-          <div className="text-xl sm:text-2xl font-bold text-orange-700">
-            {(() => {
-              if (currentSession && currentSession.qaData && Array.isArray(currentSession.qaData) && currentSession.qaData.length > 0) {
-                const totalTokens = currentSession.qaData.reduce((sum, qa) => sum + (qa.totalTokens || 0), 0);
-                return totalTokens.toLocaleString();
-              }
-              return stats.totalTokens.toLocaleString();
-            })()}
-          </div>
-          <div className="text-xs sm:text-sm text-orange-600 font-medium">
-            {(currentSession && currentSession.qaData && Array.isArray(currentSession.qaData)) ? 'Current Tokens' : 'Total Tokens'}
-          </div>
-          {(currentSession && currentSession.qaData && Array.isArray(currentSession.qaData)) && (
-            <div className="text-xs text-orange-500 mt-1">Live Session</div>
-          )}
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">Total Cost</div>
         </div>
       </div>
+
+
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
@@ -1117,7 +774,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-lg">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
+              <TrendingUp className="w-6 h-6 text-black" />
               <h3 className="text-xl font-bold text-gray-900">
               {selectedMetric === 'questions' ? 'Questions Generated' : 
                selectedMetric === 'cost' ? 'Cost Analysis' : 'Sessions Created'} - {timeRange === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
@@ -1129,7 +786,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
               <select 
                 value={timeRange} 
                 onChange={(e) => setTimeRange(e.target.value)}
-                className="bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-black"
               >
                 <option value="7d">7 Days</option>
                 <option value="30d">30 Days</option>
@@ -1137,7 +794,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
               <select 
                 value={selectedMetric} 
                 onChange={(e) => setSelectedMetric(e.target.value)}
-                className="bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-black"
               >
                 <option value="questions">Questions</option>
                 <option value="cost">Cost</option>
@@ -1219,7 +876,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
         {/* Pie Chart - Provider Distribution */}
         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-lg">
           <div className="flex items-center gap-3 mb-6">
-            <Zap className="w-6 h-6 text-blue-600" />
+            <Zap className="w-6 h-6 text-black" />
             <h3 className="text-xl font-bold text-gray-900">Provider Distribution</h3>
           </div>
           
@@ -1257,7 +914,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
               
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
-                      <div className="text-2xl font-bold text-blue-600">
+                      <div className="text-2xl font-bold text-black">
                     {Object.values(providerData).reduce((sum, val) => sum + val, 0)}
                   </div>
                       <div className="text-xs text-gray-600 font-medium">Total</div>
@@ -1274,7 +931,7 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
                   style={{ backgroundColor: providerColors[index % providerColors.length] }}
                 />
                     <span className="text-sm text-gray-700 font-medium">{getProviderDisplayName(provider)}</span>
-                    <span className="text-sm font-bold text-blue-600 ml-auto">{count}</span>
+                    <span className="text-sm font-bold text-black ml-auto">{count}</span>
               </div>
             ))}
           </div>
@@ -1294,83 +951,85 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <Calendar className="w-5 h-5 text-blue-600" />
+            <Calendar className="w-5 h-5 text-black" />
             <h3 className="text-lg font-bold text-gray-900">Token Usage</h3>
           </div>
-          <div className="text-3xl font-bold text-blue-600 mb-2">{stats.totalTokens.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-black mb-2">{stats.totalTokens.toLocaleString()}</div>
           <div className="text-gray-600 font-medium">Total Tokens Used</div>
           <div className="mt-4">
             <div className="flex justify-between text-sm mb-1">
               <span className="text-gray-600">Input Tokens</span>
-              <span className="text-blue-600 font-semibold">{stats.inputTokens.toLocaleString()}</span>
+              <span className="text-black font-semibold">{stats.inputTokens.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Output Tokens</span>
-              <span className="text-blue-600 font-semibold">{stats.outputTokens.toLocaleString()}</span>
+              <span className="text-black font-semibold">{stats.outputTokens.toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <Target className="w-5 h-5 text-green-600" />
+            <Target className="w-5 h-5 text-black" />
             <h3 className="text-lg font-bold text-gray-900">Performance</h3>
           </div>
-          <div className="text-3xl font-bold text-green-600 mb-2">{stats.avgQuestionsPerSession.toFixed(1)}</div>
+          <div className="text-3xl font-bold text-black mb-2">{stats.avgQuestionsPerSession.toFixed(1)}</div>
           <div className="text-gray-600 font-medium">Avg Questions/Session</div>
           <div className="mt-4">
             <div className="flex justify-between text-sm mb-1">
               <span className="text-gray-600">Success Rate</span>
-              <span className="text-green-600 font-semibold">{stats.successRate.toFixed(1)}%</span>
+              <span className="text-black font-semibold">{stats.successRate.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Avg Response Time</span>
-              <span className="text-blue-600 font-semibold">{stats.avgResponseTime.toFixed(1)}s</span>
+              <span className="text-black font-semibold">{stats.avgResponseTime.toFixed(1)}s</span>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <TrendingUp className="w-5 h-5 text-purple-600" />
+            <TrendingUp className="w-5 h-5 text-black" />
             <h3 className="text-lg font-bold text-gray-900">Trends</h3>
           </div>
-          <div className="text-3xl font-bold text-purple-600 mb-2">
+          <div className="text-3xl font-bold text-black mb-2">
             {stats.weeklyGrowth >= 0 ? '+' : ''}{stats.weeklyGrowth.toFixed(1)}%
           </div>
           <div className="text-gray-600 font-medium">This Week</div>
           <div className="mt-4">
             <div className="flex justify-between text-sm mb-1">
               <span className="text-gray-600">Daily Avg</span>
-              <span className="text-purple-600 font-semibold">{stats.dailyAverage.toFixed(0)}</span>
+              <span className="text-black font-semibold">{stats.dailyAverage.toFixed(0)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Peak Day</span>
-              <span className="text-purple-600 font-semibold">{stats.peakDay}</span>
+              <span className="text-black font-semibold">{stats.peakDay}</span>
             </div>
           </div>
         </div>
       </div>
+
+
 
       {/* Advanced Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {/* Sentiment Analysis */}
         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <Activity className="w-5 h-5 text-blue-600" />
+            <Activity className="w-5 h-5 text-black" />
             <h3 className="text-lg font-bold text-gray-900">Sentiment Analysis</h3>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{stats.sentimentDistribution.positive}</div>
+              <div className="text-2xl font-bold text-black">{stats.sentimentDistribution.positive}</div>
               <div className="text-gray-600 font-medium">Positive</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">{stats.sentimentDistribution.negative}</div>
+              <div className="text-2xl font-bold text-black">{stats.sentimentDistribution.negative}</div>
               <div className="text-gray-600 font-medium">Negative</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">{stats.sentimentDistribution.neutral}</div>
+              <div className="text-2xl font-bold text-black">{stats.sentimentDistribution.neutral}</div>
               <div className="text-gray-600 font-medium">Neutral</div>
             </div>
           </div>
@@ -1379,21 +1038,21 @@ export function Statistics({ sessions, currentSession }: StatisticsProps) {
         {/* Quality Metrics */}
         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <Target className="w-5 h-5 text-orange-600" />
+            <Target className="w-5 h-5 text-black" />
             <h3 className="text-lg font-bold text-gray-900">Quality Metrics</h3>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-gray-600">GEO Score Avg</span>
-              <span className="text-orange-600 font-semibold">{stats.geoScoreAverage.toFixed(1)}%</span>
+              <span className="text-black font-semibold">{stats.geoScoreAverage.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Semantic Relevance</span>
-              <span className="text-orange-600 font-semibold">{stats.semanticRelevanceAverage.toFixed(1)}%</span>
+              <span className="text-black font-semibold">{stats.semanticRelevanceAverage.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Vector Similarity</span>
-              <span className="text-orange-600 font-semibold">{stats.vectorSimilarityAverage.toFixed(1)}%</span>
+              <span className="text-black font-semibold">{stats.vectorSimilarityAverage.toFixed(1)}%</span>
             </div>
           </div>
         </div>

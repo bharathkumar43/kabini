@@ -259,6 +259,227 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
         </div>
       )}
 
+
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-green-800">{successMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Competitor Section */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Add New Competitor</h3>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
+          >
+            {showAddForm ? 'Cancel' : 'Add Competitor'}
+          </button>
+        </div>
+        
+        {showAddForm && (
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-end space-x-4">
+              <div className="flex-1">
+                <label htmlFor="competitor-name" className="block text-sm font-medium text-gray-700 mb-2">
+                  Competitor Company Name
+                </label>
+                <input
+                  type="text"
+                  id="competitor-name"
+                  value={newCompetitorName}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    // Detect URL-like input: contains a dot or protocol and no spaces
+                    const looksLikeUrl = /^(https?:\/\/)?[^\s]+\.[^\s]+/i.test(raw);
+                    setIsUrlInput(looksLikeUrl);
+                    if (looksLikeUrl) {
+                      setNewCompetitorName(raw);
+                    } else {
+                      // Allow only A–Z and a–z for company name
+                      const sanitized = raw.replace(/[^A-Za-z]/g, '');
+                      setNewCompetitorName(sanitized);
+                    }
+                    try { (e.target as HTMLInputElement).setCustomValidity(''); } catch {}
+                  }}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !isAddingCompetitor && newCompetitorName.trim()) {
+                      handleAddCompetitor();
+                    }
+                  }}
+                  placeholder="Enter competitor company name or paste a URL..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 bg-white"
+                  onInvalid={(e) => {
+                    e.preventDefault();
+                    const msg = isUrlInput
+                      ? 'Please enter a valid URL (e.g., https://example.com)'
+                      : 'Only letters (A–Z, a–z) are allowed';
+                    (e.target as HTMLInputElement).setCustomValidity(msg);
+                  }}
+                  onBlur={(e) => {
+                    const value = e.currentTarget.value.trim();
+                    if (!value) { e.currentTarget.setCustomValidity(''); return; }
+                    if (isUrlInput) {
+                      const urlOk = /^(https?:\/\/)?([A-Za-z0-9-]+\.)+[A-Za-z]{2,}(\/[^\s]*)?$/i.test(value);
+                      e.currentTarget.setCustomValidity(urlOk ? '' : 'Please enter a valid URL (e.g., https://example.com)');
+                    } else {
+                      const nameOk = /^[A-Za-z]+$/.test(value);
+                      e.currentTarget.setCustomValidity(nameOk ? '' : 'Only letters (A–Z, a–z) are allowed');
+                    }
+                  }}
+                  disabled={isAddingCompetitor}
+                />
+              </div>
+              <div className="flex-shrink-0">
+                <button
+                  onClick={handleAddCompetitor}
+                  disabled={isAddingCompetitor || !newCompetitorName.trim()}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isAddingCompetitor ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Analyzing...
+                    </>
+                  ) : (
+                    'Add & Analyze'
+                  )}
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-gray-600">
+              The system will automatically analyze AI visibility scores for the new competitor.
+              {isAddingCompetitor && (
+                <span className="text-blue-600 font-medium">
+                  {' '}This may take 30-60 seconds as we analyze across 4 AI engines.
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Main Table */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Market Analysis Results</h2>
+          <p className="text-sm text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
+        </div>
+        
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Company
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Gemini
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Perplexity
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Claude
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  ChatGPT
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Average Score
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {competitors.map((competitor, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 h-10 w-10">
+                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <span className="text-sm font-medium text-blue-600">
+                            {competitor.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-medium text-gray-900">{competitor.name}</div>
+                      </div>
+                    </div>
+                  </td>
+                  
+                  {/* Gemini Score */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.gemini)}`}>
+                      {formatScore(competitor.aiScores.gemini)}
+                    </span>
+                  </td>
+                  
+                  {/* Perplexity Score */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.perplexity)}`}>
+                      {formatScore(competitor.aiScores.perplexity)}
+                    </span>
+                  </td>
+                  
+                  {/* Claude Score */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.claude)}`}>
+                      {formatScore(competitor.aiScores.claude)}
+                    </span>
+                  </td>
+                  
+                  {/* ChatGPT Score */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.chatgpt)}`}>
+                      {formatScore(competitor.aiScores.chatgpt)}
+                    </span>
+                  </td>
+                  
+                  {/* Average Score */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`text-sm font-semibold ${getScoreClass(competitor.totalScore)}`}>
+                      {formatScore(competitor.totalScore)}
+                    </span>
+                  </td>
+                  
+                  {/* Actions */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button
+                      onClick={() => handleDeleteCompetitor(index)}
+                      className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-2 rounded-full transition-colors"
+                      title="Delete competitor"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Competitor Snapshot - Holistic Market Analysis */}
       {competitors.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -324,40 +545,29 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                 </div>
                 
                 {/* Growth Quadrant Chart */}
-                <div className="relative h-48 bg-white border border-gray-200 rounded-lg">
-                  {/* Y-axis labels */}
-                  <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 px-1">
-                    <span>High Growth</span>
-                    <span>Low Growth</span>
-                  </div>
-                  
-                  {/* X-axis labels */}
-                  <div className="absolute bottom-0 left-0 w-full flex justify-between text-xs text-gray-500 px-2 pb-1">
-                    <span>Low Traffic</span>
-                    <span>High Traffic</span>
-                  </div>
-                  
+                <div className="relative h-64 bg-white border border-gray-200 rounded-lg">
                   {/* Quadrant lines */}
                   <div className="absolute top-1/2 left-0 w-full h-px bg-gray-300"></div>
                   <div className="absolute left-1/2 top-0 w-px h-full bg-gray-300"></div>
                   
-                  {/* Quadrant labels */}
-                  <div className="absolute top-2 left-2 text-xs font-medium text-blue-600">Game Changers</div>
-                  <div className="absolute top-2 right-2 text-xs font-medium text-green-600">Leaders</div>
-                  <div className="absolute bottom-2 left-2 text-xs font-medium text-yellow-600">Niche Players</div>
-                  <div className="absolute bottom-2 right-2 text-xs font-medium text-purple-600">Established Players</div>
+                  {/* Quadrant labels - Clean positioning without axis labels */}
+                  <div className="absolute top-4 left-4 text-xs font-medium text-gray-700">Game Changers</div>
+                  <div className="absolute top-4 right-4 text-xs font-medium text-gray-700">Leaders</div>
+                  <div className="absolute bottom-4 left-4 text-xs font-medium text-gray-700">Niche Players</div>
+                  <div className="absolute bottom-4 right-4 text-xs font-medium text-gray-700">Established Players</div>
                   
                   {/* Competitor positions */}
                   {competitors.map((competitor, index) => {
                     const trafficScore = (competitor.totalScore || 0) * 10; // 0-100 scale
                     const growthScore = Math.floor(Math.random() * 100); // Simulated growth data
-                    const left = Math.min(90, Math.max(10, trafficScore));
-                    const top = Math.min(90, Math.max(10, 100 - growthScore));
+                    // Adjust positioning to avoid label overlap (keep away from edges)
+                    const left = Math.min(85, Math.max(15, trafficScore));
+                    const top = Math.min(85, Math.max(15, 100 - growthScore));
                     
                     return (
                       <div
                         key={index}
-                        className="absolute w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-lg"
+                        className="absolute w-3 h-3 bg-black rounded-full border-2 border-white shadow-lg"
                         style={{ left: `${left}%`, top: `${top}%` }}
                         title={`${competitor.name}: Traffic ${Math.round(trafficScore)}, Growth ${growthScore}%`}
                       />
@@ -523,227 +733,6 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
           </div>
         </div>
       )}
-
-      {/* Success Message */}
-      {successMessage && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-green-800">{successMessage}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Competitor Section */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Add New Competitor</h3>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            {showAddForm ? 'Cancel' : 'Add Competitor'}
-          </button>
-        </div>
-        
-        {showAddForm && (
-          <div className="border-t border-gray-200 pt-4">
-            <div className="flex items-end space-x-4">
-              <div className="flex-1">
-                <label htmlFor="competitor-name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Competitor Company Name
-                </label>
-                <input
-                  type="text"
-                  id="competitor-name"
-                  value={newCompetitorName}
-                  onChange={(e) => {
-                    const raw = e.target.value.trim();
-                    // Detect URL-like input: contains a dot or protocol and no spaces
-                    const looksLikeUrl = /^(https?:\/\/)?[^\s]+\.[^\s]+/i.test(raw);
-                    setIsUrlInput(looksLikeUrl);
-                    if (looksLikeUrl) {
-                      setNewCompetitorName(raw);
-                    } else {
-                      // Allow only A–Z and a–z for company name
-                      const sanitized = raw.replace(/[^A-Za-z]/g, '');
-                      setNewCompetitorName(sanitized);
-                    }
-                    try { (e.target as HTMLInputElement).setCustomValidity(''); } catch {}
-                  }}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !isAddingCompetitor && newCompetitorName.trim()) {
-                      handleAddCompetitor();
-                    }
-                  }}
-                  placeholder="Enter competitor company name or paste a URL..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 bg-white"
-                  onInvalid={(e) => {
-                    e.preventDefault();
-                    const msg = isUrlInput
-                      ? 'Please enter a valid URL (e.g., https://example.com)'
-                      : 'Only letters (A–Z, a–z) are allowed';
-                    (e.target as HTMLInputElement).setCustomValidity(msg);
-                  }}
-                  onBlur={(e) => {
-                    const value = e.currentTarget.value.trim();
-                    if (!value) { e.currentTarget.setCustomValidity(''); return; }
-                    if (isUrlInput) {
-                      const urlOk = /^(https?:\/\/)?([A-Za-z0-9-]+\.)+[A-Za-z]{2,}(\/[^\s]*)?$/i.test(value);
-                      e.currentTarget.setCustomValidity(urlOk ? '' : 'Please enter a valid URL (e.g., https://example.com)');
-                    } else {
-                      const nameOk = /^[A-Za-z]+$/.test(value);
-                      e.currentTarget.setCustomValidity(nameOk ? '' : 'Only letters (A–Z, a–z) are allowed');
-                    }
-                  }}
-                  disabled={isAddingCompetitor}
-                />
-              </div>
-              <div className="flex-shrink-0">
-                <button
-                  onClick={handleAddCompetitor}
-                  disabled={isAddingCompetitor || !newCompetitorName.trim()}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isAddingCompetitor ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Analyzing...
-                    </>
-                  ) : (
-                    'Add & Analyze'
-                  )}
-                </button>
-              </div>
-            </div>
-            <p className="mt-2 text-sm text-gray-600">
-              The system will automatically analyze AI visibility scores for the new competitor.
-              {isAddingCompetitor && (
-                <span className="text-blue-600 font-medium">
-                  {' '}This may take 30-60 seconds as we analyze across 4 AI engines.
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Main Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Market Analysis Results</h2>
-          <p className="text-sm text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
-        </div>
-        
-        <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Company
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Gemini
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Perplexity
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Claude
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ChatGPT
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Average Score
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-
-
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {competitors.map((competitor, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <span className="text-sm font-medium text-blue-600">
-                            {competitor.name.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{competitor.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  
-                  {/* Gemini Score */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.gemini)}`}>
-                      {formatScore(competitor.aiScores.gemini)}
-                    </span>
-                  </td>
-                  
-                  {/* Perplexity Score */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.perplexity)}`}>
-                      {formatScore(competitor.aiScores.perplexity)}
-                    </span>
-                  </td>
-                  
-                  {/* Claude Score */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.claude)}`}>
-                      {formatScore(competitor.aiScores.claude)}
-                    </span>
-                  </td>
-                  
-                  {/* ChatGPT Score */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.chatgpt)}`}>
-                      {formatScore(competitor.aiScores.chatgpt)}
-                    </span>
-                  </td>
-                  
-                  {/* Average Score */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm font-semibold ${getScoreClass(competitor.totalScore)}`}>
-                      {formatScore(competitor.totalScore)}
-                    </span>
-                  </td>
-                  
-                  {/* Actions */}
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleDeleteCompetitor(index)}
-                      className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-2 rounded-full transition-colors"
-                      title="Delete competitor"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
 
     </div>
