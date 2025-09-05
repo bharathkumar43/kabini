@@ -353,8 +353,8 @@ class Database {
     try {
       const query = `
         INSERT INTO users 
-        (id, email, name, display_name, password, tenant_id, roles, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        (id, email, name, display_name, password, tenant_id, roles, is_active, email_verified, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `;
 
       const result = await client.query(query, [
@@ -366,11 +366,89 @@ class Database {
         userData.tenantId || null,
         JSON.stringify(userData.roles),
         userData.isActive ? true : false,
+        userData.emailVerified ? true : false,
         userData.createdAt,
         userData.updatedAt
       ]);
 
       return result.rows[0]?.id || userData.id;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Update user email verification status
+  async updateEmailVerificationStatus(userId, isVerified) {
+    const client = await this.pool.connect();
+    
+    try {
+      const query = `
+        UPDATE users 
+        SET email_verified = $1, updated_at = NOW()
+        WHERE id = $2
+      `;
+
+      await client.query(query, [isVerified, userId]);
+      return true;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Get user by email verification token
+  async getUserByVerificationToken(token) {
+    const client = await this.pool.connect();
+    
+    try {
+      const query = `
+        SELECT u.*, vt.expires_at as token_expires_at
+        FROM users u
+        JOIN email_verification_tokens vt ON u.id = vt.user_id
+        WHERE vt.token = $1 AND vt.used = false
+      `;
+
+      const result = await client.query(query, [token]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Create email verification token
+  async createEmailVerificationToken(userId, token, expiresAt) {
+    const client = await this.pool.connect();
+    
+    try {
+      const query = `
+        INSERT INTO email_verification_tokens (user_id, token, expires_at, created_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+        token = EXCLUDED.token,
+        expires_at = EXCLUDED.expires_at,
+        used = false,
+        created_at = NOW()
+      `;
+
+      await client.query(query, [userId, token, expiresAt]);
+      return true;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Mark email verification token as used
+  async markEmailVerificationTokenAsUsed(token) {
+    const client = await this.pool.connect();
+    
+    try {
+      const query = `
+        UPDATE email_verification_tokens 
+        SET used = true, used_at = NOW()
+        WHERE token = $1
+      `;
+
+      const result = await client.query(query, [token]);
+      return result.rowCount > 0;
     } finally {
       client.release();
     }
@@ -504,10 +582,24 @@ class Database {
     const client = await this.pool.connect();
     
     try {
+      console.log('🔍 [Database] Looking up token:', `${token.substring(0, 10)}...`);
+      
       const result = await client.query(
-        'SELECT * FROM password_reset_tokens WHERE token = $1 AND used = false AND expires_at > NOW()',
+        'SELECT * FROM password_reset_tokens WHERE token = $1 AND used = false AND expires_at > NOW() AT TIME ZONE \'UTC\'',
         [token]
       );
+      
+      console.log('🔍 [Database] Query result:', {
+        found: result.rows.length > 0,
+        token: result.rows[0] ? {
+          id: result.rows[0].id,
+          user_id: result.rows[0].user_id,
+          used: result.rows[0].used,
+          expires_at: result.rows[0].expires_at,
+          created_at: result.rows[0].created_at
+        } : null
+      });
+      
       return result.rows[0] || null;
     } finally {
       client.release();
@@ -533,7 +625,7 @@ class Database {
     
     try {
       const result = await client.query(
-        'DELETE FROM password_reset_tokens WHERE expires_at < NOW() OR used = true'
+        'DELETE FROM password_reset_tokens WHERE expires_at < NOW() AT TIME ZONE \'UTC\' OR used = true'
       );
       return result.rowCount;
     } finally {

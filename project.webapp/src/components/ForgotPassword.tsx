@@ -9,6 +9,7 @@ const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailValidationError, setEmailValidationError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   
@@ -25,15 +26,15 @@ const ForgotPassword = () => {
     const formattedEmail = formatEmail(value);
     setEmail(formattedEmail);
     
-    // Real-time email validation - show toggle notification for errors
+    // Real-time email validation - show red alert box for errors
     if (!formattedEmail.trim()) {
-      setError(null); // Clear error when field is empty
+      setEmailValidationError(null); // Clear error when field is empty
     } else {
       const emailValidation = validateProfessionalEmail(formattedEmail);
       if (!emailValidation.isValid) {
-        setError(getEmailValidationMessage(formattedEmail, emailValidation));
+        setEmailValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
       } else {
-        setError(null); // Clear error when email is valid
+        setEmailValidationError(null); // Clear error when email is valid
       }
     }
   };
@@ -46,7 +47,7 @@ const ForgotPassword = () => {
     // Validate email field
     if (!email || !email.trim()) {
       console.log('[ForgotPassword] Email is empty, setting validation error');
-      setError('Please enter your email address');
+      setEmailValidationError('Please enter your email address');
       return;
     }
 
@@ -55,12 +56,12 @@ const ForgotPassword = () => {
       const emailValidation = validateProfessionalEmail(email);
       if (!emailValidation || !emailValidation.isValid) {
         console.log('[ForgotPassword] Email validation failed, setting validation error');
-        setError('Please enter a valid email address');
+        setEmailValidationError(getEmailValidationMessage(email, emailValidation));
         return;
       }
     } catch (validationError) {
       console.log('[ForgotPassword] Email validation error:', validationError);
-      setError('Please enter a valid email address');
+      setEmailValidationError('Please enter a valid email address');
       return;
     }
 
@@ -147,20 +148,20 @@ const ForgotPassword = () => {
                   // Trigger validation after paste
                   const emailValidation = validateProfessionalEmail(formattedEmail);
                   if (!emailValidation.isValid) {
-                    setError(getEmailValidationMessage(formattedEmail, emailValidation));
+                    setEmailValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
                   } else {
-                    setError(null); // Clear error when email is valid
+                    setEmailValidationError(null); // Clear error when email is valid
                   }
                 })}
                 onPaste={(e) => handlePaste(e, (value) => {
                   const formattedEmail = formatEmail(value);
                   setEmail(formattedEmail);
-                  // Trigger validation after paste - show toggle notification for errors
+                  // Trigger validation after paste - show red alert box for errors
                   const emailValidation = validateProfessionalEmail(formattedEmail);
                   if (!emailValidation.isValid) {
-                    setError(getEmailValidationMessage(formattedEmail, emailValidation));
+                    setEmailValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
                   } else {
-                    setError(null); // Clear error when email is valid
+                    setEmailValidationError(null); // Clear error when email is valid
                   }
                 })}
                               onKeyDown={handleKeyDown}
@@ -169,17 +170,24 @@ const ForgotPassword = () => {
               onCompositionEnd={(e) => e.preventDefault()}
               required
               placeholder="Enter your email address *"
-              className="w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all border-gray-300"
+              className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${
+                emailValidationError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
+              }`}
               />
               
-              {/* Remove inline error message - now using ErrorNotification toggle */}
+              {/* Simple Red Text for Email Validation Errors */}
+              {emailValidationError && (
+                <div className="mt-2 text-sm text-red-600">
+                  Please enter valid email address
+                </div>
+              )}
             </div>
             
 
             
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !!emailValidationError}
               className="w-full bg-black text-white font-bold py-4 px-6 rounded-xl hover:bg-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transform hover:scale-[1.02]"
             >
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send Reset Link'}

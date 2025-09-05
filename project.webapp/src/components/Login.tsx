@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { User, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -16,11 +16,38 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{ email?: string; password?: string }>({});
   const [authError, setAuthError] = useState<string | null>(null);
+  const [preventAutofill, setPreventAutofill] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, error, clearError, isAuthenticated, user } = useAuth();
   
   // Enhanced emoji blocking hook
   const { handleInputChangeAggressive: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
+
+  // Effect to clear form and prevent autofill on mount
+  useEffect(() => {
+    // Clear form data and validation errors
+    setFormData({ email: '', password: '' });
+    setValidationErrors({});
+    setAuthError(null);
+    setPreventAutofill(true);
+
+    // Check for verification message from SignUp
+    if (location.state?.message) {
+      setAuthError(location.state.message);
+      // Pre-fill email if provided
+      if (location.state.email) {
+        setFormData(prev => ({ ...prev, email: location.state.email }));
+      }
+    }
+
+    // Temporarily prevent autofill by making fields read-only
+    const timer = setTimeout(() => {
+      setPreventAutofill(false);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [location.state]);
 
   // Debug effect to monitor error state
   useEffect(() => {
@@ -31,35 +58,61 @@ const Login = () => {
 
   // Effect to redirect after successful authentication
   useEffect(() => {
-    const checkAuthAndRedirect = async () => {
-      // Use the AuthContext state instead of checking authService directly
-      if (isAuthenticated && user) {
-        console.log('[Login] User is authenticated via AuthContext, redirecting to overview...');
-        navigate('/overview', { replace: true });
-        return;
-      }
-      
-      // Fallback: also check authService directly
-      if (authService.isAuthenticated()) {
-        console.log('[Login] User is authenticated via authService, redirecting to overview...');
-        navigate('/overview', { replace: true });
-        return;
+    if (isAuthenticated && user) {
+      console.log('[Login] User is authenticated via AuthContext, redirecting to overview...');
+      navigate('/overview', { replace: true });
+    }
+  }, [navigate, isAuthenticated, user]);
+
+  // Effect to handle browser back button and prevent navigation to Google pages
+  useEffect(() => {
+    // Check if user is coming from Google OAuth redirect
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasGoogleParams = urlParams.has('code') || urlParams.has('state') || urlParams.has('error');
+    
+    if (hasGoogleParams) {
+      // Clear URL parameters and replace history to prevent back navigation to Google
+      window.history.replaceState({}, '', '/login');
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      // Only prevent navigation if we're coming from OAuth and trying to go back to OAuth pages
+      if (hasGoogleParams && (window.location.pathname === '/login' || window.location.pathname === '/')) {
+        // Allow normal navigation but ensure we stay on login page
+        window.history.replaceState({}, '', '/login');
       }
     };
 
-    // Check immediately
-    checkAuthAndRedirect();
-
-    // Set up an interval to check authentication status (more frequent for better responsiveness)
-    const interval = setInterval(checkAuthAndRedirect, 100);
+    // Add event listener
+    window.addEventListener('popstate', handlePopState);
 
     return () => {
-      clearInterval(interval);
-      // Clear any pending authentication errors when component unmounts
-      setAuthError(null);
-      setIsLoading(false);
+      window.removeEventListener('popstate', handlePopState);
     };
-  }, [navigate, isAuthenticated, user]);
+  }, []);
+
+  // Consolidated validation function
+  const validateField = (name: string, value: string): string | undefined => {
+    if (name === 'email') {
+      if (!value.trim()) {
+        return 'Please enter your email address';
+      }
+      const emailValidation = validateProfessionalEmail(value);
+      if (!emailValidation.isValid) {
+        return getEmailValidationMessage(value, emailValidation);
+      }
+      return undefined;
+    }
+    
+    if (name === 'password') {
+      if (!value.trim()) {
+        return 'Please enter your password';
+      }
+      return undefined;
+    }
+    
+    return undefined;
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -75,87 +128,21 @@ const Login = () => {
       [name]: value
     });
     
-    // Real-time validation for email
-    if (name === 'email') {
-      if (!value.trim()) {
-        setValidationErrors(prev => ({ ...prev, email: 'Please enter your email address' }));
-      } else {
-        // Use comprehensive Gmail email validation for real-time feedback
-        const emailValidation = validateProfessionalEmail(value);
-        if (!emailValidation.isValid) {
-          setValidationErrors(prev => ({ ...prev, email: getEmailValidationMessage(value, emailValidation) }));
-        } else {
-          setValidationErrors(prev => ({ ...prev, email: undefined }));
-        }
-      }
-    }
-    
-    // Real-time validation for password
-    if (name === 'password') {
-      if (!value.trim()) {
-        setValidationErrors(prev => ({ ...prev, password: 'Please enter your password' }));
-      } else {
-        setValidationErrors(prev => ({ ...prev, password: undefined }));
-      }
-    }
+    // Real-time validation using consolidated function
+    const error = validateField(name, value);
+    setValidationErrors(prev => ({ ...prev, [name]: error }));
   };
 
-  const validateField = (name: string, value: string) => {
-    const newErrors = { ...validationErrors };
-    
-    if (name === 'email') {
-      if (!value.trim()) {
-        newErrors.email = 'Please enter your email address';
-      } else {
-        // Use comprehensive Gmail email validation
-        const emailValidation = validateProfessionalEmail(value);
-        if (!emailValidation.isValid) {
-          newErrors.email = getEmailValidationMessage(value, emailValidation);
-        } else {
-          delete newErrors.email;
-        }
-      }
-    } else if (name === 'password') {
-      if (!value.trim()) {
-        newErrors.password = 'Please enter your password';
-      } else {
-        delete newErrors.password;
-      }
-    }
-    
-    setValidationErrors(newErrors);
-    return !newErrors[name as keyof typeof newErrors];
-  };
 
   const validateForm = () => {
     const errors: { email?: string; password?: string } = {};
     
-    if (!formData.email.trim()) {
-      errors.email = 'Please enter your email address';
-    } else {
-      // Use comprehensive Gmail email validation
-      const emailValidation = validateProfessionalEmail(formData.email);
-      if (!emailValidation.isValid) {
-        errors.email = getEmailValidationMessage(formData.email, emailValidation);
-      }
-    }
+    // Use consolidated validation function
+    const emailError = validateField('email', formData.email);
+    const passwordError = validateField('password', formData.password);
     
-    if (!formData.password.trim()) {
-      errors.password = 'Please enter your password';
-    } else {
-      // Validate password strength with enhanced requirements
-      if (formData.password.length < 8) {
-        errors.password = 'Password must be at least 8 characters long';
-      } else if (!/[A-Z]/.test(formData.password)) {
-        errors.password = 'Password must contain at least one uppercase letter';
-      } else if (!/[a-z]/.test(formData.password)) {
-        errors.password = 'Password must contain at least one lowercase letter';
-      } else if (!/\d/.test(formData.password)) {
-        errors.password = 'Password must contain at least one number';
-      } else if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password)) {
-        errors.password = 'Password must contain at least one special character';
-      }
-    }
+    if (emailError) errors.email = emailError;
+    if (passwordError) errors.password = passwordError;
     
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -163,55 +150,25 @@ const Login = () => {
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    validateField(name, value);
+    const error = validateField(name, value);
+    setValidationErrors(prev => ({ ...prev, [name]: error }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent multiple rapid submissions
+    if (isLoading) {
+      return;
+    }
     
     try {
       // Clear previous errors
       setValidationErrors({});
       setAuthError(null);
       
-      // Validate all fields
-      const newErrors: { email?: string; password?: string } = {};
-      
-      if (!formData.email.trim()) {
-        newErrors.email = 'Please enter your email address';
-      } else {
-        // Use comprehensive email validation for professional domains
-        try {
-          const emailValidation = validateProfessionalEmail(formData.email);
-          if (!emailValidation || !emailValidation.isValid) {
-            newErrors.email = getEmailValidationMessage(formData.email, emailValidation);
-          }
-        } catch (validationError) {
-          console.error('[Login] Email validation error:', validationError);
-          newErrors.email = 'Please enter a valid email address';
-        }
-      }
-      
-      if (!formData.password.trim()) {
-        newErrors.password = 'Please enter your password';
-      } else if (formData.password && formData.password.length > 0) {
-        // Validate password strength with enhanced requirements
-        if (formData.password.length < 8) {
-          newErrors.password = 'Password must be at least 8 characters long';
-        } else if (!/[A-Z]/.test(formData.password)) {
-          newErrors.password = 'Password must contain at least one uppercase letter';
-        } else if (!/[a-z]/.test(formData.password)) {
-          newErrors.password = 'Password must contain at least one lowercase letter';
-        } else if (!/\d/.test(formData.password)) {
-          newErrors.password = 'Password must contain at least one number';
-        } else if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password)) {
-          newErrors.password = 'Password must contain at least one special character';
-        }
-      }
-      
-      // If there are validation errors, don't proceed
-      if (Object.keys(newErrors).length > 0) {
-        setValidationErrors(newErrors);
+      // Validate all fields using consolidated validation
+      if (!validateForm()) {
         return;
       }
       
@@ -229,37 +186,36 @@ const Login = () => {
       } catch (err: any) {
         console.error('[Login] Local login error:', err);
         
-        // Always show the proper authentication error message for wrong credentials
-        let errorMessage = 'Invalid credentials entered please verify and try logging in';
+        // Determine appropriate error message based on error type
+        let errorMessage = 'Invalid credentials. Please check your email and password.';
         
-        // Only show different messages for network/connection issues
         if (err && typeof err === 'object') {
           if (err.message && typeof err.message === 'string') {
             if (err.message.includes('Network') || err.message.includes('fetch') || err.message.includes('Failed to fetch')) {
               errorMessage = 'Network error. Please check your connection and try again.';
+            } else if (err.message.includes('timeout') || err.message.includes('Timeout')) {
+              errorMessage = 'Request timed out. Please try again.';
+            } else if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+              errorMessage = 'Invalid credentials. Please check your email and password.';
+            } else if (err.message.includes('404') || err.message.includes('Not Found')) {
+              errorMessage = 'Account not found. Please check your email or sign up.';
+            } else if (err.message.includes('500') || err.message.includes('Internal Server Error')) {
+              errorMessage = 'Server error. Please try again later.';
+            } else if (err.message.includes('verify your email')) {
+              errorMessage = err.message; // Use the specific email verification message
             }
           } else if (err.error && typeof err.error === 'string') {
-            // Handle backend error responses - but still show the main authentication message
             if (err.error.includes('Network') || err.error.includes('connection')) {
               errorMessage = 'Network error. Please check your connection and try again.';
+            } else if (err.error.includes('Invalid') || err.error.includes('credentials')) {
+              errorMessage = 'Invalid credentials. Please check your email and password.';
+            } else if (err.error.includes('verify your email')) {
+              errorMessage = err.error; // Use the specific email verification message
             }
-            // For all other backend errors (including invalid credentials), show the main message
           }
         }
         
-        // Set authentication error for the toggle notification
-        console.log('[Login] Setting authentication error message:', errorMessage);
-        console.log('[Login] Error object details:', {
-          hasError: !!err,
-          errorType: typeof err,
-          errorMessage: err?.message,
-          errorError: err?.error,
-          stack: err?.stack
-        });
-        
-        // Ensure the error message is always a string
-        const finalErrorMessage = typeof errorMessage === 'string' ? errorMessage : 'Invalid credentials entered please verify and try logging in';
-        setAuthError(finalErrorMessage);
+        setAuthError(errorMessage);
       } finally {
         setIsLoading(false);
       }
@@ -272,26 +228,18 @@ const Login = () => {
   };
 
   const handleGoogleSignIn = async () => {
+    // Prevent multiple rapid submissions
+    if (isLoading) {
+      return;
+    }
+    
     clearError();
-    setAuthError(null); // Clear any previous auth errors
+    setAuthError(null);
     setIsLoading(true);
 
     try {
-      // Start Google authentication
       await login('google');
       console.log('[Login] Google sign-in successful');
-      
-      // Wait a moment for state to update
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log('[Login] Authentication state after Google login:', {
-        isAuthenticated: authService.isAuthenticated(),
-        hasToken: !!authService.getAccessToken(),
-        user: await authService.getCurrentUser()
-      });
-      
-      // The useEffect will handle the redirect automatically
-      console.log('[Login] Google authentication completed, waiting for redirect...');
     } catch (err: any) {
       console.error('[Login] Google sign-in error:', err);
       
@@ -300,21 +248,20 @@ const Login = () => {
       
       if (err && typeof err === 'object') {
         if (err.message && typeof err.message === 'string') {
-          if (err.message.includes('cancelled') || err.message.includes('Cancelled')) {
-            // Don't show error message for cancellation, just return to login state
+          if (err.message.includes('cancelled') || err.message.includes('Cancelled') || err.message.includes('popup_closed_by_user')) {
+            // Don't show error message for user cancellation
             setIsLoading(false);
             return;
           } else if (err.message.includes('timed out') || err.message.includes('Timed out')) {
             errorMessage = 'Google sign-in timed out. Please try again.';
           } else if (err.message.includes('Network') || err.message.includes('fetch')) {
             errorMessage = 'Network error. Please check your connection and try again.';
-          } else {
-            errorMessage = err.message;
+          } else if (err.message.includes('access_denied')) {
+            errorMessage = 'Google sign-in was denied. Please try again.';
           }
         }
       }
       
-      // Show the error as a toggle notification (only for non-cancellation errors)
       setAuthError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -322,34 +269,44 @@ const Login = () => {
   };
 
   const handleMicrosoftSignIn = async () => {
+    // Prevent multiple rapid submissions
+    if (isLoading) {
+      return;
+    }
+    
     clearError();
+    setAuthError(null);
     setIsLoading(true);
 
     try {
       console.log('[Login] Starting Microsoft sign-in...');
-      console.log('[Login] Environment variables:', {
-        clientId: import.meta.env.VITE_REACT_APP_AZURE_CLIENT_ID,
-        tenantId: import.meta.env.VITE_REACT_APP_AZURE_TENANT_ID,
-        redirectUri: import.meta.env.VITE_REACT_APP_REDIRECT_URI
-      });
-      
       await login('microsoft');
       console.log('[Login] Microsoft sign-in successful');
-      
-      // Wait a moment for state to update
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log('[Login] Authentication state after login:', {
-        isAuthenticated: authService.isAuthenticated(),
-        hasToken: !!authService.getAccessToken(),
-        user: await authService.getCurrentUser()
-      });
-      
-      // The useEffect will handle the redirect automatically
-      console.log('[Login] Microsoft authentication completed, waiting for redirect...');
     } catch (err: any) {
       console.error('[Login] Microsoft sign-in error:', err);
-      // Error is now handled by AuthContext
+      
+      // Handle specific Microsoft authentication error cases
+      let errorMessage = 'Microsoft sign-in failed. Please try again.';
+      
+      if (err && typeof err === 'object') {
+        if (err.message && typeof err.message === 'string') {
+          if (err.message.includes('cancelled') || err.message.includes('Cancelled') || err.message.includes('user_cancelled')) {
+            // Don't show error message for user cancellation
+            setIsLoading(false);
+            return;
+          } else if (err.message.includes('timed out') || err.message.includes('Timed out')) {
+            errorMessage = 'Microsoft sign-in timed out. Please try again.';
+          } else if (err.message.includes('Network') || err.message.includes('fetch')) {
+            errorMessage = 'Network error. Please check your connection and try again.';
+          } else if (err.message.includes('access_denied')) {
+            errorMessage = 'Microsoft sign-in was denied. Please try again.';
+          } else if (err.message.includes('invalid_client')) {
+            errorMessage = 'Microsoft sign-in configuration error. Please contact support.';
+          }
+        }
+      }
+      
+      setAuthError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -398,6 +355,12 @@ const Login = () => {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Hidden dummy fields to prevent autofill */}
+          <div style={{ display: 'none' }}>
+            <input type="text" name="fake-email" autoComplete="username" />
+            <input type="password" name="fake-password" autoComplete="current-password" />
+          </div>
+          
           {/* Email Input */}
           <div>
             <label className="block text-sm font-bold text-gray-900 mb-3">Email <span className="text-red-600">*</span></label>
@@ -434,7 +397,12 @@ const Login = () => {
               onBlur={handleBlur}
               required
               inputMode="email"
-              autoComplete="email"
+              autoComplete="off"
+              data-form-type="other"
+              data-lpignore="true"
+              readOnly={preventAutofill}
+              aria-invalid={!!validationErrors.email}
+              aria-describedby={validationErrors.email ? "email-error" : undefined}
               className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${
                 validationErrors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
               }`}
@@ -443,8 +411,8 @@ const Login = () => {
             
             {/* Inline error message below email field */}
             {validationErrors.email && (
-              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <p id="email-error" className="mt-2 text-sm text-red-600 flex items-center gap-1" role="alert" aria-live="polite">
+                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 {validationErrors.email}
@@ -483,6 +451,12 @@ const Login = () => {
               onCompositionUpdate={(e) => e.preventDefault()}
               onCompositionEnd={(e) => e.preventDefault()}
               required
+              autoComplete="new-password"
+              data-form-type="other"
+              data-lpignore="true"
+              readOnly={preventAutofill}
+              aria-invalid={!!validationErrors.password}
+              aria-describedby={validationErrors.password ? "password-error" : undefined}
               placeholder="Enter your password *"
               className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${
                 validationErrors.password ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
@@ -491,15 +465,16 @@ const Login = () => {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
-              tabIndex={-1}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              title={showPassword ? 'Hide password' : 'Show password'}
             >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
             </div>
             {validationErrors.password && (
-              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <p id="password-error" className="mt-2 text-sm text-red-600 flex items-center gap-1" role="alert" aria-live="polite">
+                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 {validationErrors.password}

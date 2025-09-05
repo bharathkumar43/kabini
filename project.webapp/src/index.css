@@ -1,9 +1,9 @@
+/* Import responsive scaling utilities */
+@import './responsive-scaling.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import responsive scaling utilities */
-@import './responsive-scaling.css';
 
 /* Global scaling fix for 100% zoom */
 html {
