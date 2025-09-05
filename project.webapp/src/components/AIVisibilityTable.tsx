@@ -59,8 +59,84 @@ interface AIVisibilityTableProps {
 const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
   console.log('[AIVisibilityTable] Rendering with data:', data);
   
+  // Sorting state for traffic metrics table
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
+  
+  // Dropdown state removed; keep no state for dropdowns
+  // Backlink table sorting and dropdown state
+  const [backlinkSortConfig, setBacklinkSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
+  // Dropdown state removed; keep no state for dropdowns
+  
   // Add error boundary state
   const [hasError, setHasError] = useState(false);
+
+  // Old dropdown handlers removed
+
+  // Single-click sorter: cycles asc -> desc -> none
+  const cycleTrafficSort = (key: string) => {
+    setSortConfig(prev => {
+      if (!prev || prev.key !== key) return { key, direction: 'asc' } as const;
+      if (prev.direction === 'asc') return { key, direction: 'desc' } as const;
+      return null;
+    });
+  };
+
+  // Old backlink dropdown handlers removed
+
+  const cycleBacklinkSort = (key: string) => {
+    setBacklinkSortConfig(prev => {
+      if (!prev || prev.key !== key) return { key, direction: 'asc' } as const;
+      if (prev.direction === 'asc') return { key, direction: 'desc' } as const;
+      return null;
+    });
+  };
+
+  // Get sorted competitors for traffic metrics
+  const getSortedCompetitors = () => {
+    if (!sortConfig) return competitors;
+
+    return [...competitors].sort((a, b) => {
+      let aValue: number;
+      let bValue: number;
+
+      switch (sortConfig.key) {
+        case 'estimatedVisits':
+          aValue = getTrafficMetricsFor(a).estimatedVisits;
+          bValue = getTrafficMetricsFor(b).estimatedVisits;
+          break;
+        case 'pagesPerVisit':
+          aValue = getTrafficMetricsFor(a).pagesPerVisit;
+          bValue = getTrafficMetricsFor(b).pagesPerVisit;
+          break;
+        case 'bounceRate':
+          aValue = getTrafficMetricsFor(a).bounceRate;
+          bValue = getTrafficMetricsFor(b).bounceRate;
+          break;
+        case 'uniqueVisitors':
+          aValue = getTrafficMetricsFor(a).uniqueVisitors;
+          bValue = getTrafficMetricsFor(b).uniqueVisitors;
+          break;
+        case 'avgDuration':
+          aValue = getTrafficMetricsFor(a).avgDuration;
+          bValue = getTrafficMetricsFor(b).avgDuration;
+          break;
+        default:
+          return 0;
+      }
+
+      if (sortConfig.direction === 'asc') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
+  };
   const [errorMessage, setErrorMessage] = useState('');
   
   const [competitors, setCompetitors] = useState(data.competitors || []);
@@ -69,6 +145,93 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
   const [isUrlInput, setIsUrlInput] = useState(false);
   const [isAddingCompetitor, setIsAddingCompetitor] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [validationWarning, setValidationWarning] = useState('');
+  const [isCheckingDomain, setIsCheckingDomain] = useState(false);
+  
+  // Deterministic traffic metrics generator to prevent page sections from shifting on click
+  const getTrafficMetricsFor = (comp: CompetitorAnalysis) => {
+    const name = comp.name || '';
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+      hash = (hash << 5) - hash + name.charCodeAt(i);
+      hash |= 0; // 32-bit
+    }
+    const seed = Math.abs(hash % 1000) / 1000; // 0..1
+    const score = comp.totalScore || 0;
+    const estimatedVisits = Math.floor(score * 10000) + Math.floor(seed * 50000);
+    const uniqueVisitors = Math.floor(estimatedVisits * 0.8);
+    const pagesPerVisit = parseFloat((2 + score * 0.3 + seed * 0.2).toFixed(1));
+    const avgDuration = Math.floor(score * 60 + 30 + seed * 30);
+    const bounceRate = Math.max(20, 80 - score * 5 - Math.floor(seed * 5));
+    return { estimatedVisits, uniqueVisitors, pagesPerVisit, avgDuration, bounceRate };
+  };
+
+  // Utility: stable 0..1 seed from a name and salt
+  const seeded = (name: string, salt: string): number => {
+    const key = `${name}::${salt}`;
+    let h = 0;
+    for (let i = 0; i < key.length; i += 1) {
+      h = (h << 5) - h + key.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h % 1000) / 1000;
+  };
+
+  // Colors for legends/dots - deterministic by competitor name
+  // Use the same color shades shown in the Competitive Positioning legend
+  // Blue, Green, Amber/Orange, Pink, Violet, Cyan/Teal, Red, Emerald, Amber (lighter), Teal (lighter)
+  const LEGEND_COLORS = [
+    '#3b82f6', // blue-500 (Good)
+    '#22c55e', // green-500 (Excellent)
+    '#f59e0b', // amber-500
+    '#ec4899', // pink-500
+    '#8b5cf6', // violet-500
+    '#06b6d4', // cyan-500
+    '#ef4444', // red-500 (Poor)
+    '#10b981', // emerald-500
+    '#fbbf24', // amber-400
+    '#14b8a6', // teal-500
+  ];
+  const getColorForName = (name: string): string => {
+    const idx = Math.floor(seeded(name || 'unknown', 'color') * LEGEND_COLORS.length);
+    return LEGEND_COLORS[idx];
+  };
+
+  // Tooltip state for Growth Quadrant dots
+  const [hoveredPoint, setHoveredPoint] = useState<null | { left: number; top: number; name: string; traffic: number; growth: number }>(null);
+
+  // Deterministic generators for other sections so values don't change on re-render
+  const getChannelMixFor = (comp: CompetitorAnalysis) => {
+    const s1 = seeded(comp.name, 'organic');
+    const s2 = seeded(comp.name, 'paid');
+    const s3 = seeded(comp.name, 'referral');
+    const organic = Math.min(85, Math.floor((comp.totalScore || 0) * 10 + 30 + s1 * 5));
+    const paid = Math.floor(5 + s2 * 20);
+    const referral = Math.floor(5 + s3 * 15);
+    const direct = Math.max(0, 100 - organic - paid - referral);
+    return { organic, paid, referral, direct };
+  };
+
+  const getGrowthFor = (comp: CompetitorAnalysis) => {
+    const g = Math.floor(seeded(comp.name, 'growth') * 100);
+    return { growthScore: g };
+  };
+
+  const getCompetitionGapFor = (comp: CompetitorAnalysis) => {
+    const missing = Math.floor(seeded(comp.name, 'missing') * 200) + 50;
+    const opportunity = Math.floor((comp.totalScore || 0) * 10 + seeded(comp.name, 'opportunity') * 20);
+    return { missingKeywords: missing, opportunityScore: opportunity };
+  };
+
+  const getBacklinksFor = (comp: CompetitorAnalysis) => {
+    const base = (comp.totalScore || 0) * 1000;
+    const rand = seeded(comp.name, 'backlinks') * 5000;
+    const totalBacklinks = Math.floor(base + rand);
+    const referringDomains = Math.floor(totalBacklinks * 0.3 + seeded(comp.name, 'refDomains') * 200);
+    const dofollowBacklinks = Math.floor(totalBacklinks * 0.8);
+    const nofollowBacklinks = totalBacklinks - dofollowBacklinks;
+    return { totalBacklinks, referringDomains, dofollowBacklinks, nofollowBacklinks };
+  };
   
   // Validate data structure
   useEffect(() => {
@@ -111,6 +274,52 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
       return;
     }
 
+    // Helper: extract and validate domain
+    const normalizeDomainFromInput = (raw: string) => {
+      try {
+        let input = raw.trim();
+        if (!/^https?:\/\//i.test(input)) {
+          input = `https://${input}`;
+        }
+        const u = new URL(input);
+        return u.hostname.toLowerCase();
+      } catch {
+        return raw.toLowerCase();
+      }
+    };
+    const isLikelyDomainName = (value: string) => {
+      const v = value.toLowerCase();
+      return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(v);
+    };
+    const verifyDomainExists = async (domain: string): Promise<boolean> => {
+      try {
+        // Use Google's DNS-over-HTTPS API to check A records
+        const res = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`);
+        if (!res.ok) return false;
+        const json = await res.json();
+        return json && json.Status === 0 && Array.isArray(json.Answer) && json.Answer.length > 0;
+      } catch {
+        return false;
+      }
+    };
+
+    setValidationWarning('');
+    setIsCheckingDomain(true);
+    const domainCandidate = normalizeDomainFromInput(newCompetitorName);
+    const looksDomain = isLikelyDomainName(domainCandidate);
+    let domainOk = false;
+    if (looksDomain) {
+      domainOk = await verifyDomainExists(domainCandidate);
+    }
+    setIsCheckingDomain(false);
+
+    if (!looksDomain || !domainOk) {
+      setValidationWarning('Please enter a valid domain (e.g., example.com). If you prefer, switch to Company Name.');
+      // Keep the user in domain mode to correct, but offer toggle below
+      setIsUrlInput(true);
+      return;
+    }
+
     console.log('[AIVisibilityTable] Adding competitor:', newCompetitorName);
     console.log('[AIVisibilityTable] Current industry:', data.industry);
     
@@ -146,7 +355,8 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
       console.error('Error adding competitor:', error);
-      alert(`Failed to add competitor: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Failed to add competitor: ${message}`);
     } finally {
       setIsAddingCompetitor(false);
     }
@@ -162,6 +372,14 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
     if (score >= 2.5) return 'text-green-600 font-semibold';
     if (score >= 1.5) return 'text-yellow-600 font-semibold';
     return 'text-red-600 font-semibold';
+  };
+
+  // Bar color mapping to match legend colors (Excellent=green, Good=gray, Fair=yellow, Poor=red)
+  const getBarColor = (score: number) => {
+    if (score >= 2.5) return 'bg-green-500';
+    if (score >= 2.0) return 'bg-gray-500';
+    if (score >= 1.0) return 'bg-yellow-500';
+    return 'bg-red-500';
   };
 
   const formatScore = (score: number) => {
@@ -203,21 +421,22 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
       {competitors.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Competitor Performance Overview</h3>
+            <h3 className="text-lg font-semibold text-black">Competitor Performance Overview</h3>
             <p className="text-sm text-gray-600">Visual comparison of average AI visibility scores across competitors</p>
           </div>
           
-          <div className="h-48 sm:h-56 lg:h-64 flex items-end justify-between space-x-1 sm:space-x-2">
+          <div className="h-48 sm:h-56 lg:h-64 overflow-x-auto overflow-y-visible pb-2">
+            <div className="flex items-end h-full gap-3 sm:gap-4 min-w-max pr-4">
             {competitors.map((competitor, index) => {
               const avgScore = competitor.totalScore || 0;
               const heightPercentage = Math.min(100, Math.max(5, (avgScore / 10) * 100)); // Convert 0-10 scale to percentage
-              const barColor = getScoreColor(avgScore);
+              const barColor = getBarColor(avgScore);
               
               return (
-                <div key={index} className="flex-1 flex flex-col items-center">
-                  <div className="w-full max-w-12 sm:max-w-16 bg-gray-200 rounded-t-lg relative">
+                <div key={index} className="flex-none w-12 sm:w-16 h-full flex flex-col justify-end items-center">
+                  <div className="w-full h-full bg-gray-200 rounded-t-lg relative overflow-visible">
                     <div 
-                      className={`${barColor} rounded-t-lg transition-all duration-500 ease-out`}
+                      className={`${barColor} rounded-t-lg transition-all duration-500 ease-out absolute bottom-0 left-0 w-full`}
                       style={{ 
                         height: `${heightPercentage}%`,
                         minHeight: '20px'
@@ -234,25 +453,26 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                 </div>
               );
             })}
+            </div>
           </div>
           
           <div className="mt-4 text-center">
             <div className="inline-flex items-center flex-wrap justify-center gap-2 sm:gap-4 text-xs text-gray-500">
               <div className="flex items-center">
                 <div className="w-3 h-3 bg-green-500 rounded mr-1"></div>
-                <span>Excellent (8-10)</span>
+                <span>Excellent (2.5–3.5)</span>
               </div>
               <div className="flex items-center">
-                <div className="w-3 h-3 bg-blue-500 rounded mr-1"></div>
-                <span>Good (6-7.9)</span>
+                <div className="w-3 h-3 bg-gray-500 rounded mr-1"></div>
+                <span>Good (2.0–2.49)</span>
               </div>
               <div className="flex items-center">
                 <div className="w-3 h-3 bg-yellow-500 rounded mr-1"></div>
-                <span>Fair (4-5.9)</span>
+                <span>Fair (1.0–1.99)</span>
               </div>
               <div className="flex items-center">
                 <div className="w-3 h-3 bg-red-500 rounded mr-1"></div>
-                <span>Poor (0-3.9)</span>
+                <span>Poor (0–0.99)</span>
               </div>
             </div>
           </div>
@@ -280,7 +500,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
       {/* Add Competitor Section */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Add New Competitor</h3>
+          <h3 className="text-lg font-semibold text-black">Add New Competitor</h3>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
                             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
@@ -302,13 +522,9 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                   value={newCompetitorName}
                   onChange={(e) => {
                     const raw = e.target.value.trim();
-                    // Detect URL-like input: contains a dot or protocol and no spaces
-                    const looksLikeUrl = /^(https?:\/\/)?[^\s]+\.[^\s]+/i.test(raw);
-                    setIsUrlInput(looksLikeUrl);
-                    if (looksLikeUrl) {
+                    if (isUrlInput) {
                       setNewCompetitorName(raw);
                     } else {
-                      // Allow only A–Z and a–z for company name
                       const sanitized = raw.replace(/[^A-Za-z]/g, '');
                       setNewCompetitorName(sanitized);
                     }
@@ -319,28 +535,50 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                       handleAddCompetitor();
                     }
                   }}
-                  placeholder="Enter competitor company name or paste a URL..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 bg-white"
+                  placeholder="Enter a domain (e.g., example.com) or switch to Company Name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-black focus:border-black text-black placeholder-gray-400 bg-white"
                   onInvalid={(e) => {
                     e.preventDefault();
                     const msg = isUrlInput
-                      ? 'Please enter a valid URL (e.g., https://example.com)'
+                      ? 'Please enter a valid domain (e.g., example.com)'
                       : 'Only letters (A–Z, a–z) are allowed';
                     (e.target as HTMLInputElement).setCustomValidity(msg);
                   }}
                   onBlur={(e) => {
                     const value = e.currentTarget.value.trim();
                     if (!value) { e.currentTarget.setCustomValidity(''); return; }
-                    if (isUrlInput) {
-                      const urlOk = /^(https?:\/\/)?([A-Za-z0-9-]+\.)+[A-Za-z]{2,}(\/[^\s]*)?$/i.test(value);
-                      e.currentTarget.setCustomValidity(urlOk ? '' : 'Please enter a valid URL (e.g., https://example.com)');
-                    } else {
+                    if (!isUrlInput) {
                       const nameOk = /^[A-Za-z]+$/.test(value);
                       e.currentTarget.setCustomValidity(nameOk ? '' : 'Only letters (A–Z, a–z) are allowed');
+                    } else {
+                      const urlOk = /^(https?:\/\/)?([A-Za-z0-9-]+\.)+[A-Za-z]{2,}(\/[^\s]*)?$/i.test(value);
+                      e.currentTarget.setCustomValidity(urlOk ? '' : 'Please enter a valid domain (e.g., example.com)');
                     }
                   }}
                   disabled={isAddingCompetitor}
                 />
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-gray-600">Input type:</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsUrlInput(true)}
+                    className={`px-2 py-1 text-xs rounded ${isUrlInput ? 'bg-black text-white' : 'bg-gray-100 text-black'}`}
+                  >Domain</button>
+                  <button
+                    type="button"
+                    onClick={() => setIsUrlInput(false)}
+                    className={`px-2 py-1 text-xs rounded ${!isUrlInput ? 'bg-black text-white' : 'bg-gray-100 text-black'}`}
+                  >Company Name</button>
+                  {isCheckingDomain && <span className="text-xs text-gray-500">Checking domain…</span>}
+                </div>
+                {validationWarning && (
+                  <p className="mt-2 text-sm text-red-600">
+                    {validationWarning}{' '}
+                    <button type="button" onClick={() => setIsUrlInput(false)} className="underline">
+                      Switch to Company Name
+                    </button>
+                  </p>
+                )}
               </div>
               <div className="flex-shrink-0">
                 <button
@@ -377,7 +615,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
       {/* Main Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Market Analysis Results</h2>
+          <h2 className="text-lg font-semibold text-black">Market Analysis Results</h2>
           <p className="text-sm text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
         </div>
         
@@ -414,14 +652,14 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
                           <span className="text-sm font-medium text-black">
                             {competitor.name.charAt(0).toUpperCase()}
                           </span>
                         </div>
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{competitor.name}</div>
+                        <div className="text-sm font-medium text-black">{competitor.name}</div>
                       </div>
                     </div>
                   </td>
@@ -484,7 +722,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
       {competitors.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="mb-6">
-            <h3 className="text-xl font-bold text-gray-900">Competitor Snapshot</h3>
+            <h3 className="text-xl font-bold text-black">Competitor Snapshot</h3>
             <p className="text-sm text-gray-600">Holistic view of your site versus competitors across multiple dimensions</p>
           </div>
 
@@ -492,46 +730,174 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
             <div className="space-y-4">
               <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">Traffic Metrics</h4>
-              <div className="space-y-3">
-                {competitors.map((competitor, index) => {
-                  // Simulate traffic data based on AI scores (in real implementation, this would come from SEMrush API)
-                  const estimatedVisits = Math.floor((competitor.totalScore || 0) * 10000) + Math.floor(Math.random() * 50000);
-                  const uniqueVisitors = Math.floor(estimatedVisits * 0.8);
-                  const pagesPerVisit = (2 + (competitor.totalScore || 0) * 0.3).toFixed(1);
-                  const avgDuration = Math.floor((competitor.totalScore || 0) * 60) + 30;
-                  const bounceRate = Math.max(20, 80 - (competitor.totalScore || 0) * 5);
+              <div className="overflow-x-auto">
+                <table className="min-w-full bg-white border border-gray-200 rounded-lg text-black">
+                  <thead className="bg-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200" style={{ color: '#000' }}>
+                        Competitor
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                        <div className="flex flex-col items-center">
+                          <span>EST.</span>
+                          <span>VISITS</span>
+                          <div className="mt-1">
+                            <button 
+                              onClick={() => cycleTrafficSort('estimatedVisits')}
+                              className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors ${
+                                sortConfig?.key === 'estimatedVisits' ? 'text-black' : 'text-gray-600 hover:text-gray-800'
+                              }`}
+                            >
+                              <div className="flex items-center">
+                                <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                                <div className="flex flex-col space-y-0.5">
+                                  <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                                </div>
+                              </div>
+                            </button>
+                            
+                            {/* Dropdown removed: single click cycles asc -> desc -> none */}
+                          </div>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                        <div className="flex flex-col items-center">
+                          <span>PAGES/</span>
+                          <span>VISIT</span>
+                          <div className="mt-1">
+                            <button 
+                              onClick={() => cycleTrafficSort('pagesPerVisit')}
+                              className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors ${
+                                sortConfig?.key === 'pagesPerVisit' ? 'text-black' : 'text-gray-600 hover:text-gray-800'
+                              }`}
+                            >
+                              <div className="flex items-center">
+                                <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                                <div className="flex flex-col space-y-0.5">
+                                  <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                                </div>
+                              </div>
+                            </button>
+                            
+                            {/* Dropdown removed */}
+                          </div>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                        <div className="flex flex-col items-center">
+                          <span>BOUNCE</span>
+                          <span>RATE</span>
+                          <div className="mt-1">
+                            <button 
+                              onClick={() => cycleTrafficSort('bounceRate')}
+                              className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors ${
+                                sortConfig?.key === 'bounceRate' ? 'text-black' : 'text-gray-600 hover:text-gray-800'
+                              }`}
+                            >
+                              <div className="flex items-center">
+                                <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                                <div className="flex flex-col space-y-0.5">
+                                  <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                                </div>
+                              </div>
+                            </button>
+                            
+                            {/* Dropdown removed */}
+                          </div>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                        <div className="flex flex-col items-center">
+                          <span>UNIQUE</span>
+                          <span>VISITORS</span>
+                          <div className="mt-1">
+                            <button 
+                              onClick={() => cycleTrafficSort('uniqueVisitors')}
+                              className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors ${
+                                sortConfig?.key === 'uniqueVisitors' ? 'text-black' : 'text-gray-600 hover:text-gray-800'
+                              }`}
+                            >
+                              <div className="flex items-center">
+                                <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                                <div className="flex flex-col space-y-0.5">
+                                  <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                                </div>
+                              </div>
+                            </button>
+                            
+                            {/* Dropdown removed */}
+                          </div>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                        <div className="flex flex-col items-center">
+                          <span>AVG</span>
+                          <span>DURATION</span>
+                          <div className="mt-1">
+                            <button 
+                              onClick={() => cycleTrafficSort('avgDuration')}
+                              className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors ${
+                                sortConfig?.key === 'avgDuration' ? 'text-black' : 'text-gray-600 hover:text-gray-800'
+                              }`}
+                            >
+                              <div className="flex items-center">
+                                <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                                <div className="flex flex-col space-y-0.5">
+                                  <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                  <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                                </div>
+                              </div>
+                            </button>
+                            
+                            {/* Dropdown removed */}
+                          </div>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {getSortedCompetitors().map((competitor, index) => {
+                  const tm = getTrafficMetricsFor(competitor);
+                  const estimatedVisits = tm.estimatedVisits;
+                  const uniqueVisitors = tm.uniqueVisitors;
+                  const pagesPerVisit = tm.pagesPerVisit.toFixed(1);
+                  const avgDuration = tm.avgDuration;
+                  const bounceRate = tm.bounceRate;
                   
                   return (
-                    <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h5 className="font-medium text-gray-900">{competitor.name}</h5>
-                        <span className="text-xs text-gray-500">Competitor {index + 1}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="text-gray-600">Est. Visits:</span>
-                          <span className="ml-2 font-medium">{estimatedVisits.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Unique Visitors:</span>
-                          <span className="ml-2 font-medium">{uniqueVisitors.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Pages/Visit:</span>
-                          <span className="ml-2 font-medium">{pagesPerVisit}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Avg Duration:</span>
-                          <span className="ml-2 font-medium">{avgDuration}s</span>
-                        </div>
-                        <div className="col-span-2">
-                          <span className="text-gray-600">Bounce Rate:</span>
-                          <span className="ml-2 font-medium">{bounceRate}%</span>
-                        </div>
-                      </div>
-                    </div>
+                        <tr key={index} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="text-sm font-medium text-black">{competitor.name}</div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-black font-medium" style={{ color: '#000' }}>
+                            {estimatedVisits.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-black" style={{ color: '#000' }}>
+                            {pagesPerVisit}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-black" style={{ color: '#000' }}>
+                            {bounceRate}%
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-black" style={{ color: '#000' }}>
+                            {uniqueVisitors.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-black" style={{ color: '#000' }}>
+                            {avgDuration}s
+                          </td>
+                        </tr>
                   );
                 })}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -540,7 +906,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
               <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">Market Positioning & Growth</h4>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <div className="text-center mb-4">
-                  <h5 className="font-medium text-gray-900 mb-2">Growth Quadrant Analysis</h5>
+                  <h5 className="font-medium text-black mb-2">Growth Quadrant Analysis</h5>
                   <p className="text-xs text-gray-600">Positioning based on Traffic vs Growth</p>
                 </div>
                 
@@ -556,23 +922,44 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                   <div className="absolute bottom-4 left-4 text-xs font-medium text-gray-700">Niche Players</div>
                   <div className="absolute bottom-4 right-4 text-xs font-medium text-gray-700">Established Players</div>
                   
-                  {/* Competitor positions */}
+                  {/* Competitor positions with hover tooltip */}
                   {competitors.map((competitor, index) => {
                     const trafficScore = (competitor.totalScore || 0) * 10; // 0-100 scale
-                    const growthScore = Math.floor(Math.random() * 100); // Simulated growth data
+                    const { growthScore } = getGrowthFor(competitor);
                     // Adjust positioning to avoid label overlap (keep away from edges)
                     const left = Math.min(85, Math.max(15, trafficScore));
                     const top = Math.min(85, Math.max(15, 100 - growthScore));
+                    const color = getColorForName(competitor.name);
                     
                     return (
                       <div
                         key={index}
-                        className="absolute w-3 h-3 bg-black rounded-full border-2 border-white shadow-lg"
-                        style={{ left: `${left}%`, top: `${top}%` }}
-                        title={`${competitor.name}: Traffic ${Math.round(trafficScore)}, Growth ${growthScore}%`}
+                        className="absolute w-3 h-3 rounded-full border-2 border-white shadow-lg cursor-pointer"
+                        style={{ left: `${left}%`, top: `${top}%`, backgroundColor: color }}
+                        onMouseEnter={(e) => {
+                          const rect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+                          setHoveredPoint({
+                            left: e.currentTarget.getBoundingClientRect().left - rect.left + 12,
+                            top: e.currentTarget.getBoundingClientRect().top - rect.top - 8,
+                            name: competitor.name,
+                            traffic: Math.round(trafficScore),
+                            growth: growthScore,
+                          });
+                        }}
+                        onMouseLeave={() => setHoveredPoint(null)}
                       />
                     );
                   })}
+                  {hoveredPoint && (
+                    <div
+                      className="absolute bg-white border border-gray-200 rounded-md shadow-md px-3 py-2 text-xs text-black"
+                      style={{ left: hoveredPoint.left, top: hoveredPoint.top }}
+                    >
+                      <div className="font-medium">{hoveredPoint.name}</div>
+                      <div>Traffic: {hoveredPoint.traffic}</div>
+                      <div>Growth: {hoveredPoint.growth}%</div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -583,14 +970,11 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
             <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">Channel Mix & Engagement</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
               {competitors.map((competitor, index) => {
-                const organic = Math.floor((competitor.totalScore || 0) * 10) + 30;
-                const paid = Math.floor(Math.random() * 20) + 5;
-                const referral = Math.floor(Math.random() * 15) + 5;
-                const direct = 100 - organic - paid - referral;
+                const { organic, paid, referral, direct } = getChannelMixFor(competitor);
                 
                 return (
                   <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                    <h5 className="font-medium text-gray-900 mb-3">{competitor.name}</h5>
+                    <h5 className="font-medium text-black mb-3">{competitor.name}</h5>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Organic:</span>
@@ -605,7 +989,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                         <span className="font-medium">{paid}%</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${paid}%` }}></div>
+                        <div className="bg-gray-500 h-2 rounded-full" style={{ width: `${paid}%` }}></div>
                       </div>
                       
                       <div className="flex justify-between text-sm">
@@ -636,20 +1020,20 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
               {/* Competition Level */}
               <div className="space-y-4">
-                <h5 className="font-medium text-gray-900">Competition Level Ranking</h5>
+                <h5 className="font-medium text-black">Competition Level Ranking</h5>
                 <div className="space-y-3">
                   {competitors.map((competitor, index) => {
-                    const competitionLevel = Math.floor((competitor.totalScore || 0) * 10) + Math.floor(Math.random() * 30);
-                    const sharedKeywords = Math.floor(competitionLevel * 10) + Math.floor(Math.random() * 100);
+                    const competitionLevel = Math.floor((competitor.totalScore || 0) * 10) + Math.floor(seeded(competitor.name, 'comp') * 30);
+                    const sharedKeywords = Math.floor(competitionLevel * 10) + Math.floor(seeded(competitor.name, 'shared') * 100);
                     
                     return (
                       <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
                         <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
                             <span className="text-sm font-medium text-black">{index + 1}</span>
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900">{competitor.name}</div>
+                            <div className="font-medium text-black">{competitor.name}</div>
                             <div className="text-sm text-gray-600">{sharedKeywords} shared keywords</div>
                           </div>
                         </div>
@@ -665,16 +1049,15 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
 
               {/* Keyword Gap Analysis */}
               <div className="space-y-4">
-                <h5 className="font-medium text-gray-900">Keyword Gap Analysis</h5>
+                <h5 className="font-medium text-black">Keyword Gap Analysis</h5>
                 <div className="space-y-3">
                   {competitors.map((competitor, index) => {
-                    const missingKeywords = Math.floor(Math.random() * 200) + 50;
-                    const opportunityScore = Math.floor((competitor.totalScore || 0) * 10) + Math.floor(Math.random() * 20);
+                    const { missingKeywords, opportunityScore } = getCompetitionGapFor(competitor);
                     
                     return (
                       <div key={index} className="bg-gray-50 p-3 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-gray-900">{competitor.name}</span>
+                          <span className="font-medium text-black">{competitor.name}</span>
                           <span className="text-xs text-gray-500">Opportunity</span>
                         </div>
                         <div className="space-y-2">
@@ -698,37 +1081,119 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
           {/* Backlink Profile Comparison */}
           <div>
             <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">Backlink Profile Comparison</h4>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-              {competitors.map((competitor, index) => {
-                const totalBacklinks = Math.floor((competitor.totalScore || 0) * 1000) + Math.floor(Math.random() * 5000);
-                const referringDomains = Math.floor(totalBacklinks * 0.3) + Math.floor(Math.random() * 200);
-                const dofollowBacklinks = Math.floor(totalBacklinks * 0.8);
-                const nofollowBacklinks = totalBacklinks - dofollowBacklinks;
-                
-                return (
-                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                    <h5 className="font-medium text-gray-900 mb-3">{competitor.name}</h5>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-gray-600">Total Backlinks:</span>
-                        <span className="ml-2 font-medium">{totalBacklinks.toLocaleString()}</span>
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-lg text-black">
+                <thead className="bg-gray-50" style={{ color: '#000' }}>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200" style={{ color: '#000' }}>Competitor</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <div className="inline-flex items-center justify-center gap-2">
+                        <div className="leading-tight text-center">
+                          <div>Total</div>
+                          <div>Backlinks</div>
+                        </div>
+                        <div>
+                          <button
+                            onClick={() => cycleBacklinkSort('totalBacklinks')}
+                            className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors focus:outline-none focus:ring-0 ${backlinkSortConfig?.key === 'totalBacklinks' ? 'text-black' : 'text-gray-600 hover:text-gray-800'}`}
+                          >
+                            <div className="flex items-center">
+                              <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                              <div className="flex flex-col space-y-0.5">
+                                <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                              </div>
+                            </div>
+                          </button>
+                          {/* Dropdown removed: click cycles sort */}
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-gray-600">Referring Domains:</span>
-                        <span className="ml-2 font-medium">{referringDomains.toLocaleString()}</span>
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <div className="inline-flex items-center justify-center gap-2">
+                        <div className="leading-tight text-center">
+                          <div>Referring</div>
+                          <div>Domains</div>
+                        </div>
+                        <div>
+                          <button
+                            onClick={() => cycleBacklinkSort('referringDomains')}
+                            className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors focus:outline-none focus:ring-0 ${backlinkSortConfig?.key === 'referringDomains' ? 'text-black' : 'text-gray-600 hover:text-gray-800'}`}
+                          >
+                            <div className="flex items-center">
+                              <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                              <div className="flex flex-col space-y-0.5">
+                                <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                              </div>
+                            </div>
+                          </button>
+                          {/* Dropdown removed */}
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-gray-600">Dofollow:</span>
-                        <span className="ml-2 font-medium">{dofollowBacklinks.toLocaleString()}</span>
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <div className="inline-flex items-center justify-center gap-2">
+                        <div className="leading-tight text-center"><div>Dofollow</div></div>
+                        <div>
+                          <button onClick={() => cycleBacklinkSort('dofollowBacklinks')} className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors focus:outline-none focus:ring-0 ${backlinkSortConfig?.key === 'dofollowBacklinks' ? 'text-black' : 'text-gray-600 hover:text-gray-800'}`}>
+                            <div className="flex items-center">
+                              <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                              <div className="flex flex-col space-y-0.5">
+                                <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                              </div>
+                            </div>
+                          </button>
+                          {/* Dropdown removed */}
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-gray-600">Nofollow:</span>
-                        <span className="ml-2 font-medium">{nofollowBacklinks.toLocaleString()}</span>
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <div className="inline-flex items-center justify-center gap-2">
+                        <div className="leading-tight text-center"><div>Nofollow</div></div>
+                        <div>
+                          <button onClick={() => cycleBacklinkSort('nofollowBacklinks')} className={`p-1 rounded bg-transparent hover:bg-gray-100 transition-colors focus:outline-none focus:ring-0 ${backlinkSortConfig?.key === 'nofollowBacklinks' ? 'text-black' : 'text-gray-600 hover:text-gray-800'}`}>
+                            <div className="flex items-center">
+                              <div className="w-1 h-3 bg-gray-400 rounded-sm mr-1"></div>
+                              <div className="flex flex-col space-y-0.5">
+                                <div className="w-2 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1.5 h-0.5 bg-gray-600 rounded"></div>
+                                <div className="w-1 h-0.5 bg-gray-600 rounded"></div>
+                              </div>
+                            </div>
+                          </button>
+                          {/* Dropdown removed */}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {(backlinkSortConfig ? [...competitors].sort((a,b) => {
+                    const aM = getBacklinksFor(a);
+                    const bM = getBacklinksFor(b);
+                    const key = backlinkSortConfig.key as keyof typeof aM;
+                    const aV = aM[key] as unknown as number;
+                    const bV = bM[key] as unknown as number;
+                    return backlinkSortConfig.direction === 'asc' ? aV - bV : bV - aV;
+                  }) : competitors).map((competitor, index) => {
+                    const { totalBacklinks, referringDomains, dofollowBacklinks, nofollowBacklinks } = getBacklinksFor(competitor);
+                    return (
+                      <tr key={index} className="hover:bg-gray-50 transition-colors" style={{ color: '#000' }}>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-black font-medium text-left" style={{ color: '#000' }}>{competitor.name}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-black text-center" style={{ color: '#000' }}>{totalBacklinks.toLocaleString()}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-black text-center" style={{ color: '#000' }}>{referringDomains.toLocaleString()}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-black text-center" style={{ color: '#000' }}>{dofollowBacklinks.toLocaleString()}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-black text-center" style={{ color: '#000' }}>{nofollowBacklinks.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

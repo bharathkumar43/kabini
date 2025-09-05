@@ -12,6 +12,7 @@ class LLMService {
     this.openaiBaseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
     this.perplexityBaseUrl = process.env.PERPLEXITY_BASE_URL || 'https://api.perplexity.ai';
     this.serperBaseUrl = process.env.SERPER_BASE_URL || 'https://google.serper.dev';
+    this.perplexityTimeoutMs = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || '45000', 10);
 
     // Debug logs for LLM provider API keys
     console.log('[LLMService] Provider API Key Status:');
@@ -166,43 +167,93 @@ class LLMService {
   }
 
   // Perplexity API call
-  async callPerplexityAPI(prompt, model = 'r1-1776', isQuestion = false) {
+  async callPerplexityAPI(prompt, model = 'sonar', isQuestion = false) {
     if (!this.perplexityApiKey) {
       throw new Error('Perplexity API key not configured');
     }
 
     // Map simplified model names to actual Perplexity model names
     let actualModel = model;
-    if (model === 'sonar') {
+    if (model === 'sonar' || model === 'sonar-medium') {
+      actualModel = 'llama-3.1-sonar-medium-128k-online';
+    } else if (model === 'sonar-small') {
       actualModel = 'llama-3.1-sonar-small-128k-online';
     }
 
-    const response = await axios.post(
-      `${this.perplexityBaseUrl}/chat/completions`,
-      {
-        model: actualModel,
-        messages: [
+    let response;
+    try {
+      response = await axios.post(
+        `${this.perplexityBaseUrl}/chat/completions`,
+        {
+          model: actualModel,
+          messages: [
+            {
+              role: 'system',
+              content: isQuestion 
+                ? 'You are an expert at generating relevant questions from content. Generate clear, specific questions that can be answered from the provided content.'
+                : 'You are an expert at providing comprehensive and accurate answers based on the given content.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: isQuestion ? 0.8 : 0.7,
+          max_tokens: isQuestion ? 1024 : 2048,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.perplexityApiKey}`
+          },
+          timeout: this.perplexityTimeoutMs
+        }
+      );
+    } catch (err) {
+      // Fallback chain: try medium first, then small
+      if (actualModel !== 'llama-3.1-sonar-medium-128k-online') {
+        response = await axios.post(
+          `${this.perplexityBaseUrl}/chat/completions`,
           {
-            role: 'system',
-            content: isQuestion 
-              ? 'You are an expert at generating relevant questions from content. Generate clear, specific questions that can be answered from the provided content.'
-              : 'You are an expert at providing comprehensive and accurate answers based on the given content.'
+            model: 'llama-3.1-sonar-medium-128k-online',
+            messages: [
+              { role: 'system', content: 'You are a helpful business analyst specializing in AI market analysis.' },
+              { role: 'user', content: prompt }
+            ],
+            temperature: isQuestion ? 0.8 : 0.7,
+            max_tokens: isQuestion ? 1024 : 2048,
           },
           {
-            role: 'user',
-            content: prompt
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.perplexityApiKey}`
+            },
+            timeout: this.perplexityTimeoutMs
           }
-        ],
-        temperature: isQuestion ? 0.8 : 0.7,
-        max_tokens: isQuestion ? 1024 : 2048,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.perplexityApiKey}`
-        }
+        );
+      } else {
+        // If medium already failed, try small as a final fallback
+        response = await axios.post(
+          `${this.perplexityBaseUrl}/chat/completions`,
+          {
+            model: 'llama-3.1-sonar-small-128k-online',
+            messages: [
+              { role: 'system', content: 'You are a helpful business analyst specializing in AI market analysis.' },
+              { role: 'user', content: prompt }
+            ],
+            temperature: isQuestion ? 0.8 : 0.7,
+            max_tokens: isQuestion ? 1024 : 2048,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.perplexityApiKey}`
+            },
+            timeout: this.perplexityTimeoutMs
+          }
+        );
       }
-    );
+    }
 
     const generatedText = response.data.choices[0]?.message?.content || '';
     const inputTokens = response.data.usage?.prompt_tokens || this.estimateTokens(prompt);
@@ -323,9 +374,8 @@ class LLMService {
         { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', pricing: { input: 0.01, output: 0.03 } }
       ],
       perplexity: [
-        { value: 'r1-1776', label: 'R1-1776 (Recommended)', pricing: { input: 0.0002, output: 0.0002 } },
-        { value: 'llama-3.1-sonar-small-128k-online', label: 'Llama 3.1 Sonar Small', pricing: { input: 0.0002, output: 0.0002 } },
-        { value: 'llama-3.1-sonar-medium-128k-online', label: 'Llama 3.1 Sonar Medium', pricing: { input: 0.0006, output: 0.0006 } },
+        { value: 'llama-3.1-sonar-medium-128k-online', label: 'Sonar Medium (Recommended)', pricing: { input: 0.0006, output: 0.0006 } },
+        { value: 'llama-3.1-sonar-small-128k-online', label: 'Sonar Small (Cheaper)', pricing: { input: 0.0002, output: 0.0002 } },
         { value: 'llama-3.1-sonar-large-128k-online', label: 'Llama 3.1 Sonar Large', pricing: { input: 0.001, output: 0.001 } }
       ],
       serper: [

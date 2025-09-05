@@ -1,6 +1,6 @@
 import { User, LoginResponse, AuthConfig } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || '';
 
 // Extend Window interface for MSAL
 declare global {

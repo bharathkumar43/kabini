@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { LLMService } = require('./llmService');
 const cheerio = require('cheerio');
 
 // API Keys from environment variables
@@ -9,6 +10,13 @@ const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID;
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+// Tunable timeouts (ms) for fast-mode calls
+const PERPLEXITY_TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || '25000', 10);
+const OPENAI_TIMEOUT_MS = parseInt(process.env.OPENAI_TIMEOUT_MS || '20000', 10);
+
+// Shared LLM service instance
+const sharedLLM = new LLMService();
 
 // AI-specific prompts for each model
 function getChatGPTPrompts(company, industry) {
@@ -146,10 +154,9 @@ function getEnhancedPrompts(company, industry = '', product = '') {
       `How does ${company} leverage AI in ${industryContext}?`
     ],
     perplexity: [
-      `Which companies are leading in ${industryContext}?`,
-      `What are the top companies offering ${productContext} in ${industryContext}?`,
-      `Compare ${company} with other companies in the ${industryContext}.`,
-      `How does ${company} leverage AI in ${industryContext}?`
+      `Analyze the brand and market visibility of "${company}" in ${industryContext}. Write a narrative analysis that repeatedly references the exact company name "${company}" throughout the text. Include its position versus competitors, sentiment indicators, and notable strengths or gaps. Ensure the company name "${company}" appears naturally multiple times (at least 6) in the explanation.`,
+      `Provide a competitor visibility comparison centered on "${company}" in ${industryContext}. Explicitly mention "${company}" many times while discussing mentions, positioning, and notable references in the market. Keep the tone analytical and informative.`,
+      `Summarize how "${company}" is perceived in ${industryContext}, including brand mentions, relative positioning, and sentiment cues. Make sure to include the exact string "${company}" frequently across the response so the narrative clearly ties every point back to "${company}".`
     ],
     claude: [
       `Which companies are leading in ${industryContext}?`,
@@ -901,23 +908,10 @@ async function queryPerplexity(competitorName, industry = '', customPrompts = nu
       try {
         console.log(`   📝 Perplexity prompt ${i + index + 1}: ${prompt.substring(0, 50)}...`);
         
-        const responseText = await retryWithBackoff(async () => {
-          const response = await axios.post(
-            'https://api.perplexity.ai/chat/completions',
-            {
-              model: 'r1-1776',
-              messages: [
-                { role: 'system', content: 'You are a helpful business analyst specializing in AI market analysis.' },
-                { role: 'user', content: prompt }
-              ]
-            },
-            { 
-              headers: { 'Authorization': `Bearer ${PERPLEXITY_API_KEY}`, 'Content-Type': 'application/json' },
-              timeout: 60000
-            }
-          );
-          return response.data?.choices?.[0]?.message?.content || '';
+        const responseObj = await retryWithBackoff(async () => {
+          return sharedLLM.callPerplexityAPI(prompt, 'sonar', false);
         });
+        const responseText = responseObj?.text || '';
         
         console.log(`   ✅ Perplexity prompt ${i + index + 1} completed (${responseText.length} chars)`);
         return responseText;
@@ -1059,7 +1053,7 @@ async function queryChatGPT(competitorName, industry = '', customPrompts = null)
         const response = await axios.post(
           'https://api.openai.com/v1/chat/completions',
           {
-            model: 'gpt-4',
+            model: 'gpt-3.5-turbo',
             messages: [
               { role: 'system', content: 'You are a helpful business analyst specializing in AI market analysis.' },
               { role: 'user', content: prompt }
@@ -1292,22 +1286,22 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         ] = await Promise.all([
           withTimeout(
             queryGeminiVisibility(competitorName, detectedIndustry, [enhancedPrompts.gemini[0]]),
-            10000,
+            12000,
             { analysis: 'Timed out', visibilityScore: 1, keyMetrics: {}, breakdown: {} }
           ).catch(() => ({ analysis: 'Error', visibilityScore: 1, keyMetrics: {}, breakdown: {} })),
           withTimeout(
             queryPerplexity(competitorName, detectedIndustry, [enhancedPrompts.perplexity[0]]),
-            10000,
+            PERPLEXITY_TIMEOUT_MS,
             { analysis: 'Timed out', visibilityScore: 1, keyMetrics: {}, breakdown: {} }
           ).catch(() => ({ analysis: 'Error', visibilityScore: 1, keyMetrics: {}, breakdown: {} })),
           withTimeout(
             queryClaude(competitorName, detectedIndustry, [enhancedPrompts.claude[0]]),
-            10000,
+            12000,
             { analysis: 'Timed out', visibilityScore: 1, keyMetrics: {}, breakdown: {} }
           ).catch(() => ({ analysis: 'Error', visibilityScore: 1, keyMetrics: {}, breakdown: {} })),
           withTimeout(
             queryChatGPT(competitorName, detectedIndustry, [enhancedPrompts.chatgpt[0]]),
-            10000,
+            OPENAI_TIMEOUT_MS,
             { analysis: 'Timed out', visibilityScore: 1, keyMetrics: {}, breakdown: {} }
           ).catch(() => ({ analysis: 'Error', visibilityScore: 1, keyMetrics: {}, breakdown: {} }))
         ]);
@@ -1380,12 +1374,18 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       const safeClaudeResponse = claudeResponse || { analysis: 'No analysis available', visibilityScore: 5, keyMetrics: {}, breakdown: {} };
       const safeChatGPTResponse = chatgptResponse || { analysis: 'No analysis available', visibilityScore: 5, keyMetrics: {}, breakdown: {} };
       
-      // Log response structures for debugging
-      console.log(`\n🔍 Response structures for ${competitorName}:`);
-      console.log(`   Gemini:`, JSON.stringify(safeGeminiResponse, null, 2));
-      console.log(`   Perplexity:`, JSON.stringify(safePerplexityResponse, null, 2));
-      console.log(`   Claude:`, JSON.stringify(safeClaudeResponse, null, 2));
-      console.log(`   ChatGPT:`, JSON.stringify(safeChatGPTResponse, null, 2));
+      // Log response structures for debugging (truncate to keep logs small)
+      console.log(`\n🔍 Response structures for ${competitorName} (truncated):`);
+      const truncate = (obj) => {
+        try {
+          const str = JSON.stringify(obj);
+          return str.length > 400 ? str.slice(0, 400) + '…' : str;
+        } catch { return '[unserializable]'; }
+      };
+      console.log(`   Gemini:`, truncate(safeGeminiResponse));
+      console.log(`   Perplexity:`, truncate(safePerplexityResponse));
+      console.log(`   Claude:`, truncate(safeClaudeResponse));
+      console.log(`   ChatGPT:`, truncate(safeChatGPTResponse));
       
       // Calculate scores with fallback values
       const scores = {

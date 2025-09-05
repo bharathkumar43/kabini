@@ -299,7 +299,7 @@ export function CompetitorInsight() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+  // Removed Root Domain / Exact URL dropdown
   
   // History data state
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
@@ -1029,17 +1029,17 @@ export function CompetitorInsight() {
                 }}
                 required
                 placeholder="Enter company name or URL"
-                className="flex-1 px-4 py-4 border-2 border-blue-600 rounded-xl text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg h-[60px]"
+                className="flex-1 px-4 py-4 border-2 border-blue-600 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg h-[60px]"
                 disabled={isAnalyzing}
               />
-
+              {/* Dropdown removed: always auto-detect type; input has rounded corners */}
             </div>
           </div>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch">
             <button
               onClick={startAnalysis}
               disabled={isAnalyzing || !inputValue.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-8 py-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors shadow-lg w-full lg:w-auto min-w-[140px] h-[60px]"
+              className="bg-black hover:bg-gray-800 disabled:bg-gray-400 text-white px-8 py-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors shadow-lg w-full lg:w-auto min-w-[140px] h-[60px]"
             >
               {isAnalyzing ? (
                 <>
@@ -1056,7 +1056,7 @@ export function CompetitorInsight() {
             {isAnalyzing && (
               <button
                 onClick={() => { try { abortController?.abort(); } catch {}; setIsAnalyzing(false); }}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors w-full lg:w-auto min-w-[120px] h-[60px]"
+                className="bg-black text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors w-full lg:w-auto min-w-[120px] h-[60px]"
               >
                 Stop
               </button>
@@ -1091,8 +1091,8 @@ export function CompetitorInsight() {
                       </svg>
                     </div>
                     <div className="ml-3">
-                      <h3 className="text-sm font-medium text-black">Competitor Analysis Complete</h3>
-                      <p className="text-sm text-black mt-1">
+                      <h3 className="text-sm font-medium text-blue-800">Competitor Analysis Complete</h3>
+                      <p className="text-sm text-blue-700 mt-1">
                         Your competitor analysis has been completed successfully. 
                         {analysisResult.competitors && analysisResult.competitors.length > 0 
                           ? ` Found ${analysisResult.competitors.length} competitors for analysis.`

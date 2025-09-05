@@ -39,6 +39,7 @@ import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import NotificationTest from './components/ui/NotificationTest';
 import { FAQContentAnalyzer } from './components/FAQContentAnalyzer';
+import IdleSessionManager from './components/IdleSessionManager';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -363,6 +364,8 @@ function AppContent() {
         currentPath={location.pathname}
       />
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden content-responsive">
+        {/* Global idle session manager: 10 min idle with 60s warning */}
+        <IdleSessionManager idleMinutes={10} warningSeconds={60} />
         <Topbar setIsOpen={setSidebarOpen} onLogout={handleLogout} />
         <main className="flex-1 p-responsive-md overflow-x-hidden overflow-y-auto text-black bg-white main-content-responsive">
           <div className="main-content-container">
