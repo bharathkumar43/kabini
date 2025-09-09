@@ -6,8 +6,7 @@ export const clearAllAnalysisData = () => {
   
   // Clear only analysis-related localStorage keys (not essential app data)
   const keysToClear = [
-    // QA Generation
-    'llm_qa_current_session',
+    // QA Generation - Note: preserving FAQ sessions by not clearing user-specific keys
     'llm_qa_current_work',
     'enhance_content_state',
     
@@ -79,7 +78,7 @@ export const clearUserSpecificData = (userId?: string) => {
   console.log('🧹 Clearing user-specific data...');
   
   if (userId) {
-    // Clear user-specific session data
+    // Clear user-specific session data (but preserve FAQ sessions)
     const userSpecificKeys = [
       `user_${userId}_sessions`,
       `user_${userId}_analysis_data`,
@@ -92,6 +91,22 @@ export const clearUserSpecificData = (userId?: string) => {
         console.log(`🧹 Cleared user-specific key: ${key}`);
       } catch (error) {
         console.warn(`🧹 Failed to clear user-specific key ${key}:`, error);
+      }
+    });
+    
+    // Also clear any keys that match the FAQ pattern but are not FAQ sessions
+    const keysToCheck = Object.keys(localStorage);
+    keysToCheck.forEach(key => {
+      if (key.startsWith('llm_qa_') && key.endsWith(`_${userId}`)) {
+        // Only clear non-FAQ session keys
+        if (!key.includes('sessions') && !key.includes('current_session')) {
+          try {
+            localStorage.removeItem(key);
+            console.log(`🧹 Cleared FAQ-related key: ${key}`);
+          } catch (error) {
+            console.warn(`🧹 Failed to clear FAQ-related key ${key}:`, error);
+          }
+        }
       }
     });
   }

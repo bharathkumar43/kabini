@@ -7,11 +7,13 @@ class LLMService {
     this.openaiApiKey = process.env.OPENAI_API_KEY;
     this.perplexityApiKey = process.env.PERPLEXITY_API_KEY;
     this.serperApiKey = process.env.SERPER_API_KEY;
+    this.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
     
     this.geminiBaseUrl = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
     this.openaiBaseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
     this.perplexityBaseUrl = process.env.PERPLEXITY_BASE_URL || 'https://api.perplexity.ai';
     this.serperBaseUrl = process.env.SERPER_BASE_URL || 'https://google.serper.dev';
+    this.anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1';
 
     // Debug logs for LLM provider API keys
     console.log('[LLMService] Provider API Key Status:');
@@ -19,6 +21,7 @@ class LLMService {
     console.log('  OpenAI:      ', this.openaiApiKey ? 'SET' : 'NOT SET');
     console.log('  Perplexity:  ', this.perplexityApiKey ? 'SET' : 'NOT SET');
     console.log('  Serper:      ', this.serperApiKey ? 'SET' : 'NOT SET');
+    console.log('  Anthropic:   ', this.anthropicApiKey ? 'SET' : 'NOT SET');
   }
 
   // Estimate tokens (approximate)
@@ -292,6 +295,59 @@ class LLMService {
     };
   }
 
+  // Claude API call
+  async callClaudeAPI(prompt, model = 'claude-3-sonnet-20240229', isQuestion = false) {
+    if (!this.anthropicApiKey) {
+      console.error('[Claude API] API key not configured');
+      throw new Error('Claude API key not configured');
+    }
+
+    console.log('[Claude API] Making request to:', `${this.anthropicBaseUrl}/messages`);
+    console.log('[Claude API] Model:', model, 'Prompt length:', prompt.length);
+
+    try {
+      const response = await axios.post(
+        `${this.anthropicBaseUrl}/messages`,
+        {
+          model: model,
+          max_tokens: isQuestion ? 1024 : 2048,
+          temperature: isQuestion ? 0.8 : 0.7,
+          messages: [
+            { role: 'user', content: prompt }
+          ]
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.anthropicApiKey}`,
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01'
+          }
+        }
+      );
+
+      const generatedText = response.data?.content?.[0]?.text || '';
+      const inputTokens = this.estimateTokens(prompt);
+      const outputTokens = this.estimateTokens(generatedText);
+
+      console.log('[Claude API] Response received:', {
+        textLength: generatedText.length,
+        inputTokens,
+        outputTokens
+      });
+
+      return {
+        text: generatedText,
+        inputTokens,
+        outputTokens,
+        model: model,
+        provider: 'claude'
+      };
+    } catch (error) {
+      console.error('[Claude API] Error:', error.response?.data || error.message);
+      throw new Error(`Claude API error: ${error.response?.data?.error?.message || error.message}`);
+    }
+  }
+
   // Main method to call any LLM provider
   async callLLM(prompt, provider, model, isQuestion = false) {
     switch (provider.toLowerCase()) {
@@ -302,6 +358,8 @@ class LLMService {
         return this.callOpenAIAPI(prompt, model, isQuestion);
       case 'perplexity':
         return this.callPerplexityAPI(prompt, model, isQuestion);
+      case 'claude':
+        return this.callClaudeAPI(prompt, model, isQuestion);
       case 'serper':
         return this.callSerperAPI(prompt, model, isQuestion);
       default:
@@ -328,6 +386,11 @@ class LLMService {
         { value: 'llama-3.1-sonar-medium-128k-online', label: 'Llama 3.1 Sonar Medium', pricing: { input: 0.0006, output: 0.0006 } },
         { value: 'llama-3.1-sonar-large-128k-online', label: 'Llama 3.1 Sonar Large', pricing: { input: 0.001, output: 0.001 } }
       ],
+      claude: [
+        { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet (Recommended)', pricing: { input: 0.003, output: 0.015 } },
+        { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus', pricing: { input: 0.015, output: 0.075 } },
+        { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku', pricing: { input: 0.00025, output: 0.00125 } }
+      ],
       serper: [
         { value: 'serper-search', label: 'Google Search (Answer Only)', pricing: { input: 0.001, output: 0.001 } }
       ]
@@ -344,6 +407,8 @@ class LLMService {
         return !!this.openaiApiKey;
       case 'perplexity':
         return !!this.perplexityApiKey;
+      case 'claude':
+        return !!this.anthropicApiKey;
       case 'serper':
         return !!this.serperApiKey;
       default:
@@ -357,6 +422,7 @@ class LLMService {
     if (this.geminiApiKey) providers.push('gemini');
     if (this.openaiApiKey) providers.push('openai');
     if (this.perplexityApiKey) providers.push('perplexity');
+    if (this.anthropicApiKey) providers.push('claude');
     if (this.serperApiKey) providers.push('serper');
     return providers;
   }

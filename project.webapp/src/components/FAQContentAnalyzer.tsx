@@ -75,6 +75,7 @@ export function FAQContentAnalyzer() {
   
   // Notification state
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
+  const [notificationType, setNotificationType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
   
   // Textarea ref for auto-expansion
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -125,6 +126,9 @@ export function FAQContentAnalyzer() {
       case 'perplexity':
         setFaqModel('sonar');
         break;
+      case 'claude':
+        setFaqModel('claude-3-sonnet-20240229');
+        break;
       default:
         setFaqModel('gemini-1.5-flash');
     }
@@ -136,11 +140,18 @@ export function FAQContentAnalyzer() {
       const userSessionsKey = getUserSpecificKey(SESSIONS_KEY, user.id);
       const userCurrentSessionKey = getUserSpecificKey(CURRENT_SESSION_KEY, user.id);
       
+      console.log('[FAQ Session] Loading sessions from localStorage:', {
+        userSessionsKey,
+        userCurrentSessionKey,
+        userId: user.id
+      });
+      
       try {
         // Load sessions
         const savedSessions = localStorage.getItem(userSessionsKey);
         if (savedSessions) {
           const parsedSessions = JSON.parse(savedSessions);
+          console.log('[FAQ Session] Loaded sessions:', parsedSessions.length);
           setSessions(parsedSessions);
         }
         
@@ -148,16 +159,17 @@ export function FAQContentAnalyzer() {
         const savedCurrentSession = localStorage.getItem(userCurrentSessionKey);
         if (savedCurrentSession) {
           const parsedCurrentSession = JSON.parse(savedCurrentSession);
+          console.log('[FAQ Session] Loaded current session:', {
+            id: parsedCurrentSession.id,
+            type: parsedCurrentSession.type,
+            qaDataLength: parsedCurrentSession.qaData?.length || 0,
+            questionsLength: parsedCurrentSession.generatedQuestions?.length || 0,
+            showQuestionsSection: parsedCurrentSession.showQuestionsSection,
+            showFAQSection: parsedCurrentSession.showFAQSection
+          });
           setCurrentSession(parsedCurrentSession);
-          
-          // Restore FAQ state if current session is an FAQ session
-          if (parsedCurrentSession && parsedCurrentSession.type === 'faq') {
-            setFaqs(parsedCurrentSession.qaData || []);
-            setShowFAQSection(true);
-            setContent(parsedCurrentSession.blogContent || '');
-            setFaqProvider(parsedCurrentSession.questionProvider || 'gemini');
-            setFaqModel(parsedCurrentSession.questionModel || (parsedCurrentSession.questionProvider === 'perplexity' ? 'sonar' : 'gemini-1.5-flash'));
-          }
+        } else {
+          console.log('[FAQ Session] No current session found in localStorage');
         }
       } catch (error) {
         console.error('[Session Loading] Error loading sessions:', error);
@@ -182,6 +194,15 @@ export function FAQContentAnalyzer() {
     if (user?.id && currentSession) {
       const userCurrentSessionKey = getUserSpecificKey(CURRENT_SESSION_KEY, user.id);
       try {
+        console.log('[FAQ Session] Saving current session to localStorage:', {
+          key: userCurrentSessionKey,
+          sessionId: currentSession.id,
+          sessionType: currentSession.type,
+          qaDataLength: currentSession.qaData?.length || 0,
+          questionsLength: currentSession.generatedQuestions?.length || 0,
+          showQuestionsSection: currentSession.showQuestionsSection,
+          showFAQSection: currentSession.showFAQSection
+        });
         localStorage.setItem(userCurrentSessionKey, JSON.stringify(currentSession));
       } catch (error) {
         console.error('[Session Saving] Error saving current session:', error);
@@ -197,7 +218,9 @@ export function FAQContentAnalyzer() {
       setExpandedSessions(new Set());
       // Clear FAQ state on logout
       setFaqs([]);
+      setGeneratedQuestions([]);
       setShowFAQSection(false);
+      setShowQuestionsSection(false);
       setContent('');
       setIsGeneratingQuestions(false);
       setIsGeneratingAnswers(false);
@@ -208,26 +231,50 @@ export function FAQContentAnalyzer() {
   // Restore FAQ state when current session changes
   useEffect(() => {
     if (currentSession && currentSession.type === 'faq') {
+      console.log('[FAQ Session] Restoring FAQ session:', {
+        id: currentSession.id,
+        qaDataLength: currentSession.qaData?.length || 0,
+        questionsLength: currentSession.generatedQuestions?.length || 0,
+        blogContentLength: currentSession.blogContent?.length || 0,
+        showQuestionsSection: currentSession.showQuestionsSection,
+        showFAQSection: currentSession.showFAQSection
+      });
+      
+      // Restore basic FAQ state
       setFaqs(currentSession.qaData || []);
-      setShowFAQSection(true);
       setContent(currentSession.blogContent || '');
       setFaqProvider(currentSession.questionProvider || 'gemini');
-      setFaqModel(currentSession.questionModel || (currentSession.questionProvider === 'perplexity' ? 'sonar' : 'gemini-1.5-flash'));
+      setFaqModel(currentSession.questionModel || (currentSession.questionProvider === 'perplexity' ? 'sonar' : currentSession.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
       
-              // Reset textarea height to accommodate content
-        if (textareaRef.current && currentSession.blogContent) {
-          setTimeout(() => {
-            if (textareaRef.current) {
-              textareaRef.current.style.height = 'auto';
-              const newHeight = Math.max(36, Math.min(textareaRef.current.scrollHeight, 150));
-              textareaRef.current.style.height = newHeight + 'px';
-            }
-          }, 100);
+      // Restore questions state
+      setGeneratedQuestions(currentSession.generatedQuestions || []);
+      setShowQuestionsSection(currentSession.showQuestionsSection || false);
+      setShowFAQSection(currentSession.showFAQSection || false);
+      
+      // Reset textarea height to accommodate content
+      if (textareaRef.current && currentSession.blogContent) {
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            const newHeight = Math.max(36, Math.min(textareaRef.current.scrollHeight, 150));
+            textareaRef.current.style.height = newHeight + 'px';
+          }
+        }, 100);
       }
-    } else {
-      // Clear FAQ state if not an FAQ session
+    } else if (currentSession && currentSession.type !== 'faq') {
+      // Clear FAQ state if current session is not an FAQ session
+      console.log('[FAQ Session] Clearing FAQ state - current session is not FAQ type:', currentSession.type);
       setFaqs([]);
+      setGeneratedQuestions([]);
       setShowFAQSection(false);
+      setShowQuestionsSection(false);
+    } else if (!currentSession) {
+      // Clear FAQ state if no current session
+      console.log('[FAQ Session] Clearing FAQ state - no current session');
+      setFaqs([]);
+      setGeneratedQuestions([]);
+      setShowFAQSection(false);
+      setShowQuestionsSection(false);
     }
   }, [currentSession]);
   
@@ -281,7 +328,8 @@ export function FAQContentAnalyzer() {
               setFaqProvider(faqData.provider);
               setFaqModel(faqData.model);
               setIsGeneratingFAQs(false);
-              setNotificationMessage(`Restored ${faqData.faqs.length} previously generated FAQs!`);
+              const faqText = faqData.faqs.length === 1 ? 'FAQ' : 'FAQs';
+              setNotificationMessage(`Restored ${faqData.faqs.length} previously generated ${faqText}!`);
             }, 100);
             
             // Clear the generated FAQs from localStorage
@@ -376,7 +424,8 @@ export function FAQContentAnalyzer() {
           setCurrentSession(newSession);
         }
         
-        setNotificationMessage(`Successfully generated ${response.faqs.length} FAQs!`);
+        const faqText = response.faqs.length === 1 ? 'FAQ' : 'FAQs';
+        setNotificationMessage(`Successfully generated ${response.faqs.length} ${faqText}!`);
       } else {
         console.error('[Pending FAQ] Invalid response format:', response);
         setNotificationMessage('Failed to generate FAQs. Please try again.');
@@ -410,8 +459,56 @@ export function FAQContentAnalyzer() {
       return;
     }
     
+    // Validate content - check if it contains meaningful text
+    const trimmedContent = content.trim();
+    
+    // Check if content is a valid URL
+    const isValidUrl = (text: string): boolean => {
+      try {
+        new URL(text);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    
+    // If it's a valid URL, allow it
+    if (isValidUrl(trimmedContent)) {
+      // URL is valid, proceed with generation
+    } else {
+      // For non-URL content, apply validation rules
+      
+      // Check if content is only numbers
+      if (/^\d+$/.test(trimmedContent)) {
+        setNotificationType('error');
+        setNotificationMessage('Enter valid content');
+        return;
+      }
+      
+      // Check if content is only emojis or special characters
+      if (/^[\p{Emoji}\p{Symbol}\p{Punctuation}\s]+$/u.test(trimmedContent)) {
+        setNotificationType('error');
+        setNotificationMessage('Enter valid content');
+        return;
+      }
+      
+      // Check if content is only single characters or very short meaningless text
+      if (trimmedContent.length < 10 || /^[a-zA-Z\s]{1,10}$/.test(trimmedContent)) {
+        setNotificationType('error');
+        setNotificationMessage('Enter valid content');
+        return;
+      }
+      
+      // Check if content has meaningful words (not just repeated characters)
+      const words = trimmedContent.split(/\s+/).filter(word => word.length > 0);
+      if (words.length < 3) {
+        setNotificationType('error');
+        setNotificationMessage('Enter valid content');
+        return;
+      }
+    }
+    
     setIsGeneratingQuestions(true);
-    setShowQuestionsSection(false);
     setGeneratedQuestions([]);
     setSelectedQuestions(new Set());
     
@@ -430,12 +527,19 @@ export function FAQContentAnalyzer() {
         const questions = response.questions || [];
         setGeneratedQuestions(questions);
         setShowQuestionsSection(true);
-        setNotificationMessage(`Generated ${questions.length} questions successfully!`);
+        const questionText = questions.length === 1 ? 'question' : 'questions';
+        setNotificationType('success');
+        setNotificationMessage(`Generated ${questions.length} ${questionText} successfully!`);
+        
+        // Save questions to session immediately
+        saveQuestionsToSession(questions);
       } else {
+        setNotificationType('error');
         setNotificationMessage('Failed to generate questions. Please try again.');
       }
     } catch (error) {
       console.error('[Questions Generation] Error:', error);
+      setNotificationType('error');
       setNotificationMessage('Error generating questions. Please try again.');
     } finally {
       setIsGeneratingQuestions(false);
@@ -456,6 +560,13 @@ export function FAQContentAnalyzer() {
       // Get selected questions
       const selectedQuestionsList = Array.from(selectedQuestions).map(index => generatedQuestions[index]);
       
+      console.log('[FAQ Generation] Starting answer generation:', {
+        selectedQuestionsSize: selectedQuestions.size,
+        selectedQuestionsIndices: Array.from(selectedQuestions),
+        selectedQuestionsList: selectedQuestionsList,
+        totalGeneratedQuestions: generatedQuestions.length
+      });
+      
       // Generate answers for selected questions
       const response = await apiService.generateAIFAQs({
         content: content.trim(),
@@ -468,17 +579,47 @@ export function FAQContentAnalyzer() {
       
       if (response.success && response.faqs) {
         const newFaqs = response.faqs || [];
-        setFaqs(newFaqs);
-        setShowFAQSection(true);
-        setNotificationMessage(`Generated answers for ${newFaqs.length} questions successfully!`);
+        const selectedQuestionsCount = selectedQuestions.size;
         
-        // Save to session
-        saveToSession(newFaqs);
+        console.log('[FAQ Generation] API Response Analysis:', {
+          responseSuccess: response.success,
+          responseFaqsLength: response.faqs?.length || 0,
+          selectedQuestionsCount: selectedQuestionsCount,
+          newFaqsLength: newFaqs.length,
+          responseFaqs: response.faqs
+        });
+        
+        // Accumulate new FAQs with existing ones instead of replacing
+        setFaqs(prevFaqs => {
+          const allFaqs = [...prevFaqs, ...newFaqs];
+          console.log('[FAQ Generation] Accumulating FAQs:', {
+            previousCount: prevFaqs.length,
+            newCount: newFaqs.length,
+            totalCount: allFaqs.length,
+            selectedQuestionsCount: selectedQuestionsCount
+          });
+          // Update existing session with all FAQs (existing + new)
+          updateSessionWithAnswers(allFaqs);
+          return allFaqs;
+        });
+        
+        setShowFAQSection(true);
+        const questionText = selectedQuestionsCount === 1 ? 'question' : 'questions';
+        setNotificationType('success');
+        setNotificationMessage(`Generated answers for ${selectedQuestionsCount} ${questionText} successfully!`);
+        
+        console.log('[FAQ Generation] Answer generation completed:', {
+          selectedQuestionsCount,
+          apiResponseCount: newFaqs.length,
+          selectedQuestionsList
+        });
       } else {
+        setNotificationType('error');
         setNotificationMessage('Failed to generate answers. Please try again.');
       }
     } catch (error) {
       console.error('[Answers Generation] Error:', error);
+      setNotificationType('error');
       setNotificationMessage('Error generating answers. Please try again.');
     } finally {
       setIsGeneratingAnswers(false);
@@ -508,9 +649,12 @@ export function FAQContentAnalyzer() {
     setSelectedQuestions(new Set());
   };
 
-  // Save FAQ session
-  const saveToSession = (newFaqs: FAQItem[]) => {
-    if (!user?.id) return;
+  // Save re-analyzed FAQ session
+  const saveReanalyzedToSession = (updatedFaqs: FAQItem[], reanalyzedQuestion: string) => {
+    if (!user?.id) {
+      console.warn('[FAQ Session] Cannot save re-analyzed session - no user ID');
+      return;
+    }
     
     const sessionData: SessionData = {
       id: `faq-${Date.now()}`,
@@ -525,21 +669,130 @@ export function FAQContentAnalyzer() {
       blogContent: content,
       blogUrl: extractUrl(content),
       sourceUrls: extractUrl(content) ? [extractUrl(content)!] : [],
-      qaData: newFaqs,
+      qaData: updatedFaqs,
       totalInputTokens: 0,
       totalOutputTokens: 0,
       statistics: {
-        totalQuestions: newFaqs.length,
+        totalQuestions: updatedFaqs.length,
         avgAccuracy: 'N/A',
         avgCitationLikelihood: 'N/A',
         totalCost: 'N/A'
       },
-      userId: user.id
+      userId: user.id,
+      generatedQuestions: generatedQuestions,
+      showQuestionsSection: showQuestionsSection,
+      showFAQSection: true
     };
+    
+    console.log('[FAQ Session] Saving re-analyzed session:', {
+      id: sessionData.id,
+      name: sessionData.name,
+      qaDataLength: sessionData.qaData.length,
+      reanalyzedQuestion: reanalyzedQuestion.substring(0, 100)
+    });
     
     setSessions(prev => [sessionData, ...prev]);
     setCurrentSession(sessionData);
   };
+
+  // Save questions to session (create new session when questions are generated)
+  const saveQuestionsToSession = (questions: string[]) => {
+    if (!user?.id) {
+      console.warn('[FAQ Session] Cannot save questions session - no user ID');
+      return;
+    }
+    
+    const sessionData: SessionData = {
+      id: `faq-${Date.now()}`,
+      name: `FAQ Session - ${new Date().toLocaleDateString()}`,
+      type: 'faq',
+      timestamp: new Date().toISOString(),
+      model: faqModel,
+      questionProvider: faqProvider,
+      answerProvider: faqProvider,
+      questionModel: faqModel,
+      answerModel: faqModel,
+      blogContent: content,
+      blogUrl: extractUrl(content),
+      sourceUrls: extractUrl(content) ? [extractUrl(content)!] : [],
+      qaData: [], // Empty initially, will be filled when answers are generated
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      statistics: {
+        totalQuestions: questions.length,
+        avgAccuracy: 'N/A',
+        avgCitationLikelihood: 'N/A',
+        totalCost: 'N/A'
+      },
+      userId: user.id,
+      generatedQuestions: questions,
+      showQuestionsSection: true,
+      showFAQSection: false
+    };
+    
+    console.log('[FAQ Session] Saving questions session:', {
+      id: sessionData.id,
+      questionsLength: sessionData.generatedQuestions?.length || 0,
+      blogContentLength: sessionData.blogContent.length,
+      userId: sessionData.userId
+    });
+    
+    setSessions(prev => [sessionData, ...prev]);
+    setCurrentSession(sessionData);
+  };
+
+  // Update existing session with answers
+  const updateSessionWithAnswers = (newFaqs: FAQItem[]) => {
+    if (!user?.id || !currentSession) {
+      console.warn('[FAQ Session] Cannot update session - no user ID or current session');
+      return;
+    }
+    
+    console.log('[FAQ Session] Before updating session:', {
+      currentSessionId: currentSession.id,
+      currentSessionQaDataLength: currentSession.qaData?.length || 0,
+      newFaqsLength: newFaqs.length,
+      currentSessionGeneratedQuestionsLength: currentSession.generatedQuestions?.length || 0
+    });
+    
+    const updatedSession: SessionData = {
+      ...currentSession,
+      qaData: newFaqs,
+      showFAQSection: true,
+      showQuestionsSection: true, // Keep questions section visible
+      statistics: {
+        ...currentSession.statistics,
+        totalQuestions: newFaqs.length
+      }
+    };
+    
+    console.log('[FAQ Session] Updating session with answers:', {
+      id: updatedSession.id,
+      qaDataLength: updatedSession.qaData.length,
+      questionsLength: updatedSession.generatedQuestions?.length || 0,
+      showFAQSection: updatedSession.showFAQSection
+    });
+    
+    // Update the session in the sessions array
+    setSessions(prev => {
+      const updatedSessions = prev.map(session => 
+        session.id === currentSession.id ? updatedSession : session
+      );
+      console.log('[FAQ Session] Sessions after update:', {
+        totalSessions: updatedSessions.length,
+        updatedSessionIndex: updatedSessions.findIndex(s => s.id === currentSession.id),
+        updatedSessionQaDataLength: updatedSessions.find(s => s.id === currentSession.id)?.qaData?.length || 0
+      });
+      return updatedSessions;
+    });
+    setCurrentSession(updatedSession);
+    
+    // Update the UI state to show both sections
+    setShowQuestionsSection(true);
+    setShowFAQSection(true);
+  };
+
+
 
   // Copy Q&A pair to clipboard
   const copyQAPair = async (question: string, answer: string) => {
@@ -560,6 +813,8 @@ export function FAQContentAnalyzer() {
       return;
     }
 
+    console.log('[Re-analyze] Starting re-analysis for question:', question.substring(0, 100));
+
     try {
       setIsGeneratingAnswers(true);
       
@@ -576,13 +831,21 @@ export function FAQContentAnalyzer() {
         const newAnswer = response.faqs[0].answer;
         
         // Update the existing FAQ with the new answer
-        setFaqs(prev => prev.map(faq => 
-          faq.question === question 
-            ? { ...faq, answer: newAnswer }
-            : faq
-        ));
+        setFaqs(prev => {
+          const updatedFaqs = prev.map(faq => 
+            faq.question === question 
+              ? { ...faq, answer: newAnswer }
+              : faq
+          );
+          
+          // Create a new session for the re-analyzed answer
+          saveReanalyzedToSession(updatedFaqs, question);
+          
+          return updatedFaqs;
+        });
         
-        console.log('Answer reanalyzed successfully');
+        setNotificationMessage(`Re-analyzed answer for "${question}" successfully!`);
+        console.log('Answer reanalyzed successfully and new session created');
       }
     } catch (error) {
       console.error('Error reanalyzing answer:', error);
@@ -623,7 +886,7 @@ export function FAQContentAnalyzer() {
       setShowFAQSection(true);
       setContent(session.blogContent || '');
       setFaqProvider(session.questionProvider || 'gemini');
-      setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : 'gemini-1.5-flash'));
+      setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
       
               // Reset textarea height to accommodate content
         if (textareaRef.current && session.blogContent) {
@@ -737,6 +1000,7 @@ export function FAQContentAnalyzer() {
                       <option value="gemini">Gemini</option>
                       <option value="openai">ChatGPT</option>
                       <option value="perplexity">Perplexity</option>
+                      <option value="claude">Claude</option>
                     </select>
                   </div>
                   
@@ -845,6 +1109,7 @@ export function FAQContentAnalyzer() {
                     <option value="gemini">Gemini</option>
                     <option value="openai">ChatGPT</option>
                     <option value="perplexity">Perplexity</option>
+                    <option value="claude">Claude</option>
                   </select>
                 </div>
                 
@@ -924,7 +1189,7 @@ export function FAQContentAnalyzer() {
           </div>
         
         <div className="space-y-3 max-h-96 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          {sessions.slice(0, 10).map((session, idx) => (
+          {sessions.slice(0, 50).map((session, idx) => (
             <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-all duration-200">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
@@ -990,7 +1255,7 @@ export function FAQContentAnalyzer() {
                               // Regenerate FAQs for this session
                               setContent(session.blogContent || '');
                               setFaqProvider(session.questionProvider || 'gemini');
-                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : 'gemini-1.5-flash'));
+                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
                               generateQuestions();
                             }}
                             className="p-2 bg-white border border-gray-300 rounded-lg text-black hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"
@@ -1036,16 +1301,41 @@ export function FAQContentAnalyzer() {
                           </button>
                         </div>
                       </div>
-                      {session.qaData?.map((qa, qaIdx) => (
-                        <div key={qaIdx} className="p-2 bg-white rounded border border-gray-200">
-                          <div className="font-medium text-sm text-black mb-1">
-                            Q: {qa.question}
+                      {/* Show all questions with their answer status */}
+                      {session.generatedQuestions && session.generatedQuestions.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs text-gray-600 font-medium">
+                            Questions ({session.generatedQuestions.length}):
                           </div>
-                          <div className="text-xs text-gray-600">
-                            A: {qa.answer}
-                          </div>
+                          {session.generatedQuestions.slice(0, 5).map((question, qIdx) => {
+                            // Check if this question has an answer
+                            const hasAnswer = session.qaData?.some(qa => qa.question === question);
+                            const answer = session.qaData?.find(qa => qa.question === question);
+                            
+                            return (
+                              <div key={qIdx} className="p-1.5 bg-white rounded border border-gray-200">
+                                <div className="font-medium text-xs text-black leading-tight">
+                                  Q: {question}
+                                </div>
+                                {hasAnswer && answer ? (
+                                  <div className="text-xs text-gray-600 leading-tight mt-0.5">
+                                    A: {answer.answer}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-gray-500 mt-0.5">
+                                    (Answer not generated yet)
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {session.generatedQuestions.length > 5 && (
+                            <div className="text-xs text-gray-500">
+                              +{session.generatedQuestions.length - 5} more questions
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      )}
                       <div className="text-xs text-gray-500">
                         Provider: {session.questionProvider} | Model: {session.questionModel}
                       </div>
@@ -1066,7 +1356,7 @@ export function FAQContentAnalyzer() {
                               // Regenerate Q&A for this session
                               setContent(session.blogContent || '');
                               setFaqProvider(session.questionProvider || 'gemini');
-                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : 'gemini-1.5-flash'));
+                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
                               generateQuestions();
                             }}
                             className="p-2 bg-white border border-gray-300 rounded-lg text-black hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"
@@ -1152,6 +1442,7 @@ export function FAQContentAnalyzer() {
       onClose={() => setNotificationMessage(null)}
       autoClose={true}
       autoCloseDelay={3000}
+      type={notificationType}
     />
   </div>
   );
