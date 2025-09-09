@@ -28,6 +28,7 @@ const hashContent = (content: string): string => {
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Overview } from './components/Overview.tsx';
 import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
+import EmailVerification from './components/EmailVerification';
 import { CompetitorInsight } from './components/AIVisibilityAnalysis';
 
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
@@ -335,6 +336,7 @@ function AppContent() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<EmailVerification />} />
         <Route path="/test-notifications" element={<NotificationTest />} />
         <Route path="*" element={<Login />} />
       </Routes>

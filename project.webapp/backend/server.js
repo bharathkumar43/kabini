@@ -11,6 +11,7 @@ const GoogleAuthService = require('./googleAuth');
 const JSONStorage = require('./jsonStorage');
 const MemoryStorage = require('./memoryStorage');
 const EmailService = require('./emailService');
+const emailVerificationService = require('./emailVerificationService');
 const { LLMService, getGeminiEmbedding } = require('./llmService');
 // const FanoutQueryDensity = require('./fanoutQueryDensity');
 // const GEOFanoutDensity = require('./geoFanoutDensity');
@@ -173,9 +174,15 @@ if (ENABLE_LOCAL_AUTH) {
         });
       }
 
-      // Validate email
+      // Validate email format
       if (!localAuthService.validateEmail(email)) {
         return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Validate email domain (check for disposable emails)
+      const domainValidation = await emailVerificationService.validateEmailDomain(email);
+      if (!domainValidation.valid) {
+        return res.status(400).json({ error: domainValidation.error });
       }
 
       // Validate password
@@ -194,7 +201,7 @@ if (ENABLE_LOCAL_AUTH) {
       // Hash password
       const hashedPassword = await localAuthService.hashPassword(password);
       
-      // Create user
+      // Create user with email_verified = false
       const userData = {
         id: uuidv4(),
         email,
@@ -203,47 +210,169 @@ if (ENABLE_LOCAL_AUTH) {
         password: hashedPassword,
         roles: ['user'],
         isActive: true,
+        emailVerified: false, // Email not verified initially
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       
       await db.createUser(userData);
       
-      // Generate tokens
-      const accessToken = localAuthService.generateJWT(userData);
+      // Generate email verification token
+      const verificationToken = emailVerificationService.generateVerificationToken(email);
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours
+      
+      // Save verification token to database
+      await db.createEmailVerificationToken(userData.id, verificationToken, expiresAt.toISOString());
+      
+      // Send verification email
+      try {
+        const emailResult = await emailVerificationService.sendVerificationEmail(email, name, verificationToken);
+        if (!emailResult.success) {
+          console.error('❌ Failed to send verification email:', emailResult.error);
+          // Don't fail registration, but log the error
+        } else {
+          console.log(`✅ Verification email sent to ${email}`);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send verification email:', emailError);
+        // Don't fail registration if email fails
+      }
+      
+      // Generate limited tokens (for unverified users)
+      const accessToken = localAuthService.generateJWT({ ...userData, emailVerified: false });
       const refreshToken = localAuthService.generateRefreshToken(userData);
       
       // Calculate expiration time
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
+      const tokenExpiresAt = new Date();
+      tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 7);
       
       // Save session
-      await db.saveUserSession(userData.id, refreshToken, expiresAt.toISOString());
+      await db.saveUserSession(userData.id, refreshToken, tokenExpiresAt.toISOString());
       
       // Remove password from response
       const { password: _, ...userResponse } = userData;
-      
-      // Send welcome email
-      try {
-        await emailService.sendWelcomeEmail(email, name);
-        console.log(`✅ Welcome email sent to ${email}`);
-      } catch (emailError) {
-        console.error('❌ Failed to send welcome email:', emailError);
-        // Don't fail registration if email fails
-      }
       
       res.json({
         success: true,
         user: userResponse,
         accessToken,
         refreshToken,
-        expiresAt: expiresAt.toISOString()
+        expiresAt: tokenExpiresAt.toISOString(),
+        emailVerificationRequired: true,
+        message: 'Account created successfully! Please check your email to verify your account.'
       });
       
     } catch (error) {
       console.error('Registration error:', error);
       res.status(500).json({ 
         error: 'Registration failed',
+        details: error.message 
+      });
+    }
+  });
+
+  // Email verification endpoint
+  app.post('/api/auth/verify-email', async (req, res) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ error: 'Verification token is required' });
+      }
+
+      // Get user by verification token
+      const user = await db.getUserByVerificationToken(token);
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired verification token' });
+      }
+
+      // Check if token is expired
+      const now = new Date();
+      const tokenExpiresAt = new Date(user.token_expires_at);
+      if (now > tokenExpiresAt) {
+        return res.status(400).json({ error: 'Verification token has expired' });
+      }
+
+      // Mark email as verified
+      await db.updateEmailVerificationStatus(user.id, true);
+      
+      // Mark token as used
+      await db.markEmailVerificationTokenAsUsed(token);
+      
+      console.log(`✅ Email verified for user: ${user.email}`);
+      
+      res.json({
+        success: true,
+        message: 'Email verified successfully! You can now access all features.',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          displayName: user.display_name,
+          emailVerified: true
+        }
+      });
+      
+    } catch (error) {
+      console.error('Email verification error:', error);
+      res.status(500).json({ 
+        error: 'Email verification failed',
+        details: error.message 
+      });
+    }
+  });
+
+  // Resend verification email endpoint
+  app.post('/api/auth/resend-verification', async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      // Get user by email
+      const user = await db.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.email_verified) {
+        return res.status(400).json({ error: 'Email is already verified' });
+      }
+
+      // Generate new verification token
+      const verificationToken = emailVerificationService.generateVerificationToken(email);
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours
+      
+      // Save verification token to database
+      await db.createEmailVerificationToken(user.id, verificationToken, expiresAt.toISOString());
+      
+      // Send verification email
+      try {
+        const emailResult = await emailVerificationService.sendVerificationEmail(email, user.name, verificationToken);
+        if (!emailResult.success) {
+          console.error('❌ Failed to resend verification email:', emailResult.error);
+          return res.status(500).json({ error: 'Failed to send verification email' });
+        } else {
+          console.log(`✅ Verification email resent to ${email}`);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to resend verification email:', emailError);
+        return res.status(500).json({ error: 'Failed to send verification email' });
+      }
+      
+      res.json({
+        success: true,
+        message: 'Verification email sent successfully! Please check your inbox.'
+      });
+      
+    } catch (error) {
+      console.error('Resend verification error:', error);
+      res.status(500).json({ 
+        error: 'Failed to resend verification email',
         details: error.message 
       });
     }
@@ -269,6 +398,15 @@ if (ENABLE_LOCAL_AUTH) {
       // Check if user is active
       if (!user.is_active) {
         return res.status(401).json({ error: 'Your account has been deactivated. Please contact support for assistance.' });
+      }
+
+      // Check if email is verified
+      if (!user.email_verified) {
+        return res.status(401).json({ 
+          error: 'Please verify your email address before logging in. Check your inbox for a verification email.',
+          emailVerificationRequired: true,
+          email: user.email
+        });
       }
 
       // Verify password
@@ -1532,6 +1670,16 @@ app.post('/api/llm/generate-ai-faqs', authenticateToken, async (req, res) => {
   try {
     const { content, provider, model, targetKeywords, generateQuestionsOnly, generateAnswersOnly, selectedQuestions } = req.body;
     
+    console.log('[FAQ Generation] Request received:', {
+      generateQuestionsOnly,
+      generateAnswersOnly,
+      selectedQuestionsCount: selectedQuestions?.length || 0,
+      selectedQuestions: selectedQuestions?.map(q => q.substring(0, 50) + '...') || [],
+      provider,
+      model,
+      contentLength: content?.length || 0
+    });
+    
     if (!content || !provider || !model) {
       return res.status(400).json({ 
         error: 'Missing required fields: content, provider, model' 
@@ -1578,7 +1726,14 @@ Generate only the questions in this exact format:
 
       let result;
       try {
+        console.log('[FAQ Generation] Generating questions with prompt length:', questionsPrompt.length);
         result = await llmService.callLLM(questionsPrompt, provider, model, true);
+        console.log('[FAQ Generation] Questions generation result:', {
+          success: !!result,
+          textLength: result?.text?.length || 0,
+          provider: result?.provider,
+          model: result?.model
+        });
       } catch (e) {
         console.error('[Questions Generation] Primary provider failed:', e?.message || e);
         return res.status(503).json({
@@ -1591,6 +1746,8 @@ Generate only the questions in this exact format:
       const questions = [];
       const lines = result.text.split('\n');
       
+      console.log('[FAQ Generation] Parsing questions from', lines.length, 'lines');
+      
       for (const line of lines) {
         const trimmedLine = line.trim();
         if (trimmedLine.match(/^\d+\.\s+/)) {
@@ -1598,21 +1755,31 @@ Generate only the questions in this exact format:
           const question = trimmedLine.replace(/^\d+\.\s+/, '').trim();
           if (question.length > 0) {
             questions.push(question);
+            console.log('[FAQ Generation] Found numbered question:', question.substring(0, 50) + '...');
           }
         } else if (trimmedLine.startsWith('Q:')) {
           // Extract question from Q: format
           const question = trimmedLine.replace(/^Q:\s*/, '').trim();
           if (question.length > 0) {
             questions.push(question);
+            console.log('[FAQ Generation] Found Q: question:', question.substring(0, 50) + '...');
           }
         } else if (trimmedLine.length > 10 && !trimmedLine.startsWith('A:')) {
           // If it's a long line that doesn't start with A:, treat as question
           questions.push(trimmedLine);
+          console.log('[FAQ Generation] Found plain question:', trimmedLine.substring(0, 50) + '...');
         }
       }
 
       // Filter out any empty questions
       const validQuestions = questions.filter(q => q.length > 0);
+      
+      console.log('[FAQ Generation] Questions parsing complete:', {
+        totalLines: lines.length,
+        rawQuestions: questions.length,
+        validQuestions: validQuestions.length,
+        questions: validQuestions.map(q => q.substring(0, 50) + '...')
+      });
 
       return res.json({
         success: true,
@@ -1626,11 +1793,122 @@ Generate only the questions in this exact format:
 
     // Step 2: Generate Answers for Selected Questions
     if (generateAnswersOnly && selectedQuestions && selectedQuestions.length > 0) {
+      console.log('[FAQ Generation] Starting answer generation for', selectedQuestions.length, 'questions');
+      
+      try {
+      
       const keywordsText = targetKeywords && targetKeywords.length > 0 
         ? `Focus on these specific keywords/topics: ${targetKeywords.join(', ')}. ` 
         : '';
       
-      const answersPrompt = `You are an SEO and AEO/GEO optimization expert. Based on the following FAQ questions, generate high-quality answers that are concise, authoritative, and optimized for AI-driven search engines.
+      // Use batch processing for large numbers of questions
+      const batchSize = 6; // Process 6 questions at a time for better results
+      let allFaqs = [];
+      let result = null; // Initialize result variable
+      
+      if (selectedQuestions.length > batchSize) {
+        console.log('[FAQ Generation] Using batch processing for', selectedQuestions.length, 'questions with batch size', batchSize);
+        
+        // Process questions in batches
+        for (let i = 0; i < selectedQuestions.length; i += batchSize) {
+          const batch = selectedQuestions.slice(i, i + batchSize);
+          console.log('[FAQ Generation] Processing batch', Math.floor(i/batchSize) + 1, 'of', Math.ceil(selectedQuestions.length/batchSize), 'with', batch.length, 'questions');
+          
+          const batchPrompt = `You are an SEO and AEO/GEO optimization expert. Based on the following FAQ questions, generate high-quality answers that are concise, authoritative, and optimized for AI-driven search engines.
+
+Input (FAQ Questions): ${batch.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+Content: ${content}
+${keywordsText}
+Follow these best practices while generating answers:
+
+Each answer should be short, clear, and focused (100–200 words, breakdown into several paragraph, if required add bullet points)
+Start answers with the main point first, then add supporting detail.
+Use natural, conversational language that matches how users expect AI to respond.
+Incorporate keywords and synonyms naturally without keyword stuffing.
+Provide answers that are factual, actionable, and evergreen (avoid vague marketing fluff).
+Ensure answers are FAQ schema–ready (plain text, no formatting issues).
+Make answers useful for both human readers and AI-driven engines (Google, ChatGPT, Gemini, Perplexity, etc.).
+
+Generate the Q&A pairs in this exact format:
+Q: ${batch[0]}
+A: [Detailed answer here]
+
+Q: ${batch[1]}
+A: [Detailed answer here]
+
+...and so on for all questions in this batch.`;
+
+          try {
+            const batchResult = await llmService.callLLM(batchPrompt, provider, model, true);
+            
+            // Set result for the first batch (for return statement)
+            if (i === 0) {
+              result = batchResult;
+            }
+            
+            if (batchResult && batchResult.text) {
+              // Parse batch results
+              const batchFaqs = [];
+              const batchLines = batchResult.text.split('\n');
+              let currentQuestion = '';
+              let currentAnswer = '';
+              
+              for (const line of batchLines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.startsWith('Q:')) {
+                  if (currentQuestion && currentAnswer) {
+                    batchFaqs.push({
+                      question: currentQuestion,
+                      answer: currentAnswer.trim()
+                    });
+                  }
+                  currentQuestion = trimmedLine.replace(/^Q:\s*/, '').trim();
+                  currentAnswer = '';
+                } else if (trimmedLine.startsWith('A:')) {
+                  currentAnswer = trimmedLine.replace(/^A:\s*/, '').trim();
+                } else if (currentAnswer && trimmedLine) {
+                  currentAnswer += ' ' + trimmedLine;
+                }
+              }
+              
+              if (currentQuestion && currentAnswer) {
+                batchFaqs.push({
+                  question: currentQuestion,
+                  answer: currentAnswer.trim()
+                });
+              }
+              
+              const validBatchFaqs = batchFaqs.filter(faq => faq.question.length > 0 && faq.answer.length > 0);
+              allFaqs.push(...validBatchFaqs);
+              
+              console.log('[FAQ Generation] Batch', Math.floor(i/batchSize) + 1, 'completed:', {
+                batchQuestions: batch.length,
+                generatedFaqs: validBatchFaqs.length,
+                faqs: validBatchFaqs.map(faq => ({
+                  question: faq.question.substring(0, 50) + '...',
+                  answerLength: faq.answer.length
+                }))
+              });
+            }
+            
+            // Add delay between batches
+            if (i + batchSize < selectedQuestions.length) {
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            
+          } catch (error) {
+            console.error('[FAQ Generation] Error processing batch', Math.floor(i/batchSize) + 1, ':', error);
+          }
+        }
+        
+        // Use batch results as the main result
+        const faqs = allFaqs;
+        const validFaqs = faqs.filter(faq => faq.question.length > 0 && faq.answer.length > 0);
+        
+      } else {
+        // Process all questions at once for smaller sets
+        const answersPrompt = `You are an SEO and AEO/GEO optimization expert. Based on the following FAQ questions, generate high-quality answers that are concise, authoritative, and optimized for AI-driven search engines.
 
 Input (FAQ Questions): ${selectedQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 
@@ -1655,22 +1933,32 @@ A: [Detailed answer here]
 
 ...and so on for all questions.`;
 
-      let result;
-      try {
-        result = await llmService.callLLM(answersPrompt, provider, model, true);
-      } catch (e) {
-        console.error('[Answers Generation] Primary provider failed:', e?.message || e);
-        return res.status(503).json({
-          error: 'Answer generation is temporarily unavailable. Please try a different provider or try again shortly.',
-          details: e?.message || String(e)
-        });
-      }
-      
-      // Parse FAQs from the result
-      const faqs = [];
-      const lines = result.text.split('\n');
-      let currentQuestion = '';
-      let currentAnswer = '';
+        let result;
+        try {
+          console.log('[FAQ Generation] Generating answers with prompt length:', answersPrompt.length);
+          console.log('[FAQ Generation] Questions being answered:', selectedQuestions.map((q, i) => `${i + 1}. ${q.substring(0, 50)}...`));
+          result = await llmService.callLLM(answersPrompt, provider, model, true);
+          console.log('[FAQ Generation] Answers generation result:', {
+            success: !!result,
+            textLength: result?.text?.length || 0,
+            provider: result?.provider,
+            model: result?.model
+          });
+        } catch (e) {
+          console.error('[Answers Generation] Primary provider failed:', e?.message || e);
+          return res.status(503).json({
+            error: 'Answer generation is temporarily unavailable. Please try a different provider or try again shortly.',
+            details: e?.message || String(e)
+          });
+        }
+        
+        // Parse FAQs from the result
+        const faqs = [];
+        const lines = result.text.split('\n');
+        let currentQuestion = '';
+        let currentAnswer = '';
+        
+        console.log('[FAQ Generation] Parsing answers from', lines.length, 'lines');
       
       for (const line of lines) {
         const trimmedLine = line.trim();
@@ -1681,12 +1969,15 @@ A: [Detailed answer here]
               question: currentQuestion,
               answer: currentAnswer.trim()
             });
+            console.log('[FAQ Generation] Parsed FAQ:', currentQuestion.substring(0, 50) + '...', 'Answer length:', currentAnswer.trim().length);
           }
           // Start new question
           currentQuestion = trimmedLine.replace(/^Q:\s*/, '').trim();
           currentAnswer = '';
+          console.log('[FAQ Generation] Found question:', currentQuestion.substring(0, 50) + '...');
         } else if (trimmedLine.startsWith('A:')) {
           currentAnswer = trimmedLine.replace(/^A:\s*/, '').trim();
+          console.log('[FAQ Generation] Found answer start, length:', currentAnswer.length);
         } else if (currentAnswer && trimmedLine) {
           // Continue the answer
           currentAnswer += ' ' + trimmedLine;
@@ -1699,19 +1990,123 @@ A: [Detailed answer here]
           question: currentQuestion,
           answer: currentAnswer.trim()
         });
+        console.log('[FAQ Generation] Parsed final FAQ:', currentQuestion.substring(0, 50) + '...', 'Answer length:', currentAnswer.trim().length);
       }
 
-      // Filter out any empty FAQs
-      const validFaqs = faqs.filter(faq => faq.question.length > 0 && faq.answer.length > 0);
-
-      return res.json({
-        success: true,
-        faqs: validFaqs,
-        provider: result.provider,
-        model: result.model,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens
+        // Filter out any empty FAQs
+        const validFaqs = faqs.filter(faq => faq.question.length > 0 && faq.answer.length > 0);
+        
+        console.log('[FAQ Generation] Answer generation complete:', {
+          selectedQuestionsCount: selectedQuestions.length,
+          rawFaqsCount: faqs.length,
+          validFaqsCount: validFaqs.length,
+          missingAnswers: selectedQuestions.length - validFaqs.length,
+          faqs: validFaqs.map(faq => ({
+            question: faq.question.substring(0, 50) + '...',
+            answerLength: faq.answer.length
+          }))
+        });
+        
+        // Use single batch results
+        allFaqs = validFaqs;
+      }
+      
+      // Final processing for both batch and single processing
+      const finalValidFaqs = allFaqs.filter(faq => faq.question.length > 0 && faq.answer.length > 0);
+      
+      console.log('[FAQ Generation] Final answer generation complete:', {
+        selectedQuestionsCount: selectedQuestions.length,
+        finalFaqsCount: finalValidFaqs.length,
+        missingAnswers: selectedQuestions.length - finalValidFaqs.length
       });
+
+      // Check if we have answers for all selected questions
+      const missingQuestions = selectedQuestions.filter(selectedQ => 
+        !finalValidFaqs.some(faq => faq.question === selectedQ)
+      );
+
+      if (missingQuestions.length > 0) {
+        console.log('[FAQ Generation] Missing answers for', missingQuestions.length, 'questions, generating individually...');
+        
+        // Generate answers for missing questions individually
+        for (const missingQuestion of missingQuestions) {
+          try {
+            console.log('[FAQ Generation] Generating individual answer for:', missingQuestion.substring(0, 50) + '...');
+            
+            const individualPrompt = `You are an SEO and AEO/GEO optimization expert. Generate a high-quality answer for this specific FAQ question.
+
+Question: ${missingQuestion}
+
+Content: ${content}
+${keywordsText}
+
+Generate a concise, authoritative answer (100-200 words) that is optimized for AI-driven search engines. Use natural, conversational language and provide factual, actionable information.
+
+Format your response as:
+Q: ${missingQuestion}
+A: [Your detailed answer here]`;
+
+            const individualResult = await llmService.callLLM(individualPrompt, provider, model, true);
+            
+            if (individualResult && individualResult.text) {
+              // Parse the individual result
+              const individualLines = individualResult.text.split('\n');
+              let individualQuestion = '';
+              let individualAnswer = '';
+              
+              for (const line of individualLines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.startsWith('Q:')) {
+                  individualQuestion = trimmedLine.replace(/^Q:\s*/, '').trim();
+                } else if (trimmedLine.startsWith('A:')) {
+                  individualAnswer = trimmedLine.replace(/^A:\s*/, '').trim();
+                } else if (individualAnswer && trimmedLine) {
+                  individualAnswer += ' ' + trimmedLine;
+                }
+              }
+              
+              if (individualQuestion && individualAnswer && individualAnswer.length > 20) {
+                finalValidFaqs.push({
+                  question: individualQuestion,
+                  answer: individualAnswer.trim()
+                });
+                console.log('[FAQ Generation] Successfully generated individual answer for:', individualQuestion.substring(0, 50) + '...', 'Answer length:', individualAnswer.trim().length);
+              } else {
+                console.warn('[FAQ Generation] Failed to parse individual answer for:', missingQuestion.substring(0, 50) + '...');
+              }
+            }
+            
+            // Add a small delay between individual requests
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+          } catch (error) {
+            console.error('[FAQ Generation] Error generating individual answer for:', missingQuestion.substring(0, 50) + '...', error);
+          }
+        }
+        
+        console.log('[FAQ Generation] Final results after individual generation:', {
+          selectedQuestionsCount: selectedQuestions.length,
+          finalFaqsCount: finalValidFaqs.length,
+          stillMissing: selectedQuestions.length - finalValidFaqs.length
+        });
+      }
+
+        return res.json({
+          success: true,
+          faqs: finalValidFaqs,
+          provider: result?.provider || 'unknown',
+          model: result?.model || 'unknown',
+          inputTokens: result?.inputTokens || 0,
+          outputTokens: result?.outputTokens || 0
+        });
+        
+      } catch (error) {
+        console.error('[FAQ Generation] Error in answer generation:', error);
+        return res.status(500).json({
+          error: 'Failed to generate answers',
+          details: error.message || String(error)
+        });
+      }
     }
 
     // Original FAQ generation (for backward compatibility)
@@ -2995,6 +3390,14 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
       // Generate suggestions without LLM
       const suggestions = [];
       
+      console.log('[Backend] Starting suggestion generation:', {
+        fullPageHtmlLength: fullPageHtml.length,
+        originalContentLength: originalContent.length,
+        pageTitle: pageTitle,
+        hasH1: fullPageHtml.includes('<h1>'),
+        hasMarkdownH1: originalContent.includes('# ')
+      });
+      
       // Check for missing H1 heading
       if (!fullPageHtml.includes('<h1>') && !originalContent.includes('# ')) {
         const suggestedTitle = pageTitle || originalContent.split('\n')[0].substring(0, 60);
@@ -3018,13 +3421,13 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
           if (currentContent.length === 200) currentContent += '...';
         }
         
-        console.log('[Content Analysis] Generating heading suggestion with:', {
+        console.log('[Backend] Generating heading suggestion with:', {
           suggestedTitle,
           currentContent: currentContent.substring(0, 100) + '...',
           fullPageHtmlLength: fullPageHtml.length
         });
         
-        suggestions.push({
+        const headingSuggestion = {
           type: 'heading',
           priority: 'high',
           description: 'Add a clear H1 heading to improve SEO and content structure',
@@ -3036,7 +3439,26 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
             find: fullPageHtml.includes('<body>') ? '<body>' : originalContent.split('\n')[0],
             replace: fullPageHtml.includes('<body>') ? `<body>\n    <h1>${suggestedTitle}</h1>` : `<h1>${suggestedTitle}</h1>\n\n${originalContent}`
           }
+        };
+        
+        // Add a more reliable pattern for sentence replacement
+        if (currentContent && currentContent.length > 10) {
+          headingSuggestion.sentenceReplacement = {
+            find: currentContent.substring(0, 100),
+            replace: `<h1>${suggestedTitle}</h1>\n\n${currentContent}`
+          };
+        }
+        
+        console.log('[Backend] Created heading suggestion:', {
+          type: headingSuggestion.type,
+          currentContentLength: headingSuggestion.currentContent.length,
+          enhancedContentLength: headingSuggestion.enhancedContent.length,
+          hasExactReplacement: !!headingSuggestion.exactReplacement,
+          exactReplacementFind: headingSuggestion.exactReplacement.find.substring(0, 100) + '...',
+          exactReplacementReplace: headingSuggestion.exactReplacement.replace.substring(0, 100) + '...'
         });
+        
+        suggestions.push(headingSuggestion);
       }
 
       // Check for long paragraphs
@@ -3062,7 +3484,7 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
           }
         }
         
-        suggestions.push({
+        const paragraphSuggestion = {
           type: 'paragraph',
           priority: 'medium',
           description: 'Break content into smaller paragraphs for better readability',
@@ -3074,7 +3496,18 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
             find: actualParagraphContent,
             replace: `<p>${firstHalf}</p>\n<p>${secondHalf}</p>`
           }
+        };
+        
+        console.log('[Backend] Created paragraph suggestion:', {
+          type: paragraphSuggestion.type,
+          currentContentLength: paragraphSuggestion.currentContent.length,
+          enhancedContentLength: paragraphSuggestion.enhancedContent.length,
+          hasExactReplacement: !!paragraphSuggestion.exactReplacement,
+          exactReplacementFind: paragraphSuggestion.exactReplacement.find.substring(0, 100) + '...',
+          exactReplacementReplace: paragraphSuggestion.exactReplacement.replace.substring(0, 100) + '...'
         });
+        
+        suggestions.push(paragraphSuggestion);
       }
 
       // Check for missing lists
@@ -3218,6 +3651,29 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
         description: 'Add structured data markup for better search engine understanding',
         implementation: 'Generate JSON-LD schema markup for the content',
         impact: 'Improves search engine visibility and rich snippets'
+      });
+      
+      console.log('[Backend] Final suggestions generated:', {
+        totalSuggestions: suggestions.length,
+        suggestionTypes: suggestions.map(s => s.type),
+        suggestionsWithExactReplacement: suggestions.filter(s => s.exactReplacement).length,
+        suggestionsWithCurrentContent: suggestions.filter(s => s.currentContent).length,
+        suggestionsWithEnhancedContent: suggestions.filter(s => s.enhancedContent).length
+      });
+      
+      // Log each suggestion in detail
+      suggestions.forEach((suggestion, index) => {
+        console.log(`[Backend] Suggestion ${index + 1}:`, {
+          type: suggestion.type,
+          priority: suggestion.priority,
+          hasCurrentContent: !!suggestion.currentContent,
+          hasEnhancedContent: !!suggestion.enhancedContent,
+          hasExactReplacement: !!suggestion.exactReplacement,
+          currentContentPreview: suggestion.currentContent?.substring(0, 100) + '...',
+          enhancedContentPreview: suggestion.enhancedContent?.substring(0, 100) + '...',
+          exactReplacementFind: suggestion.exactReplacement?.find?.substring(0, 100) + '...',
+          exactReplacementReplace: suggestion.exactReplacement?.replace?.substring(0, 100) + '...'
+        });
       });
 
       // Calculate scores
@@ -4541,14 +4997,32 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       // Generate secure reset token
       const resetToken = require('crypto').randomBytes(32).toString('hex');
       
-      // Set expiration (1 hour from now)
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 1);
+      // Set expiration (1 hour from now) - using UTC to avoid timezone issues
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + (60 * 60 * 1000)); // Add 1 hour in milliseconds
+      
+      console.log('💾 [Forgot Password] Token timing:', {
+        now: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        timeUntilExpiry: Math.round((expiresAt.getTime() - now.getTime()) / 1000 / 60) + ' minutes',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      });
+      
+      // Clean up expired tokens before creating new one
+      await db.deleteExpiredPasswordResetTokens();
+      console.log('🧹 [Forgot Password] Cleaned up expired tokens');
       
       console.log('💾 [Forgot Password] Saving token to database...');
       
       // Save token to database
-      await db.createPasswordResetToken(user.id, resetToken, expiresAt.toISOString());
+      console.log('💾 [Forgot Password] Saving token to database:', {
+        userId: user.id,
+        token: `${resetToken.substring(0, 10)}...`,
+        expiresAt: expiresAt.toISOString()
+      });
+      
+      const tokenId = await db.createPasswordResetToken(user.id, resetToken, expiresAt.toISOString());
+      console.log('✅ [Forgot Password] Token saved with ID:', tokenId);
       
       // Create reset link
       const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
@@ -4659,16 +5133,56 @@ app.post('/api/auth/send-test-email', async (req, res) => {
 app.post('/api/auth/reset-password', async (req, res) => {
   const { token, newPassword } = req.body;
   
+  console.log('🔐 [Reset Password] Request received:', { 
+    token: token ? `${token.substring(0, 10)}...` : 'null', 
+    hasPassword: !!newPassword 
+  });
+  
   if (!token || !newPassword) {
+    console.log('❌ [Reset Password] Missing token or password');
     return res.status(400).json({ error: 'Token and new password are required' });
   }
 
   try {
     // Get token from database
+    console.log('🔍 [Reset Password] Looking up token in database...');
     const resetToken = await db.getPasswordResetToken(token);
+    
     if (!resetToken) {
+      console.log('❌ [Reset Password] Token not found or expired');
+      console.log('🔍 [Reset Password] Checking if token exists at all...');
+      
+      // Additional debugging - check if token exists but is expired/used
+      const client = await db.pool.connect();
+      try {
+        const allTokensResult = await client.query(
+          'SELECT token, used, expires_at, created_at FROM password_reset_tokens WHERE token = $1',
+          [token]
+        );
+        
+        if (allTokensResult.rows.length > 0) {
+          const tokenInfo = allTokensResult.rows[0];
+          console.log('🔍 [Reset Password] Token found but invalid:', {
+            used: tokenInfo.used,
+            expires_at: tokenInfo.expires_at,
+            created_at: tokenInfo.created_at,
+            is_expired: new Date(tokenInfo.expires_at) < new Date()
+          });
+        } else {
+          console.log('🔍 [Reset Password] Token does not exist in database');
+        }
+      } finally {
+        client.release();
+      }
+      
       return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
+    
+    console.log('✅ [Reset Password] Token found and valid:', {
+      user_id: resetToken.user_id,
+      expires_at: resetToken.expires_at,
+      created_at: resetToken.created_at
+    });
 
     // Validate password
     if (!localAuthService.validatePassword(newPassword)) {

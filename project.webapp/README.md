@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # LLM Q&A Tool with AI-Powered Confidence Calculation
 
 A React TypeScript application that generates intelligent questions from blog content and provides AI-powered answers using Google's Gemini API.
@@ -121,7 +120,4 @@ You can switch between confidence calculation methods at any time in the Configu
 - Confidence score accuracy
 - Question filtering quality
 
-The application will remember your preference for future sessions. 
-=======
-# kabini
->>>>>>> 6b9177232f9966064a428a2c68f7a850ecaa724f
+The application will remember your preference for future sessions.

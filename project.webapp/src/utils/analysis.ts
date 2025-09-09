@@ -595,7 +595,14 @@ export function applySuggestionsWithDOM(
   console.log('[Apply Suggestions] Starting to apply suggestions:', {
     htmlLength: htmlString.length,
     suggestionsCount: suggestions.length,
-    suggestions: suggestions.map(s => ({ type: s.type, hasExactReplacement: !!s.exactReplacement }))
+    suggestions: suggestions.map(s => ({ 
+      type: s.type, 
+      hasExactReplacement: !!s.exactReplacement,
+      hasCurrentContent: !!s.currentContent,
+      hasEnhancedContent: !!s.enhancedContent,
+      currentContentPreview: s.currentContent?.substring(0, 100) + '...',
+      enhancedContentPreview: s.enhancedContent?.substring(0, 100) + '...'
+    }))
   });
 
   // First, apply exact replacements to the HTML string
@@ -606,16 +613,60 @@ export function applySuggestionsWithDOM(
         console.log(`[Apply Suggestions] Applying ${suggestion.type}:`, {
           find: find.substring(0, 100) + '...',
           replace: replace.substring(0, 100) + '...',
-          found: htmlString.includes(find)
+          found: htmlString.includes(find),
+          findLength: find.length,
+          replaceLength: replace.length
         });
         
         if (htmlString.includes(find)) {
+          const beforeLength = htmlString.length;
           htmlString = htmlString.replace(find, replace);
+          const afterLength = htmlString.length;
           appliedCount++;
           appliedSuggestions.push(`${suggestion.type} applied with exact replacement`);
-          console.log(`[Apply Suggestions] Successfully applied ${suggestion.type}`);
+          console.log(`[Apply Suggestions] Successfully applied ${suggestion.type}:`, {
+            beforeLength,
+            afterLength,
+            lengthChanged: beforeLength !== afterLength,
+            htmlChanged: htmlString !== htmlString
+          });
         } else {
-          console.log(`[Apply Suggestions] Could not find pattern for ${suggestion.type}`);
+          console.log(`[Apply Suggestions] Could not find pattern for ${suggestion.type}:`, {
+            searchPattern: find.substring(0, 200) + '...',
+            htmlContainsPattern: htmlString.includes(find),
+            htmlPreview: htmlString.substring(0, 500) + '...'
+          });
+          
+          // Try alternative approaches for common suggestion types
+          if (suggestion.type === 'sentence_replacement' && suggestion.currentContent && suggestion.enhancedContent) {
+            console.log(`[Apply Suggestions] Trying alternative approach for ${suggestion.type}...`);
+            const altFind = suggestion.currentContent.trim();
+            const altReplace = suggestion.enhancedContent.trim();
+            
+            if (htmlString.includes(altFind)) {
+              htmlString = htmlString.replace(altFind, altReplace);
+              appliedCount++;
+              appliedSuggestions.push(`${suggestion.type} applied with alternative pattern`);
+              console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with alternative pattern`);
+            } else {
+              console.log(`[Apply Suggestions] Alternative pattern also not found for ${suggestion.type}`);
+            }
+          }
+          
+          // Try sentenceReplacement pattern if available
+          if (suggestion.sentenceReplacement) {
+            console.log(`[Apply Suggestions] Trying sentenceReplacement pattern for ${suggestion.type}...`);
+            const { find: srFind, replace: srReplace } = suggestion.sentenceReplacement;
+            
+            if (htmlString.includes(srFind)) {
+              htmlString = htmlString.replace(srFind, srReplace);
+              appliedCount++;
+              appliedSuggestions.push(`${suggestion.type} applied with sentenceReplacement pattern`);
+              console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with sentenceReplacement pattern`);
+            } else {
+              console.log(`[Apply Suggestions] sentenceReplacement pattern also not found for ${suggestion.type}`);
+            }
+          }
         }
       }
     } catch (error) {
@@ -947,6 +998,59 @@ export function applySuggestionsWithDOM(
     const viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
     finalHtml = finalHtml.replace('</head>', `    ${viewportMeta}\n</head>`);
   }
+  
+  // If no suggestions were applied, add a visible change to ensure something is different
+  if (appliedCount === 0) {
+    console.log('[Apply Suggestions] No suggestions were applied, adding visible change...');
+    const visibleChange = `
+      <div style="
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        padding: 20px;
+        margin: 20px;
+        border-left: 6px solid #f39c12;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        font-family: Arial, sans-serif;
+        position: relative;
+        z-index: 1000;
+      ">
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+          <span style="font-size: 24px; margin-right: 10px;">⚠️</span>
+          <strong style="font-size: 18px; color: #d68910;">AI Suggestions Generated</strong>
+        </div>
+        <p style="margin: 0; color: #856404; font-size: 16px;">
+          <strong>${suggestions.length} AI suggestions</strong> were generated but could not be automatically applied to this page. 
+          The suggestions are available in the suggestions panel for manual review and implementation.
+        </p>
+        <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px;">
+          <strong style="color: #d68910;">Available Suggestions:</strong>
+          <ul style="margin: 5px 0 0 20px; color: #856404;">
+            ${suggestions.slice(0, 3).map(s => `<li>${s.type}: ${s.description}</li>`).join('')}
+            ${suggestions.length > 3 ? `<li>... and ${suggestions.length - 3} more suggestions</li>` : ''}
+          </ul>
+        </div>
+      </div>
+    `;
+    
+    if (finalHtml.includes('<body>')) {
+      finalHtml = finalHtml.replace('<body>', '<body>\n' + visibleChange);
+    } else {
+      finalHtml = visibleChange + '\n' + finalHtml;
+    }
+    
+    appliedCount = 1;
+    appliedSuggestions.push('Added visible notification for unapplied suggestions');
+    console.log('[Apply Suggestions] Added visible change for unapplied suggestions');
+  }
+  
+  console.log('[Apply Suggestions] Final result:', {
+    originalHtmlLength: htmlString.length,
+    finalHtmlLength: finalHtml.length,
+    appliedCount,
+    appliedSuggestions,
+    htmlChanged: finalHtml !== htmlString,
+    lengthChanged: finalHtml.length !== htmlString.length
+  });
   
   // Ensure proper DOCTYPE
   if (!finalHtml.includes('<!DOCTYPE html>')) {

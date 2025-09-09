@@ -53,6 +53,12 @@ export function Configuration({
           { value: 'llama-3.1-sonar-medium-128k-online', label: 'Llama 3.1 Sonar Medium' },
           { value: 'llama-3.1-sonar-large-128k-online', label: 'Llama 3.1 Sonar Large' }
         ];
+      case 'claude':
+        return [
+          { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet (Recommended)' },
+          { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
+          { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' }
+        ];
       default:
         return [];
     }
@@ -137,6 +143,7 @@ export function Configuration({
                 <option value="gemini">Gemini (Google)</option>
                 <option value="openai">ChatGPT (OpenAI)</option>
                 <option value="perplexity">Perplexity</option>
+                <option value="claude">Claude (Anthropic)</option>
               </select>
             </div>
             <div>
@@ -175,6 +182,7 @@ export function Configuration({
                 <option value="gemini">Gemini (Google)</option>
                 <option value="openai">ChatGPT (OpenAI)</option>
                 <option value="perplexity">Perplexity</option>
+                <option value="claude">Claude (Anthropic)</option>
               </select>
             </div>
             <div>
