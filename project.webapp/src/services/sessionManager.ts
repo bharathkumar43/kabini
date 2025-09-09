@@ -63,39 +63,35 @@ class SessionManager {
    */
   getLatestAnalysisSession(type: AnalysisSession['type'], userId?: string): AnalysisSession | null {
     const sessionIds = this.getSessionIndex(type);
-    
-    if (sessionIds.length === 0) {
-      return null;
-    }
+    if (sessionIds.length === 0) return null;
 
-    // Get the most recent session
-    const latestSessionId = sessionIds[sessionIds.length - 1];
-    const sessionData = localStorage.getItem(this.SESSION_PREFIX + latestSessionId);
-    
-    if (!sessionData) {
-      return null;
-    }
-
-    try {
-      const session: AnalysisSession = JSON.parse(sessionData);
-      
-      // Check if session is expired
-      if (session.expiresAt < Date.now()) {
-        this.removeSession(session.id);
-        return null;
+    // Iterate from newest to oldest and return the first valid session for this user
+    for (let i = sessionIds.length - 1; i >= 0; i--) {
+      const sessionId = sessionIds[i];
+      const raw = localStorage.getItem(this.SESSION_PREFIX + sessionId);
+      if (!raw) {
+        // Clean up missing entry from index
+        this.removeSession(sessionId);
+        continue;
       }
-
-      // Check if session belongs to the current user (if userId is provided)
-      if (userId && session.userId && session.userId !== userId) {
-        return null;
+      try {
+        const session: AnalysisSession = JSON.parse(raw);
+        // Expired → remove and continue searching
+        if (session.expiresAt < Date.now()) {
+          this.removeSession(session.id);
+          continue;
+        }
+        // If userId is provided, require an exact match (ignore sessions without userId)
+        if (userId && session.userId !== userId) {
+          continue;
+        }
+        return session;
+      } catch (e) {
+        console.error('[SessionManager] Error parsing session data:', e);
+        this.removeSession(sessionId);
       }
-
-      return session;
-    } catch (error) {
-      console.error('[SessionManager] Error parsing session data:', error);
-      this.removeSession(latestSessionId);
-      return null;
     }
+    return null;
   }
 
   /**

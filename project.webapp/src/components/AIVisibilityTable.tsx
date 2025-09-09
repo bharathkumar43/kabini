@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { computeMonthlyGrowth } from '../utils/formulas';
 import { apiService } from '../services/apiService';
 
 interface VisibilityBreakdown {
@@ -46,6 +47,37 @@ interface CompetitorAnalysis {
     claude: string;
     chatgpt: string;
   };
+  audienceProfile?: {
+    audience?: Array<{ label: string; confidence: number }>;
+    demographics?: {
+      region?: { label?: string; confidence?: number };
+      companySize?: { label?: string; confidence?: number };
+      industryFocus?: { label?: string; confidence?: number };
+    };
+  } | null;
+  aiTraffic?: {
+    byModel?: Record<string, number>;
+    global?: number;
+    weightedGlobal?: number;
+  };
+  citations?: {
+    perModel?: Record<string, {
+      citationCount: number;
+      totalQueries: number;
+      citationRate: number;
+      rawCitationScore: number;
+      citationScore: number;
+    }>;
+    global?: {
+      citationCount: number;
+      totalQueries: number;
+      citationRate: number;
+      rawCitationScore?: number;
+      citationScore?: number;
+      equalWeightedGlobal?: number;
+    };
+  };
+  snippets?: Record<string, string>;
 }
 
 interface AIVisibilityTableProps {
@@ -197,24 +229,70 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
     return LEGEND_COLORS[idx];
   };
 
+  // Optional model usage weights (1 = equal weighting)
+  const MODEL_USAGE_WEIGHTS = {
+    chatgpt: 1,
+    gemini: 1,
+    perplexity: 1,
+    claude: 1,
+  } as const;
+
   // Tooltip state for Growth Quadrant dots
   const [hoveredPoint, setHoveredPoint] = useState<null | { left: number; top: number; name: string; traffic: number; growth: number }>(null);
+  // Tooltip state for AI Channel Mix stacked bars
+  const [hoveredChannel, setHoveredChannel] = useState<null | { left: number; top: number; competitor: string; platform: string; percent: number; visits: number }>(null);
+  const channelContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Deterministic generators for other sections so values don't change on re-render
+  // Replace classic channel mix with AI platform mix (ChatGPT, Gemini, Perplexity, Claude)
   const getChannelMixFor = (comp: CompetitorAnalysis) => {
-    const s1 = seeded(comp.name, 'organic');
-    const s2 = seeded(comp.name, 'paid');
-    const s3 = seeded(comp.name, 'referral');
-    const organic = Math.min(85, Math.floor((comp.totalScore || 0) * 10 + 30 + s1 * 5));
-    const paid = Math.floor(5 + s2 * 20);
-    const referral = Math.floor(5 + s3 * 15);
-    const direct = Math.max(0, 100 - organic - paid - referral);
-    return { organic, paid, referral, direct };
+    // Derive percentages from actual AI scores with small epsilon so tiny but non-zero values are visible
+    const eps = 0.1;
+    const rawChat = Math.max(0, Number(comp.aiScores.chatgpt) || 0) * MODEL_USAGE_WEIGHTS.chatgpt;
+    const rawGem = Math.max(0, Number(comp.aiScores.gemini) || 0) * MODEL_USAGE_WEIGHTS.gemini;
+    const rawPerp = Math.max(0, Number(comp.aiScores.perplexity) || 0) * MODEL_USAGE_WEIGHTS.perplexity;
+    const rawCl = Math.max(0, Number(comp.aiScores.claude) || 0) * MODEL_USAGE_WEIGHTS.claude;
+
+    const chatgptVisits = rawChat > 0 ? rawChat + eps : 0;
+    const geminiVisits = rawGem > 0 ? rawGem + eps : 0;
+    const perplexityVisits = rawPerp > 0 ? rawPerp + eps : 0;
+    const claudeVisits = rawCl > 0 ? rawCl + eps : 0;
+    const totalAI = Math.max(1e-6, chatgptVisits + geminiVisits + perplexityVisits + claudeVisits);
+
+    const chatgpt = (chatgptVisits / totalAI) * 100;
+    const gemini = (geminiVisits / totalAI) * 100;
+    const perplexity = (perplexityVisits / totalAI) * 100;
+    const claude = (claudeVisits / totalAI) * 100;
+
+    return { chatgpt, gemini, perplexity, claude };
+  };
+
+  const getChannelVisitsFor = (comp: CompetitorAnalysis) => {
+    // Use raw scores to compute comparable visit weights
+    const scale = 1000; // display scaling only
+    const eps = 0.1;
+    const chatBase = Math.max(0, Number(comp.aiScores.chatgpt) || 0) * MODEL_USAGE_WEIGHTS.chatgpt;
+    const gemBase = Math.max(0, Number(comp.aiScores.gemini) || 0) * MODEL_USAGE_WEIGHTS.gemini;
+    const perpBase = Math.max(0, Number(comp.aiScores.perplexity) || 0) * MODEL_USAGE_WEIGHTS.perplexity;
+    const claBase = Math.max(0, Number(comp.aiScores.claude) || 0) * MODEL_USAGE_WEIGHTS.claude;
+    const chatgptVisits = Math.max(0, Math.round(((chatBase) + (chatBase > 0 ? eps : 0)) * scale));
+    const geminiVisits = Math.max(0, Math.round(((gemBase) + (gemBase > 0 ? eps : 0)) * scale));
+    const perplexityVisits = Math.max(0, Math.round(((perpBase) + (perpBase > 0 ? eps : 0)) * scale));
+    const claudeVisits = Math.max(0, Math.round(((claBase) + (claBase > 0 ? eps : 0)) * scale));
+    const totalAI = Math.max(1, chatgptVisits + geminiVisits + perplexityVisits + claudeVisits);
+    return { chatgptVisits, geminiVisits, perplexityVisits, claudeVisits, totalAI };
   };
 
   const getGrowthFor = (comp: CompetitorAnalysis) => {
-    const g = Math.floor(seeded(comp.name, 'growth') * 100);
-    return { growthScore: g };
+    // Use estimated visits as current month proxy
+    const tm = getTrafficMetricsFor(comp);
+    const current = tm.estimatedVisits;
+    // Derive a stable synthetic previous month using seed to avoid randomness per render
+    const prevFactor = 0.8 + seeded(comp.name, 'prev') * 0.3; // 0.8..1.1
+    const previous = Math.max(1, Math.round(current * prevFactor));
+    const growth = computeMonthlyGrowth(current, previous);
+    const growthScore = Math.round(growth);
+    return { growthScore };
   };
 
   const getCompetitionGapFor = (comp: CompetitorAnalysis) => {
@@ -642,6 +720,9 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                   Average Score
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  RAVI
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -698,6 +779,16 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                       {formatScore(competitor.totalScore)}
                     </span>
                   </td>
+                  {/* RAVI */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {typeof (competitor as any).ravi?.rounded === 'number' ? (
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                        {(competitor as any).ravi.rounded}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-500">—</span>
+                    )}
+                  </td>
                   
                   {/* Actions */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -734,10 +825,10 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                 <table className="min-w-full bg-white border border-gray-200 rounded-lg text-black">
                   <thead className="bg-white">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200" style={{ color: '#000' }}>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200" style={{ color: '#000' }}>
                         Competitor
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                         <div className="flex flex-col items-center">
                           <span>EST.</span>
                           <span>VISITS</span>
@@ -762,7 +853,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                           </div>
                         </div>
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                         <div className="flex flex-col items-center">
                           <span>PAGES/</span>
                           <span>VISIT</span>
@@ -787,7 +878,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                           </div>
                         </div>
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                         <div className="flex flex-col items-center">
                           <span>BOUNCE</span>
                           <span>RATE</span>
@@ -812,7 +903,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                           </div>
                         </div>
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                         <div className="flex flex-col items-center">
                           <span>UNIQUE</span>
                           <span>VISITORS</span>
@@ -837,7 +928,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                           </div>
                         </div>
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                         <div className="flex flex-col items-center">
                           <span>AVG</span>
                           <span>DURATION</span>
@@ -965,57 +1056,215 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
             </div>
           </div>
 
-          {/* Channel Mix & Engagement */}
+          {/* Channel Mix & Engagement (AI Platforms) */}
           <div className="mb-8">
-            <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">Channel Mix & Engagement</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-              {competitors.map((competitor, index) => {
-                const { organic, paid, referral, direct } = getChannelMixFor(competitor);
-                
-                return (
-                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                    <h5 className="font-medium text-black mb-3">{competitor.name}</h5>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Organic:</span>
-                        <span className="font-medium">{organic}%</span>
+            {/* AI Traffic Section */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-4">
+                <h4 className="text-lg font-semibold text-gray-800">AI Traffic Share</h4>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Beta</span>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
+                <table className="min-w-full bg-white text-black">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">Competitor</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">ChatGPT %</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Gemini %</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Perplexity %</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Claude %</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Global %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {competitors.map((c, i) => {
+                      const t = c.aiTraffic || { byModel: {}, global: 0 };
+                      const fmt = (v?: number) => (typeof v === 'number' ? `${v.toFixed(1)}%` : '—');
+                      return (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-black">{c.name}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmt(t.byModel?.chatgpt)}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmt(t.byModel?.gemini)}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmt(t.byModel?.perplexity)}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmt(t.byModel?.claude)}</td>
+                          <td className="px-4 py-2 text-center text-sm font-semibold">{fmt(t.global)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {/* Citation Metrics Section */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-4">
+                <h4 className="text-lg font-semibold text-gray-800">AI Citation Metrics</h4>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">GEO</span>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
+                <table className="min-w-full bg-white text-black">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">Competitor</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">ChatGPT Rate</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Gemini Rate</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Perplexity Rate</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Claude Rate</th>
+                      <th className="px-4 py-2 text-center text-xs font-bold text-black uppercase tracking-wider">Global Score</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {competitors.map((c, i) => {
+                      const cm = (c.citations?.perModel || {}) as Record<string, { citationRate?: number }>;
+                      const globalScore = c.citations?.global?.citationScore;
+                      const fmtPct = (v?: number) => (typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : '—');
+                      const fmtPct0to100 = (v?: number) => (typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : '—');
+                      return (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-black">{c.name}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmtPct(cm?.chatgpt?.citationRate)}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmtPct(cm?.gemini?.citationRate)}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmtPct(cm?.perplexity?.citationRate)}</td>
+                          <td className="px-4 py-2 text-center text-sm">{fmtPct(cm?.claude?.citationRate)}</td>
+                          <td className="px-4 py-2 text-center text-sm font-semibold">{fmtPct0to100(globalScore)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-4">
+              <h4 className="text-lg font-semibold text-gray-800">AI Channel Mix</h4>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
+              <div ref={channelContainerRef} className="relative h-48 min-w-full flex items-end gap-3 px-2" style={{ overflowX: 'auto', scrollbarWidth: 'thin' }}>
+                {competitors.map((competitor, index) => {
+                  const { chatgpt, gemini, perplexity, claude } = getChannelMixFor(competitor);
+                  const { chatgptVisits, geminiVisits, perplexityVisits, claudeVisits } = getChannelVisitsFor(competitor);
+                  const barWidth = 48; // fixed width for consistent horizontal scroll
+                  return (
+                    <div key={index} className="flex flex-col items-center" style={{ width: barWidth, flex: '0 0 auto' }}>
+                      <div className="relative w-full bg-gray-100 rounded-md border border-gray-200 flex items-end" style={{ height: '120px' }}>
+                        {/* Stacked segments rendered with bottom offsets to avoid overlap */}
+                        {[
+                          { key: 'ChatGPT', color: 'bg-green-500', percent: chatgpt, visits: chatgptVisits },
+                          { key: 'Gemini', color: 'bg-blue-500', percent: gemini, visits: geminiVisits },
+                          { key: 'Perplexity', color: 'bg-yellow-500', percent: perplexity, visits: perplexityVisits },
+                          { key: 'Claude', color: 'bg-purple-500', percent: claude, visits: claudeVisits }
+                        ].reduce((acc: any[], seg) => {
+                          const bottom = acc.length === 0 ? 0 : acc[acc.length - 1].bottom + acc[acc.length - 1].percent;
+                          acc.push({ ...seg, bottom });
+                          return acc;
+                        }, []).map((seg, idx) => (
+                          <div
+                            key={idx}
+                            className={`absolute left-0 w-full ${seg.color}`}
+                            style={{ height: `${Math.max(1, seg.percent)}%`, bottom: `${seg.bottom}%` }}
+                            onMouseEnter={(e) => {
+                              const containerRect = channelContainerRef.current ? channelContainerRef.current.getBoundingClientRect() : (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+                              setHoveredChannel({
+                                left: e.currentTarget.getBoundingClientRect().left - containerRect.left + barWidth / 2,
+                                top: e.currentTarget.getBoundingClientRect().top - containerRect.top - 8,
+                                competitor: competitor.name,
+                                platform: seg.key,
+                                percent: seg.percent,
+                                visits: seg.visits
+                              });
+                            }}
+                            onMouseLeave={() => setHoveredChannel(null)}
+                          />
+                        ))}
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-green-500 h-2 rounded-full" style={{ width: `${organic}%` }}></div>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Paid:</span>
-                        <span className="font-medium">{paid}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-gray-500 h-2 rounded-full" style={{ width: `${paid}%` }}></div>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Referral:</span>
-                        <span className="font-medium">{referral}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${referral}%` }}></div>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Direct:</span>
-                        <span className="font-medium">{direct}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${direct}%` }}></div>
-                      </div>
+                      <div className="mt-1 text-[10px] text-gray-700 text-center font-medium w-full whitespace-nowrap overflow-hidden text-ellipsis" title={competitor.name}>{competitor.name}</div>
                     </div>
+                  );
+                })}
+                {hoveredChannel && (
+                  <div
+                    className="absolute bg-white border border-gray-200 rounded-md shadow px-3 py-2 text-xs text-black"
+                    style={{ left: hoveredChannel.left, top: hoveredChannel.top }}
+                  >
+                    <div className="font-medium">{hoveredChannel.competitor}</div>
+                    <div>{hoveredChannel.platform}: {hoveredChannel.percent.toFixed(1)}%</div>
+                    <div>Visits: {hoveredChannel.visits.toLocaleString()}</div>
                   </div>
-                );
-              })}
+                )}
+              </div>
+              {/* Legend */}
+              <div className="mt-4 w-full flex items-center justify-center gap-6 text-xs text-gray-600">
+                <div className="flex items-center gap-1"><span className="w-3 h-3 inline-block bg-green-500 rounded"></span> ChatGPT</div>
+                <div className="flex items-center gap-1"><span className="w-3 h-3 inline-block bg-blue-500 rounded"></span> Gemini</div>
+                <div className="flex items-center gap-1"><span className="w-3 h-3 inline-block bg-yellow-500 rounded"></span> Perplexity</div>
+                <div className="flex items-center gap-1"><span className="w-3 h-3 inline-block bg-purple-500 rounded"></span> Claude</div>
+              </div>
             </div>
           </div>
 
           {/* Competition Level & Keyword Overlap */}
           <div className="mb-6 lg:mb-8">
+            {/* Target Audience & Demographics */}
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">Target Audience & Demographics</h4>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+                {/* Audience Chips */}
+                <div className="space-y-3">
+                  <h5 className="font-medium text-black">Audience</h5>
+                  {competitors.map((c, i) => {
+                    const aud = c.audienceProfile?.audience || [];
+                    return (
+                      <div key={i} className="bg-gray-50 p-3 rounded-lg">
+                        <div className="text-sm font-semibold text-black mb-2">{c.name}</div>
+                        {aud.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {aud.map((a, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-white border border-gray-200 text-gray-800">
+                                <span>{a.label}</span>
+                                {typeof a.confidence === 'number' && (
+                                  <span className="text-gray-500">({Math.round(a.confidence * 100)}%)</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500">No data</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Demographics */}
+                <div className="space-y-3">
+                  <h5 className="font-medium text-black">Demographics</h5>
+                  {competitors.map((c, i) => {
+                    const d = c.audienceProfile?.demographics || {};
+                    const region = d.region || {};
+                    const size = d.companySize || {};
+                    const focus = d.industryFocus || {};
+                    const row = (label?: string, conf?: number) => (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">{label || '—'}</span>
+                        {typeof conf === 'number' && <span className="text-gray-500">{Math.round(conf * 100)}%</span>}
+                      </div>
+                    );
+                    return (
+                      <div key={i} className="bg-gray-50 p-3 rounded-lg">
+                        <div className="text-sm font-semibold text-black mb-2">{c.name}</div>
+                        <div className="space-y-2">
+                          <div className="text-xs text-gray-500">Region</div>
+                          {row(region.label, region.confidence)}
+                          <div className="text-xs text-gray-500 mt-2">Company Size</div>
+                          {row(size.label, size.confidence)}
+                          <div className="text-xs text-gray-500 mt-2">Industry Focus</div>
+                          {row(focus.label, focus.confidence)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
             <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">Competition Level & Keyword Overlap</h4>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
               {/* Competition Level */}
@@ -1080,13 +1329,13 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
 
           {/* Backlink Profile Comparison */}
           <div>
-            <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">Backlink Profile Comparison</h4>
+            <h4 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">Backlink Profile Comparison</h4>
             <div className="overflow-x-auto">
               <table className="min-w-full bg-white border border-gray-200 rounded-lg text-black">
                 <thead className="bg-gray-50" style={{ color: '#000' }}>
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200" style={{ color: '#000' }}>Competitor</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200" style={{ color: '#000' }}>Competitor</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                       <div className="inline-flex items-center justify-center gap-2">
                         <div className="leading-tight text-center">
                           <div>Total</div>
@@ -1110,7 +1359,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                         </div>
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                    <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                       <div className="inline-flex items-center justify-center gap-2">
                         <div className="leading-tight text-center">
                           <div>Referring</div>
@@ -1134,7 +1383,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                         </div>
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                    <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                       <div className="inline-flex items-center justify-center gap-2">
                         <div className="leading-tight text-center"><div>Dofollow</div></div>
                         <div>
@@ -1152,7 +1401,7 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
                         </div>
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase tracking-wider border-b border-gray-200">
+                    <th className="px-4 py-3 text-center text-xs font-bold text-black uppercase tracking-wider border-b border-gray-200">
                       <div className="inline-flex items-center justify-center gap-2">
                         <div className="leading-tight text-center"><div>Nofollow</div></div>
                         <div>
@@ -1199,6 +1448,30 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
         </div>
       )}
 
+      {/* Analysis Snippets */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-black">Analysis Snippets</h3>
+          <p className="text-sm text-gray-600">Model-specific insights per competitor (trimmed)</p>
+        </div>
+        <div className="space-y-4">
+          {competitors.map((c, idx) => (
+            <div key={idx} className="border border-gray-200 rounded-lg p-4">
+              <div className="text-sm font-semibold text-black mb-2">{c.name}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {['chatgpt','gemini','perplexity','claude'].map((m) => (
+                  <div key={m} className="bg-gray-50 rounded-md p-3">
+                    <div className="text-xs uppercase text-gray-500 mb-1">{m}</div>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap break-words">
+                      {((c as any).snippets?.[m] as string) || '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
     </div>
   );

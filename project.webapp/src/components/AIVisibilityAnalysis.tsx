@@ -10,6 +10,7 @@ import { sessionManager } from '../services/sessionManager';
 import type { HistoryItem, QAHistoryItem } from '../types';
 import AIVisibilityTable from './AIVisibilityTable';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -269,6 +270,7 @@ function CompetitorBenchmarkCard({ competitors, industry }: { competitors: any[]
 
 export function CompetitorInsight() {
   const { user } = useAuth();
+  const stableUserId = user?.id || user?.email || user?.name || 'anonymous';
   const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
   // keep but unused in this page variant
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -276,26 +278,12 @@ export function CompetitorInsight() {
   const navigate = useNavigate();
   
   // Independent analysis state for Competitor Insight page
-  const [inputValue, setInputValue] = useState(() => {
-    try {
-      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
-      return session?.inputValue || '';
-    } catch { return ''; }
-  });
+  // Initialize with empty values; restore after user is known to avoid picking stale sessions
+  const [inputValue, setInputValue] = useState('');
   const [analysisType, setAnalysisType] = useState<'root-domain' | 'exact-url'>('root-domain');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [inputType, setInputType] = useState<'company' | 'url'>(() => {
-    try {
-      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
-      return (session?.inputType as 'company' | 'url') || 'company';
-    } catch { return 'company'; }
-  });
-  const [analysisResult, setAnalysisResult] = useState<any | null>(() => {
-    try {
-      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
-      return session?.data || null;
-    } catch { return null; }
-  });
+  const [inputType, setInputType] = useState<'company' | 'url'>('company');
+  const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
@@ -314,10 +302,10 @@ export function CompetitorInsight() {
     console.log('[Overview] Loaded history items:', items.length);
   }, [refreshKey]);
 
-  // Restore cached analysis data on component mount
+  // Restore cached analysis data after user is known
   useEffect(() => {
     try {
-      const session = sessionManager.getLatestAnalysisSession('ai-visibility', user?.id);
+      const session = sessionManager.getLatestAnalysisSession('ai-visibility', stableUserId);
       if (session) {
         console.log('[AIVisibilityAnalysis] Restoring cached analysis data:', session);
         
@@ -334,11 +322,17 @@ export function CompetitorInsight() {
         }
         
         console.log('[AIVisibilityAnalysis] Cached data restored successfully');
+      } else {
+        // No session for this user → clear any stale state
+        setAnalysisResult(null);
+        setInputValue('');
+        setInputType('company');
+        setAnalysisType('root-domain');
       }
     } catch (error) {
       console.error('[AIVisibilityAnalysis] Error restoring cached data:', error);
     }
-  }, [user?.id]);
+  }, [stableUserId]);
 
   // Listen for storage changes to auto-refresh
   useEffect(() => {
@@ -745,7 +739,7 @@ export function CompetitorInsight() {
             analysisType,
             detectedInputType,
             detectedIndustry,
-            user?.id
+            stableUserId
           );
         } catch (e) {
           console.warn('Failed to cache analysis results:', e);
@@ -816,10 +810,40 @@ export function CompetitorInsight() {
     );
     
     if (mainCompany) {
+      // Derive mentions for main company (use keyMetrics if available)
+      const mainMentions = Math.max(
+        0,
+        Number(
+          (
+            mainCompany?.keyMetrics?.gemini?.brandMentions ??
+            mainCompany?.keyMetrics?.gemini?.mentionsCount ??
+            mainCompany?.breakdowns?.gemini?.mentionsScore ??
+            mainCompany.brandMentions ?? 0
+          ) as number
+        )
+      );
+
+      // Build competitor mentions array excluding main company
+      const competitorMentions: number[] = (result.competitors || [])
+        .filter((c: any) => c.name?.toLowerCase() !== result.company?.toLowerCase())
+        .map((c: any) => {
+          const m =
+            c?.keyMetrics?.gemini?.brandMentions ??
+            c?.keyMetrics?.gemini?.mentionsCount ??
+            c?.breakdowns?.gemini?.mentionsScore ??
+            c.brandMentions ?? 0;
+          return Number(m) || 0;
+        });
+      const medianCompetitor = median(competitorMentions);
+
+      const aiCitationScore = computeAiCitationScore(mainMentions, medianCompetitor);
+      const relativeAiVisibility = computeRelativeAiVisibility(mainMentions, medianCompetitor);
+
       return {
-        brandMentions: Number((mainCompany.brandMentions || 0).toFixed(5)),
-        medianCompetitorMentions: Number((mainCompany.medianCompetitorMentions || 0).toFixed(5)),
-        shareOfVoice: Number((mainCompany.shareOfVoice || 0).toFixed(5)),
+        brandMentions: Number(mainMentions.toFixed(5)),
+        medianCompetitorMentions: Number(medianCompetitor.toFixed(5)),
+        aiCitationScore: Number(aiCitationScore.toFixed(5)),
+        relativeAiVisibility: Number(relativeAiVisibility.toFixed(5)),
         averagePosition: Number((mainCompany.averagePosition || 0).toFixed(5)),
         volume: mainCompany.volume || 0,
         brandSentiment: mainCompany.brandSentiment || 'Neutral',
@@ -832,7 +856,18 @@ export function CompetitorInsight() {
     return {
       brandMentions: Number((result.brandMentions || 0).toFixed(5)),
       medianCompetitorMentions: Number((result.medianCompetitorMentions || 0).toFixed(5)),
-      shareOfVoice: Number((result.shareOfVoice || 0).toFixed(5)),
+      aiCitationScore: Number(
+        computeAiCitationScore(
+          Number(result.brandMentions || 0),
+          Number(result.medianCompetitorMentions || 0)
+        ).toFixed(5)
+      ),
+      relativeAiVisibility: Number(
+        computeRelativeAiVisibility(
+          Number(result.brandMentions || 0),
+          Number(result.medianCompetitorMentions || 0)
+        ).toFixed(5)
+      ),
       averagePosition: Number((result.averagePosition || 0).toFixed(5)),
       volume: result.volume || 0,
       brandSentiment: result.brandSentiment || 'Neutral',
@@ -1079,7 +1114,10 @@ export function CompetitorInsight() {
             
             {/* Add error boundary for AIVisibilityTable */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Competitor Analysis</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Competitor Analysis</h3>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
+              </div>
               {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 ? (
                 <AIVisibilityTable key={`analysis-${refreshKey}`} data={analysisResult} />
               ) : (

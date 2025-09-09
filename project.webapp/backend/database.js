@@ -217,6 +217,29 @@ class Database {
         )
       `);
 
+      // AI visibility runs (per competitor, per run) - use _v2 to avoid type conflicts
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ai_visibility_runs_v2 (
+          id TEXT PRIMARY KEY,
+          company TEXT NOT NULL,
+          competitor TEXT NOT NULL,
+          total_score REAL NOT NULL,
+          ai_scores JSONB NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Visibility logs for period badges (metric/value time-series)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS visibility_logs (
+          id TEXT PRIMARY KEY,
+          competitor TEXT NOT NULL,
+          metric TEXT NOT NULL,
+          value REAL NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // Create indexes for better performance
       await client.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users(tenant_id)`);
@@ -235,6 +258,11 @@ class Database {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_structure_analyses_user_id ON structure_analyses(user_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_structure_analyses_content_hash ON structure_analyses(content_hash)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_structure_analyses_url ON structure_analyses(url)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_vis_runs_competitor_v2 ON ai_visibility_runs_v2(competitor)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_vis_runs_created_at_v2 ON ai_visibility_runs_v2(created_at)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_vis_logs_competitor ON visibility_logs(competitor)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_vis_logs_metric ON visibility_logs(metric)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_vis_logs_created_at ON visibility_logs(created_at)`);
 
       console.log('Database tables initialized successfully!');
     } catch (err) {
@@ -1306,6 +1334,69 @@ class Database {
     } finally {
       client.release();
     }
+  }
+
+  // AI Visibility Runs Methods
+  async saveAiVisibilityRun({ id, company, competitor, totalScore, aiScores }) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        INSERT INTO ai_visibility_runs_v2 (id, company, competitor, total_score, ai_scores)
+        VALUES ($1, $2, $3, $4, $5)
+      `;
+      await client.query(query, [id, company, competitor, totalScore, JSON.stringify(aiScores || {})]);
+      return id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAiVisibilityRunsByCompetitorBetween(competitor, fromIso, toIso) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        SELECT company, competitor, total_score, ai_scores, created_at
+        FROM ai_visibility_runs_v2
+        WHERE competitor = $1 AND created_at BETWEEN $2 AND $3
+        ORDER BY created_at DESC
+      `;
+      const res = await client.query(query, [competitor, fromIso, toIso]);
+      return res.rows.map(r => ({
+        company: r.company,
+        competitor: r.competitor,
+        totalScore: Number(r.total_score) || 0,
+        aiScores: (() => { try { return typeof r.ai_scores === 'object' ? r.ai_scores : JSON.parse(r.ai_scores || '{}'); } catch { return {}; } })(),
+        createdAt: r.created_at
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  // Visibility Logs Methods
+  async saveVisibilityLog({ id, competitor, metric, value }) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        INSERT INTO visibility_logs (id, competitor, metric, value)
+        VALUES ($1, $2, $3, $4)
+      `;
+      await client.query(query, [id, competitor, metric, value]);
+      return id;
+    } finally { client.release(); }
+  }
+
+  async getVisibilityLogsBetween(competitor, metric, fromIso, toIso) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        SELECT value, created_at FROM visibility_logs
+        WHERE competitor = $1 AND metric = $2 AND created_at BETWEEN $3 AND $4
+        ORDER BY created_at DESC
+      `;
+      const res = await client.query(query, [competitor, metric, fromIso, toIso]);
+      return res.rows.map(r => ({ value: Number(r.value) || 0, createdAt: r.created_at }));
+    } finally { client.release(); }
   }
 
   close() {

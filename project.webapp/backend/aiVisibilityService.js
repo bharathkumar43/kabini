@@ -55,6 +55,591 @@ function getClaudePrompts(company, industry) {
   ];
 }
 
+// --- Per-model visibility scoring (CSE-driven) ---
+const MODEL_KEYWORDS = {
+  chatgpt: ['chatgpt'],
+  gemini: ['gemini ai'],
+  claude: ['claude ai'],
+  perplexity: ['perplexity ai']
+};
+
+// Only use providers that are configured to avoid zeros from missing API keys
+function getConfiguredModelKeys() {
+  const keys = [];
+  if (OPENAI_API_KEY) keys.push('chatgpt');
+  if (GEMINI_API_KEY) keys.push('gemini');
+  if (ANTHROPIC_API_KEY) keys.push('claude');
+  if (PERPLEXITY_API_KEY) keys.push('perplexity');
+  return keys;
+}
+
+function getHost(url) {
+  try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
+}
+
+function computeSourceWeight(url) {
+  const host = getHost(url);
+  if (!host) return 1.0;
+  if (/forbes|bloomberg|wsj|nytimes|wired|techcrunch|theverge|reuters|guardian|bbc|cnbc|financialtimes|ft\.com|news/i.test(host)) return 1.5;
+  if (/medium|substack|blog|dev\.to|hashnode/i.test(host)) return 1.0;
+  if (/reddit|twitter|x\.com|quora|stackoverflow|hackernews|ycombinator/i.test(host)) return 0.5;
+  return 1.0;
+}
+
+function quickSentimentScore(text) {
+  // Heuristic fallback: positive words increase, negative decrease
+  const t = String(text || '').toLowerCase();
+  const pos = (t.match(/best|leading|top|innovative|recommended|trusted|popular|positive|strong|leader|growing/g) || []).length;
+  const neg = (t.match(/problem|issue|concern|negative|bad|poor|not\s+recommended|decline|weak/g) || []).length;
+  const total = Math.max(1, pos + neg);
+  const raw = (pos - neg) / total; // -1..1
+  return Math.max(-1, Math.min(1, raw));
+}
+
+async function fetchModelSnippetsFast(competitorName, modelKey) {
+  try {
+    const kw = MODEL_KEYWORDS[modelKey]?.[0] || modelKey;
+    const q = `${competitorName} ${kw}`;
+    const results = await withTimeout(queryCustomSearchAPI(q), 7000, []);
+    return results.slice(0, 10); // cap
+  } catch { return []; }
+}
+
+async function fetchModelSnippetsFull(competitorName, modelKey) {
+  try {
+    const kws = MODEL_KEYWORDS[modelKey] || [modelKey];
+    const queries = kws.map(k => `${competitorName} ${k}`);
+    const results = await Promise.all(queries.map(q => withTimeout(queryCustomSearchAPI(q), 9000, []).catch(() => [])));
+    const flat = results.flat();
+    // de-duplicate by link
+    const seen = new Set();
+    const unique = [];
+    for (const r of flat) {
+      if (!r?.link) continue;
+      if (seen.has(r.link)) continue;
+      seen.add(r.link);
+      unique.push(r);
+      if (unique.length >= 15) break;
+    }
+    return unique;
+  } catch { return []; }
+}
+
+async function computePerModelRawMetrics(competitorName, isFast) {
+  const modelKeys = Object.keys(MODEL_KEYWORDS);
+  const byModel = {};
+  await Promise.all(modelKeys.map(async (m) => {
+    const results = await (isFast ? fetchModelSnippetsFast(competitorName, m) : fetchModelSnippetsFull(competitorName, m));
+    let mentions = 0;
+    let prominenceSum = 0;
+    let posCount = 0;
+    let negCount = 0;
+    let totalCount = 0;
+    results.forEach((item, idx) => {
+      const snippet = `${item?.name || ''}. ${item?.snippet || ''}`;
+      const weight = computeSourceWeight(item?.link || '');
+      const rankPos = idx + 1;
+      // Mentions: count snippet presence (treat each result as one mention)
+      mentions += 1;
+      // Prominence contribution
+      prominenceSum += (1 / rankPos) * weight;
+      // Sentiment
+      const s = quickSentimentScore(snippet);
+      if (s > 0.1) posCount++; else if (s < -0.1) negCount++;
+      totalCount++;
+    });
+    const sentiment = totalCount > 0 ? (posCount - negCount) / totalCount : 0; // -1..1
+    const brandMentions = mentions; // co-mentions proxy
+    byModel[m] = { mentions, prominence: prominenceSum, sentiment, brandMentions };
+  }));
+  return byModel;
+}
+
+function normalizeAndScoreModels(rawMetricsByCompetitor) {
+  // Collect maxima for normalization per model
+  const modelKeys = Object.keys(MODEL_KEYWORDS);
+  const maxes = {};
+  modelKeys.forEach(m => { maxes[m] = { mentions: 1, prominence: 1, brand: 1 }; });
+  for (const comp of rawMetricsByCompetitor) {
+    for (const m of modelKeys) {
+      const mm = comp.rawModels[m] || { mentions: 0, prominence: 0, brandMentions: 0 };
+      maxes[m].mentions = Math.max(maxes[m].mentions, mm.mentions || 0);
+      maxes[m].prominence = Math.max(maxes[m].prominence, mm.prominence || 0);
+      maxes[m].brand = Math.max(maxes[m].brand, mm.brandMentions || 0);
+    }
+  }
+  // Compute normalized 0..100 and score
+  for (const comp of rawMetricsByCompetitor) {
+    const aiScores = {};
+    for (const m of modelKeys) {
+      const mm = comp.rawModels[m] || { mentions: 0, prominence: 0, sentiment: 0, brandMentions: 0 };
+      const normMentions = (mm.mentions / Math.max(1, maxes[m].mentions)) * 100;
+      const normProminence = (mm.prominence / Math.max(1, maxes[m].prominence)) * 100;
+      const normSentiment = ((Math.max(-1, Math.min(1, mm.sentiment)) + 1) / 2) * 100; // -1..1 to 0..100
+      const normBrand = (mm.brandMentions / Math.max(1, maxes[m].brand)) * 100;
+      const score = (normMentions * 0.35) + (normProminence * 0.30) + (normSentiment * 0.20) + (normBrand * 0.15);
+      // Scale back to 0..10 for table parity
+      aiScores[m] = Number((score / 10).toFixed(4));
+    }
+    comp.aiScores = aiScores;
+  }
+  return rawMetricsByCompetitor;
+}
+
+// --- AI Traffic Share (query-pool → model responses) ---
+function getDefaultQueryPool(industry = '') {
+  const base = [
+    'top companies in [INDUSTRY]','best tools in [INDUSTRY]','leading vendors in [INDUSTRY]','alternatives and competitors in [INDUSTRY]','who are the leaders in [INDUSTRY]','recommended solutions in [INDUSTRY]'
+  ];
+  const ind = industry && industry.trim().length > 0 ? industry : 'this category';
+  return base.map(q => q.replace('[INDUSTRY]', ind)).slice(0, 6);
+}
+
+async function callModelSimple(modelKey, prompt) {
+  try {
+    if (modelKey === 'gemini') {
+      if (!GEMINI_API_KEY) return '';
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const res = await model.generateContent(prompt);
+      return res?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    }
+    if (modelKey === 'chatgpt') {
+      if (!OPENAI_API_KEY) return '';
+      const res = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a helpful market analyst.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 400
+      }, { headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` } });
+      return res?.data?.choices?.[0]?.message?.content || '';
+    }
+    if (modelKey === 'claude') {
+      if (!ANTHROPIC_API_KEY) return '';
+      const res = await axios.post('https://api.anthropic.com/v1/messages', {
+        model: 'claude-3-5-sonnet-20240620',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      }, { headers: { 'Authorization': `Bearer ${ANTHROPIC_API_KEY}`, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' } });
+      return res?.data?.content?.[0]?.text || '';
+    }
+    if (modelKey === 'perplexity') {
+      try {
+        const resp = await sharedLLM.callPerplexityAPI(prompt, 'sonar', false);
+        return resp?.text || '';
+      } catch { return ''; }
+    }
+    return '';
+  } catch { return ''; }
+}
+
+async function computeAiTrafficShares(competitorNames, industry, isFast) {
+  const queries = getDefaultQueryPool(industry).slice(0, isFast ? 3 : 6);
+  const modelKeys = getConfiguredModelKeys();
+  const counts = {};
+  const totals = {};
+  modelKeys.forEach(m => { counts[m] = Object.fromEntries(competitorNames.map(n => [n, 0])); totals[m] = 0; });
+
+  // Precompute alias lists per competitor for robust detection
+  const aliasMap = Object.fromEntries(competitorNames.map(n => [n, buildAliases(n)]));
+  const listVendors = competitorNames.join(', ');
+
+  const promptFor = (q) => `For the topic: "${q}", consider these vendors: ${listVendors}. Briefly discuss which of these are most relevant/recommended today. Mention vendor names directly.`;
+
+  await Promise.all(modelKeys.map(async (m) => {
+    for (let i = 0; i < queries.length; i += 1) {
+      const q = queries[i];
+      const text = await withTimeout(callModelSimple(m, promptFor(q)), isFast ? 8000 : 12000, '').catch(() => '');
+      if (!text || !String(text).trim()) continue; // ignore failed/empty responses
+      totals[m] += 1;
+      const lower = String(text).toLowerCase();
+      competitorNames.forEach(name => {
+        if (!name) return;
+        const aliases = aliasMap[name] || [name];
+        const matched = aliases.some(a => wordBoundaryRegex(a).test(lower));
+        if (matched) counts[m][name] += 1;
+      });
+    }
+  }));
+
+  // Convert to shares per formula
+  const sharesByCompetitor = {};
+  competitorNames.forEach(name => {
+    const byModel = {};
+    const usableModels = modelKeys.filter(m => (totals[m] || 0) > 0);
+    usableModels.forEach(m => {
+      const totalQ = totals[m];
+      const mentions = counts[m][name] || 0;
+      byModel[m] = totalQ > 0 ? (mentions / totalQ) * 100 : undefined;
+    });
+    const globalNum = usableModels.reduce((s, m) => s + (counts[m][name] || 0), 0);
+    const globalDen = usableModels.reduce((s, m) => s + (totals[m] || 0), 0);
+    const global = globalDen > 0 ? (globalNum / globalDen) * 100 : 0;
+    const weightedEqual = usableModels.length > 0
+      ? usableModels.reduce((s, m) => s + (((counts[m][name] || 0) / (totals[m] || 1)) * 100), 0) / usableModels.length
+      : 0;
+    sharesByCompetitor[name] = { byModel, global, weightedGlobal: weightedEqual };
+  });
+  return { sharesByCompetitor, totals, counts, queries };
+}
+
+// --- AI Citation Metrics (mention + sentiment + prominence) ---
+function buildAliases(name) {
+  const canon = String(name || '').trim();
+  const aliases = new Set([canon, canon.toLowerCase(), canon.replace(/\s+/g, ''), canon.replace(/\s+/g, '-').toLowerCase()]);
+  return Array.from(aliases).filter(Boolean);
+}
+
+// --- Relative AI Visibility Index (RAVI) ---
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+function clamp100(x) { return Math.max(0, Math.min(100, x)); }
+function normalizeTo100(x, max = 100, min = 0) {
+  const denom = Math.max(1e-9, max - min);
+  const v = ((x - min) / denom) * 100;
+  return clamp100(v);
+}
+
+function computeModelCoveragePercent(aiScores, threshold = 0) {
+  const keys = ['chatgpt','gemini','perplexity','claude'];
+  const available = keys.filter(k => aiScores && typeof aiScores[k] === 'number');
+  const denom = Math.max(1, available.length);
+  const covered = available.filter(k => (Number(aiScores[k]) || 0) > threshold).length;
+  return (covered / denom) * 100;
+}
+
+function computeAvgModelScore100(aiScores) {
+  const keys = ['chatgpt','gemini','perplexity','claude'];
+  const vals = keys.map(k => Number(aiScores?.[k] || 0)).filter(v => v >= 0);
+  if (vals.length === 0) return 0;
+  // aiScores are on 0..10 in this pipeline; convert to 0..100
+  const avg0to10 = vals.reduce((a,b)=>a+b,0) / vals.length;
+  return avg0to10 * 10;
+}
+
+function computeRaviForCompetitor(entry) {
+  const avgModelScore = computeAvgModelScore100(entry.aiScores);
+  const trafficShare = Number(entry.aiTraffic?.global || 0); // already 0..100
+  const citationScorePct = Number(entry.citations?.global?.citationScore || 0) * 100; // 0..1 -> 0..100
+  const modelCoverage = computeModelCoveragePercent(entry.aiScores, 0);
+
+  const avgModelN = normalizeTo100(avgModelScore, 100, 0);
+  const trafficN = normalizeTo100(trafficShare, 100, 0);
+  const citationN = normalizeTo100(citationScorePct, 100, 0);
+  const coverageN = normalizeTo100(modelCoverage, 100, 0);
+
+  const raviRaw = (avgModelN * 0.40) + (trafficN * 0.25) + (citationN * 0.20) + (coverageN * 0.15);
+  const ravi = clamp100(raviRaw);
+  return {
+    raw: Number(raviRaw.toFixed(3)),
+    rounded: Number((Math.round(ravi * 10) / 10).toFixed(1)),
+    components: {
+      avgModel: Number(avgModelN.toFixed(2)),
+      traffic: Number(trafficN.toFixed(2)),
+      citation: Number(citationN.toFixed(2)),
+      coverage: Number(coverageN.toFixed(2))
+    }
+  };
+}
+
+function wordBoundaryRegex(term) {
+  const escaped = term.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`, 'i');
+}
+
+function sentimentWeightFromScore(s) {
+  // Map [-1,1] to bins as specified
+  if (s >= 0.6) return 1.0;
+  if (s >= 0.2) return 0.8;
+  if (s >= -0.2) return 0.6;
+  if (s >= -0.6) return 0.4;
+  return 0.2;
+}
+
+function computeProminenceFactorFromText(text, name) {
+  try {
+    const t = String(text || '');
+    const lower = t.toLowerCase();
+    const idx = lower.indexOf(String(name || '').toLowerCase());
+    let factor = 1.0;
+    if (idx >= 0 && idx < 200) factor += 0.15; // early appearance
+    if (/recommend|we\s+recommend|top\s+pick|best\s+choice/i.test(t)) factor += 0.1;
+    // list rank heuristic
+    const lines = t.split(/\n+/);
+    let rankBoost = 0;
+    for (let i = 0; i < Math.min(lines.length, 20); i++) {
+      const line = lines[i];
+      const m = line.match(/^\s*(\d+)[\)\.]?\s+(.+)$/);
+      if (m && wordBoundaryRegex(name).test(line)) {
+        const rank = parseInt(m[1], 10) || 99;
+        const rankDiscount = 1 / Math.log2(1 + Math.max(1, rank));
+        rankBoost = Math.max(rankBoost, rankDiscount - 1); // normalize ~ [0,1]
+      }
+    }
+    factor += Math.min(0.3, Math.max(0, rankBoost));
+    // Clamp to [0.5, 1.5]
+    return Math.max(0.5, Math.min(1.5, factor));
+  } catch { return 1.0; }
+}
+
+function detectMentionRobust(text, name, domainKeywords = []) {
+  const t = String(text || '');
+  const aliases = buildAliases(name);
+  const hasAlias = aliases.some(a => wordBoundaryRegex(a).test(t));
+  if (!hasAlias) return { detected: false, count: 0 };
+  // Ambiguity guard for short/common names
+  const common = /^(box|meta|apple|oracle|data|cloud|drive)$/i;
+  if (common.test(name)) {
+    const windowOk = domainKeywords.some(k => new RegExp(`\\b${k}\\b`, 'i').test(t));
+    if (!windowOk) return { detected: false, count: 0 };
+  }
+  // Count occurrences (capped later)
+  let count = 0;
+  aliases.forEach(a => { const m = t.match(new RegExp(a.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'ig')); count += (m ? m.length : 0); });
+  return { detected: true, count: Math.max(1, Math.min(3, count)) };
+}
+
+async function computeCitationMetrics(competitorNames, industry, isFast) {
+  const queries = getDefaultQueryPool(industry).slice(0, isFast ? 3 : 6);
+  const modelKeys = getConfiguredModelKeys();
+  // Initialize aggregates
+  const agg = {};
+  competitorNames.forEach(c => {
+    agg[c] = { perModel: {}, globalRaw: 0, globalMentions: 0 };
+    modelKeys.forEach(m => { agg[c].perModel[m] = { raw: 0, mentions: 0, total: 0 }; });
+  });
+
+  const domainKeywords = ['cloud', 'migration', 'file', 'sharing', 'security', 'saas', 'platform', 'software', 'ai'];
+
+  for (const m of modelKeys) {
+    for (let i = 0; i < queries.length; i += 1) {
+      const q = queries[i];
+      const text = await withTimeout(callModelSimple(m, `Answer briefly: ${q}`), isFast ? 8000 : 12000, '').catch(() => '');
+      if (!text || !String(text).trim()) continue; // skip empty/failed responses
+      const lower = String(text).toLowerCase();
+      for (const c of competitorNames) {
+        const det = detectMentionRobust(lower, c, domainKeywords);
+        if (!det.detected) { agg[c].perModel[m].total += 1; continue; }
+        const s = quickSentimentScore(text);
+        const sw = sentimentWeightFromScore(s);
+        const pf = computeProminenceFactorFromText(text, c);
+        const contrib = Math.min(1, det.count) * sw * pf;
+        agg[c].perModel[m].raw += Math.min(1.0, contrib); // cap contribution per response
+        agg[c].perModel[m].mentions += 1; // binary per response
+        agg[c].perModel[m].total += 1;
+        agg[c].globalRaw += Math.min(1.0, contrib);
+        agg[c].globalMentions += 1;
+      }
+      // increment totals for competitors without mention as well
+      competitorNames.forEach(c => { if (agg[c].perModel[m].total < i + 1) agg[c].perModel[m].total += 1; });
+    }
+  }
+
+  // Finalize metrics
+  const result = {};
+  competitorNames.forEach(c => {
+    const perModel = {};
+    let sumTotals = 0;
+    let sumRaw = 0;
+    let sumMentions = 0;
+    const usedModels = modelKeys.filter(m => (agg[c].perModel[m].total || 0) > 0);
+    usedModels.forEach(m => {
+      const pm = agg[c].perModel[m];
+      const total = pm.total;
+      const citationScore = total > 0 ? (pm.raw / total) : 0;
+      const citationRate = total > 0 ? (pm.mentions / total) : 0;
+      perModel[m] = {
+        citationCount: pm.mentions,
+        totalQueries: pm.total,
+        citationRate,
+        rawCitationScore: pm.raw,
+        citationScore
+      };
+      sumTotals += pm.total;
+      sumRaw += pm.raw;
+      sumMentions += pm.mentions;
+    });
+    const equalWeighted = usedModels.length > 0
+      ? usedModels.reduce((s, m) => s + (perModel[m].citationScore || 0), 0) / usedModels.length
+      : 0;
+    result[c] = {
+      perModel,
+      global: {
+        citationCount: sumMentions,
+        totalQueries: sumTotals,
+        citationRate: sumTotals > 0 ? (sumMentions / sumTotals) : 0,
+        rawCitationScore: sumRaw,
+        citationScore: sumTotals > 0 ? (sumRaw / sumTotals) : 0,
+        equalWeightedGlobal: equalWeighted
+      }
+    };
+  });
+  return result;
+}
+
+// --- Audience & Demographics Helpers (GEO) ---
+// Collect relevant text snippets for a competitor using Google CSE
+async function collectAudienceSnippets(competitorName) {
+  try {
+    const queries = [
+      `${competitorName} about us`,
+      `${competitorName} solutions`,
+      `${competitorName} platform`,
+      `${competitorName} customers`,
+      `${competitorName} press`,
+      `${competitorName} who we serve`,
+      `${competitorName} target audience`
+    ];
+    const results = await Promise.all(
+      queries.map(q => queryCustomSearchAPI(q).catch(() => []))
+    );
+    const flattened = results.flat();
+    const snippets = flattened
+      .map(item => String(item?.snippet || ''))
+      .filter(s => s && s.trim().length > 0)
+      .slice(0, 25); // cap
+    return snippets;
+  } catch {
+    return [];
+  }
+}
+
+function normalizeRegion(labelRaw = '') {
+  const l = String(labelRaw).toLowerCase();
+  if (/(north\s*america|usa|u\.s\.|united\s*states|canada|us\b)/i.test(l)) return 'North America';
+  if (/(europe|eu\b|uk\b|united\s*kingdom|germany|france|italy|spain|netherlands|nordics)/i.test(l)) return 'Europe';
+  if (/(apac|asia\s*pacific|asia|australia|new\s*zealand|india|japan|singapore|korea)/i.test(l)) return 'APAC';
+  if (/(latin\s*america|latam|brazil|mexico|argentina|chile|colombia)/i.test(l)) return 'LATAM';
+  if (/(middle\s*east|mena|saudi|uae|qatar|egypt)/i.test(l)) return 'Middle East';
+  if (/(africa|south\s*africa|nigeria|kenya)/i.test(l)) return 'Africa';
+  if (/(global|worldwide|international)/i.test(l)) return 'Global';
+  return labelRaw || '';
+}
+
+function normalizeCompanySize(labelRaw = '') {
+  const l = String(labelRaw).toLowerCase();
+  if (/(smb|small\s*business|startups?|small\s*&?\s*medium|mid\s*-?market)/i.test(l)) return 'SMB';
+  if (/(enterprise|large\s*enterprise|fortune\s*500|global\s*enterprise|large\s*organizations?)/i.test(l)) return 'Enterprise';
+  if (/(mid\s*-?market|midsize|medium\s*business)/i.test(l)) return 'Mid-Market';
+  return labelRaw || '';
+}
+
+function normalizeIndustryFocus(labelRaw = '') {
+  const l = String(labelRaw).toLowerCase();
+  if (/health|medic|pharma|biotech|care/.test(l)) return 'Healthcare';
+  if (/fintech|bank|finance|payment|insur/.test(l)) return 'Financial Services';
+  if (/retail|e-?commerce|commerce|marketplace/.test(l)) return 'Retail & E-commerce';
+  if (/cloud|devops|kubernetes|saas|platform|api/.test(l)) return 'Cloud & SaaS';
+  if (/security|cyber|threat|protections?/.test(l)) return 'Cybersecurity';
+  if (/education|edtech|university|school|learning/.test(l)) return 'Education';
+  if (/manufactur|industrial|logistics|supply/.test(l)) return 'Manufacturing & Logistics';
+  return labelRaw || '';
+}
+
+function normalizeAudienceLabels(labels = []) {
+  const norm = [];
+  const pushUnique = (label) => {
+    if (!label) return;
+    if (!norm.includes(label)) norm.push(label);
+  };
+  (labels || []).forEach(raw => {
+    const l = String(raw || '').toLowerCase();
+    if (/developer|devops|engineer/.test(l)) return pushUnique('Developers');
+    if (/it\s*(teams?|managers?|leaders?)/.test(l)) return pushUnique('Enterprise IT');
+    if (/security|secops|ciso/.test(l)) return pushUnique('Security Teams');
+    if (/data|analytics|ml|ai\s*teams?/.test(l)) return pushUnique('Data & AI Teams');
+    if (/marketing|growth|demand/.test(l)) return pushUnique('Marketing Teams');
+    if (/sales|revops|revenue/.test(l)) return pushUnique('Sales Teams');
+    if (/end-?users?|consumers?/.test(l)) return pushUnique('End Users');
+    if (/smb|small\s*business|startups?/.test(l)) return pushUnique('SMB Buyers');
+    if (/enterprise/.test(l)) return pushUnique('Enterprise Buyers');
+    // fallback: Title Case
+    pushUnique(String(raw || '').replace(/\s+/g, ' ').trim());
+  });
+  return norm;
+}
+
+function computeConfidenceForLabel(label, snippets, synonyms = []) {
+  const total = Math.max(1, snippets.length);
+  const needles = [String(label || '').toLowerCase(), ...synonyms.map(s => String(s).toLowerCase())].filter(Boolean);
+  let supporting = 0;
+  const lowers = snippets.map(s => String(s || '').toLowerCase());
+  lowers.forEach(s => {
+    if (needles.some(n => n && s.includes(n))) supporting++;
+  });
+  return Number((supporting / total).toFixed(2));
+}
+
+async function extractAudienceProfileWithGemini(competitorName, snippets) {
+  if (!GEMINI_API_KEY) return null;
+  try {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const prompt = `From the following text snippets about ${competitorName}, extract the target audience (roles, industries, B2B/B2C) and demographics (region, company size, industry focus).\nReturn ONLY JSON with keys: audience[], demographics { region, companySize, industryFocus }.\nSnippets:\n${snippets.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\nExample JSON:\n{\n  "audience": ["Enterprise IT", "Developers"],\n  "demographics": {"region": "North America", "companySize": "SMB", "industryFocus": "Healthcare"}\n}`;
+    const result = await model.generateContent(prompt);
+    let text = result.response.candidates[0]?.content?.parts?.[0]?.text || '';
+    text = text.trim().replace(/```json\s*|```/g, '');
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const raw = jsonMatch ? jsonMatch[0] : text;
+    const parsed = JSON.parse(raw);
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function getAudienceProfile(competitorName) {
+  try {
+    const snippets = await collectAudienceSnippets(competitorName);
+    const extracted = await extractAudienceProfileWithGemini(competitorName, snippets);
+    if (!extracted) return null;
+
+    // Normalize fields
+    const normAudience = normalizeAudienceLabels(extracted.audience || []);
+    const regionLabel = normalizeRegion(extracted?.demographics?.region || '');
+    const companySizeLabel = normalizeCompanySize(extracted?.demographics?.companySize || '');
+    const industryFocusLabel = normalizeIndustryFocus(extracted?.demographics?.industryFocus || '');
+
+    // Confidence scoring
+    const audienceWithConfidence = normAudience.map(label => ({
+      label,
+      confidence: computeConfidenceForLabel(label, snippets)
+    }));
+
+    const regionConfidence = computeConfidenceForLabel(regionLabel, snippets, [
+      regionLabel,
+      ...(regionLabel === 'North America' ? ['usa', 'united states', 'canada', 'north america'] : []),
+      ...(regionLabel === 'Europe' ? ['europe', 'eu', 'uk', 'united kingdom'] : []),
+      ...(regionLabel === 'APAC' ? ['apac', 'asia pacific', 'asia', 'australia', 'india', 'japan'] : []),
+      ...(regionLabel === 'LATAM' ? ['latam', 'latin america', 'brazil', 'mexico'] : []),
+      ...(regionLabel === 'Middle East' ? ['middle east', 'mena', 'uae', 'saudi'] : []),
+      ...(regionLabel === 'Africa' ? ['africa', 'south africa', 'nigeria', 'kenya'] : []),
+      ...(regionLabel === 'Global' ? ['global', 'worldwide', 'international'] : [])
+    ]);
+
+    const sizeConfidence = computeConfidenceForLabel(companySizeLabel, snippets, [
+      companySizeLabel,
+      ...(companySizeLabel === 'SMB' ? ['smb', 'small business', 'startup', 'mid-market'] : []),
+      ...(companySizeLabel === 'Enterprise' ? ['enterprise', 'large enterprise', 'fortune 500'] : []),
+      ...(companySizeLabel === 'Mid-Market' ? ['mid-market', 'midsize', 'medium business'] : [])
+    ]);
+
+    const industryConfidence = computeConfidenceForLabel(industryFocusLabel, snippets, [industryFocusLabel]);
+
+    return {
+      audience: audienceWithConfidence,
+      demographics: {
+        region: { label: regionLabel, confidence: regionConfidence },
+        companySize: { label: companySizeLabel, confidence: sizeConfidence },
+        industryFocus: { label: industryFocusLabel, confidence: industryConfidence }
+      }
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Automatic industry and product detection functions
 async function detectIndustryAndProduct(companyName) {
   console.log(`🔍 Detecting industry and product for: ${companyName}`);
@@ -672,8 +1257,11 @@ function analyzeVisibility(responseText, company) {
   const mentions = (responseText.match(new RegExp(name, 'gi')) || []);
   const mentionsCount = mentions.length;
   
-  // B. Position Score (30% weight) - 1 if mentioned anywhere, 0 if not
-  const position = responseText.toLowerCase().indexOf(name.toLowerCase()) >= 0 ? 1 : 0;
+  // B. Prominence (30% weight) - how early the first mention appears (normalized 0..1)
+  const lower = responseText.toLowerCase();
+  const idx = lower.indexOf(String(name || '').toLowerCase());
+  const textLen = Math.max(1, lower.length);
+  const prominence = idx >= 0 ? Math.max(0, Math.min(1, 1 - (idx / textLen))) : 0;
   
   // C. Sentiment Score (20% weight)
   let sentiment = 0.5; // Default neutral
@@ -691,13 +1279,14 @@ function analyzeVisibility(responseText, company) {
   
   console.log(`   [DEBUG] Raw values for ${name}:`);
   console.log(`   [DEBUG] Mentions count: ${mentionsCount}`);
-  console.log(`   [DEBUG] Position: ${position}`);
+  console.log(`   [DEBUG] Prominence: ${prominence.toFixed(4)}`);
   console.log(`   [DEBUG] Sentiment: ${sentiment}`);
   console.log(`   [DEBUG] Brand mentions: ${brandMentions}`);
   
   return { 
     mentions, 
-    position, 
+    position: idx >= 0 ? 1 : 0, // kept for backward compatibility
+    prominence,
     sentiment, 
     brandMentions,
     mentionsCount,
@@ -713,24 +1302,24 @@ function calculateVisibilityScore(response, companyName = '') {
     
     // Weighted scoring formula
     const mentionsScore = analysis.mentionsCount * 0.35; // 35% weight
-    const positionScore = analysis.position * 0.3; // 30% weight
-    const sentimentScore = analysis.sentiment * 0.2; // 20% weight
-    const brandMentionsScore = analysis.brandMentions * 0.1; // 10% weight
+    const prominenceScore = analysis.prominence * 0.30; // 30% weight
+    const sentimentScore = analysis.sentiment * 0.20; // 20% weight
+    const brandMentionsScore = analysis.brandMentions * 0.15; // 15% weight
     
-    const totalScore = mentionsScore + positionScore + sentimentScore + brandMentionsScore;
+    const totalScore = mentionsScore + prominenceScore + sentimentScore + brandMentionsScore;
     
     console.log(`   [DEBUG] Weighted scores for ${companyName}:`);
     console.log(`   [DEBUG] Mentions score (35%): ${analysis.mentionsCount} x 0.35 = ${mentionsScore.toFixed(2)}`);
-    console.log(`   [DEBUG] Position score (30%): ${analysis.position} x 0.3 = ${positionScore.toFixed(2)}`);
-    console.log(`   [DEBUG] Sentiment score (20%): ${analysis.sentiment} x 0.2 = ${sentimentScore.toFixed(2)}`);
-    console.log(`   [DEBUG] Brand mentions score (10%): ${analysis.brandMentions} x 0.1 = ${brandMentionsScore.toFixed(2)}`);
+    console.log(`   [DEBUG] Prominence score (30%): ${analysis.prominence.toFixed(4)} x 0.30 = ${prominenceScore.toFixed(2)}`);
+    console.log(`   [DEBUG] Sentiment score (20%): ${analysis.sentiment} x 0.20 = ${sentimentScore.toFixed(2)}`);
+    console.log(`   [DEBUG] Brand mentions score (15%): ${analysis.brandMentions} x 0.15 = ${brandMentionsScore.toFixed(2)}`);
     console.log(`   [DEBUG] Total visibility score: ${totalScore.toFixed(4)}`);
     
     return {
       totalScore: totalScore,
       breakdown: {
         mentionsScore,
-        positionScore,
+        prominenceScore,
         sentimentScore,
         brandMentionsScore
       },
@@ -977,7 +1566,7 @@ async function queryClaude(competitorName, industry = '', customPrompts = null) 
         const response = await axios.post(
           'https://api.anthropic.com/v1/messages',
           {
-            model: 'claude-3-sonnet-20240229',
+            model: 'claude-3-5-sonnet-20240620',
             max_tokens: 1000,
             messages: [
               { role: 'user', content: prompt }
@@ -1053,7 +1642,7 @@ async function queryChatGPT(competitorName, industry = '', customPrompts = null)
         const response = await axios.post(
           'https://api.openai.com/v1/chat/completions',
           {
-            model: 'gpt-3.5-turbo',
+            model: 'gpt-4o-mini',
             messages: [
               { role: 'system', content: 'You are a helpful business analyst specializing in AI market analysis.' },
               { role: 'user', content: prompt }
@@ -1282,7 +1871,9 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         // Use all AI models but with shorter timeouts for speed
         const [
           geminiResponse, perplexityResponse, 
-          claudeResponse, chatgptResponse
+          claudeResponse, chatgptResponse,
+          audienceProfile,
+          rawModelMetrics
         ] = await Promise.all([
           withTimeout(
             queryGeminiVisibility(competitorName, detectedIndustry, [enhancedPrompts.gemini[0]]),
@@ -1303,15 +1894,14 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
             queryChatGPT(competitorName, detectedIndustry, [enhancedPrompts.chatgpt[0]]),
             OPENAI_TIMEOUT_MS,
             { analysis: 'Timed out', visibilityScore: 1, keyMetrics: {}, breakdown: {} }
-          ).catch(() => ({ analysis: 'Error', visibilityScore: 1, keyMetrics: {}, breakdown: {} }))
+          ).catch(() => ({ analysis: 'Error', visibilityScore: 1, keyMetrics: {}, breakdown: {} })),
+          // Audience profile in parallel with a tight timeout to avoid slowing main flow
+          withTimeout(getAudienceProfile(competitorName), 9000, null).catch(() => null),
+          withTimeout(computePerModelRawMetrics(competitorName, true), 9000, { chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }).catch(() => ({ chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }))
         ]);
         
-        const scores = {
-          gemini: geminiResponse.visibilityScore,
-          perplexity: perplexityResponse.visibilityScore,
-          claude: claudeResponse.visibilityScore,
-          chatgpt: chatgptResponse.visibilityScore
-        };
+        // Placeholder scores; will be replaced after normalization step
+        const scores = { gemini: 0, perplexity: 0, claude: 0, chatgpt: 0 };
         const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / 4;
         return {
           name: competitorName,
@@ -1321,14 +1911,24 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           breakdowns: { gemini: geminiResponse.breakdown || {}, perplexity: perplexityResponse.breakdown || {}, claude: claudeResponse.breakdown || {}, chatgpt: chatgptResponse.breakdown || {} },
           keyMetrics: { gemini: geminiResponse.keyMetrics || {}, perplexity: perplexityResponse.keyMetrics || {}, claude: claudeResponse.keyMetrics || {}, chatgpt: chatgptResponse.keyMetrics || {} },
           scrapedData,
-          analysis: { gemini: geminiResponse.analysis || 'No analysis available', perplexity: perplexityResponse.analysis || 'No analysis available', claude: claudeResponse.analysis || 'No analysis available', chatgpt: chatgptResponse.analysis || 'No analysis available' }
+          analysis: { gemini: geminiResponse.analysis || 'No analysis available', perplexity: perplexityResponse.analysis || 'No analysis available', claude: claudeResponse.analysis || 'No analysis available', chatgpt: chatgptResponse.analysis || 'No analysis available' },
+          audienceProfile: audienceProfile || null,
+          rawModels: rawModelMetrics,
+          snippets: {
+            gemini: (geminiResponse.analysis || '').slice(0, 300),
+            chatgpt: (chatgptResponse.analysis || '').slice(0, 300),
+            claude: (claudeResponse.analysis || '').slice(0, 300),
+            perplexity: (perplexityResponse.analysis || '').slice(0, 300)
+          }
         };
       }
 
       // Query all AI models in parallel for this competitor with enhanced error handling (full mode)
       const [
         geminiResponse, perplexityResponse, 
-        claudeResponse, chatgptResponse
+        claudeResponse, chatgptResponse,
+        audienceProfile,
+        rawModelMetrics
       ] = await Promise.all([
         queryGeminiVisibility(competitorName, detectedIndustry, enhancedPrompts.gemini).catch(err => {
           console.error(`❌ Gemini error for ${competitorName}:`, err.message);
@@ -1365,7 +1965,9 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
             keyMetrics: {},
             breakdown: {}
           };
-        })
+        }),
+        withTimeout(getAudienceProfile(competitorName), 12000, null).catch(() => null),
+        withTimeout(computePerModelRawMetrics(competitorName, false), 15000, { chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }).catch(() => ({ chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }))
       ]);
       
       // Ensure all responses have valid structure
@@ -1388,12 +1990,8 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       console.log(`   ChatGPT:`, truncate(safeChatGPTResponse));
       
       // Calculate scores with fallback values
-      const scores = {
-        gemini: (safeGeminiResponse.visibilityScore || 5),
-        perplexity: (safePerplexityResponse.visibilityScore || 5),
-        claude: (safeClaudeResponse.visibilityScore || 5),
-        chatgpt: (safeChatGPTResponse.visibilityScore || 5)
-      };
+      // Placeholder, will be set after normalization across competitors
+      const scores = { gemini: 0, perplexity: 0, claude: 0, chatgpt: 0 };
       
       const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / 4;
       
@@ -1447,13 +2045,49 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           perplexity: perplexityResponse.analysis || 'No analysis available',
           claude: claudeResponse.analysis || 'No analysis available',
           chatgpt: chatgptResponse.analysis || 'No analysis available'
+        },
+        audienceProfile: audienceProfile || null,
+        rawModels: rawModelMetrics,
+        snippets: {
+          gemini: (geminiResponse.analysis || '').slice(0, 300),
+          chatgpt: (chatgptResponse.analysis || '').slice(0, 300),
+          claude: (claudeResponse.analysis || '').slice(0, 300),
+          perplexity: (perplexityResponse.analysis || '').slice(0, 300)
         }
       };
     });
     
     // Wait for all analyses to complete
     console.log('⏳ Waiting for all parallel analyses to complete...');
-    const analysisResults = await Promise.all(analysisPromises);
+    let analysisResults = await Promise.all(analysisPromises);
+    // Compute normalized per-model scores from rawModels across all competitors
+    const enriched = analysisResults.map(r => ({ name: r.name, rawModels: r.rawModels || { chatgpt: {}, gemini: {}, perplexity: {}, claude: {} } }));
+    const normalized = normalizeAndScoreModels(enriched);
+    const scoreByName = new Map(normalized.map(n => [n.name, n.aiScores]));
+    analysisResults = analysisResults.map(r => {
+      const newScores = scoreByName.get(r.name) || r.aiScores;
+      const avg = (newScores.chatgpt + newScores.gemini + newScores.perplexity + newScores.claude) / 4;
+      return { ...r, aiScores: newScores, totalScore: Number(avg.toFixed(4)) };
+    });
+
+    // Compute AI Traffic shares using a small query pool (fast/full)
+    try {
+      const [traffic, citations] = await Promise.all([
+        computeAiTrafficShares(allCompanies, detectedIndustry, isFast).catch(() => null),
+        computeCitationMetrics(allCompanies, detectedIndustry, isFast).catch(() => null)
+      ]);
+      analysisResults = analysisResults.map(r => {
+        const aiTraffic = traffic ? (traffic.sharesByCompetitor[r.name] || { byModel: {}, global: 0, weightedGlobal: 0 }) : undefined;
+        const citationsFor = citations ? (citations[r.name] || undefined) : undefined;
+        return { ...r, aiTraffic, citations: citationsFor };
+      });
+    } catch (e) { /* ignore */ }
+
+    // Compute RAVI per competitor
+    analysisResults = analysisResults.map(r => ({
+      ...r,
+      ravi: computeRaviForCompetitor(r)
+    }));
     console.log('✅ All parallel analyses completed!');
     
     const aiTime = Date.now();
@@ -1480,6 +2114,48 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     console.log(`   - Competitor Detection: ${competitorTime - competitorStartTime}ms`);
     console.log(`   - AI Analysis: ${aiTime - aiStartTime}ms`);
     
+    // Persist run rows for engagement/growth later
+    try {
+      const savePromises = analysisResults.map(async (r) => {
+        try {
+          await db.saveAiVisibilityRun({
+            id: require('crypto').randomUUID(),
+            company: companyName,
+            competitor: r.name,
+            totalScore: r.totalScore,
+            aiScores: r.aiScores
+          });
+        } catch {}
+        try {
+          if (r.ravi?.rounded !== undefined) {
+            await db.saveVisibilityLog({
+              id: require('crypto').randomUUID(),
+              competitor: r.name,
+              metric: 'RAVI',
+              value: Number(r.ravi.rounded) || 0
+            });
+          }
+          if (r.aiTraffic?.global !== undefined) {
+            await db.saveVisibilityLog({
+              id: require('crypto').randomUUID(),
+              competitor: r.name,
+              metric: 'AI_Traffic_Share',
+              value: Number(r.aiTraffic.global) || 0
+            });
+          }
+          if (r.citations?.global?.citationScore !== undefined) {
+            await db.saveVisibilityLog({
+              id: require('crypto').randomUUID(),
+              competitor: r.name,
+              metric: 'CitationScore',
+              value: Number(r.citations.global.citationScore) * 100 || 0
+            });
+          }
+        } catch {}
+      });
+      await Promise.all(savePromises);
+    } catch {}
+
     return {
       company: companyName,
       industry: industry,
@@ -1527,7 +2203,8 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
     // Query all AI models in parallel for maximum speed
     const [
       geminiResponse, perplexityResponse, 
-      claudeResponse, chatgptResponse
+      claudeResponse, chatgptResponse,
+      audienceProfile
     ] = await Promise.all([
       queryGeminiVisibility(competitorName, detectedIndustry, enhancedPrompts.gemini).catch(err => {
         console.error(`❌ Gemini error for ${competitorName}:`, err.message);
@@ -1568,7 +2245,8 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
           keyMetrics: {},
           breakdown: {}
         };
-      })
+      }),
+      withTimeout(getAudienceProfile(competitorName), 12000, null).catch(() => null)
     ]);
     
     console.log(`\n🔍 Raw AI responses for ${competitorName}:`);
@@ -1630,7 +2308,8 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
         perplexity: safePerplexityResponse.analysis || 'No analysis available',
         claude: safeClaudeResponse.analysis || 'No analysis available',
         chatgpt: safeChatGPTResponse.analysis || 'No analysis available'
-      }
+      },
+      audienceProfile: audienceProfile || null
     };
     
     console.log(`\n✅ Single competitor analysis complete for ${competitorName}`);

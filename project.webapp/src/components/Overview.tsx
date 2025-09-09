@@ -10,6 +10,7 @@ import { sessionManager } from '../services/sessionManager';
 import type { HistoryItem, QAHistoryItem } from '../types';
 
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -965,27 +966,49 @@ export function Overview() {
     const totalScore = mainCompany.totalScore || 0;
     const aiScores = mainCompany.aiScores || {};
     const breakdowns = mainCompany.breakdowns || {};
-    
-    // Calculate average AI score across all platforms
-    const platformScores = Object.values(aiScores).filter(score => typeof score === 'number');
-    const averageAIScore = platformScores.length > 0 
-      ? platformScores.reduce((sum: number, score: number) => sum + score, 0) / platformScores.length 
-      : 0;
-    
+
+    // Use mentions from key metrics or breakdowns
+    const mainMentions = Number(
+      (
+        mainCompany?.keyMetrics?.gemini?.brandMentions ??
+        mainCompany?.keyMetrics?.gemini?.mentionsCount ??
+        breakdowns?.gemini?.mentionsScore ??
+        0
+      ) as number
+    ) || 0;
+
+    // Compute median competitor mentions
+    const competitorMentions: number[] = (result.competitors || [])
+      .filter((c: any) => c.name?.toLowerCase() !== result.company?.toLowerCase())
+      .map((c: any) => {
+        const m =
+          c?.keyMetrics?.gemini?.brandMentions ??
+          c?.keyMetrics?.gemini?.mentionsCount ??
+          c?.breakdowns?.gemini?.mentionsScore ??
+          0;
+        return Number(m) || 0;
+      });
+    const medianCompetitor = median(competitorMentions);
+
+    // Derived metrics per provided formulas
+    const aiCitationScore = computeAiCitationScore(mainMentions, medianCompetitor);
+    const relativeAiVisibility = computeRelativeAiVisibility(mainMentions, medianCompetitor);
+
     // Get Gemini breakdown (most detailed data available)
     const geminiBreakdown = breakdowns.gemini || {};
-    
+
     return {
       aiVisibilityScore: Math.min(10, Math.max(0, totalScore)),
-      brandMentions: Number((geminiBreakdown.mentionsScore || 0).toFixed(5)),
-      medianCompetitorMentions: Number((Math.round(averageAIScore * 10) / 10).toFixed(5)),
-      shareOfVoice: Number((Math.round((totalScore / 10) * 100 * 100) / 100).toFixed(5)),
+      brandMentions: Number(mainMentions.toFixed(5)),
+      medianCompetitorMentions: Number(medianCompetitor.toFixed(5)),
+      aiCitationScore: Number(aiCitationScore.toFixed(5)),
+      relativeAiVisibility: Number(relativeAiVisibility.toFixed(5)),
       averagePosition: Number((geminiBreakdown.positionScore || 0).toFixed(5)),
-      searchVolume: 'N/A', // Not available in current API
+      searchVolume: 'N/A',
       sentiment: geminiBreakdown.sentimentScore > 0.5 ? 'Positive' : 
                  geminiBreakdown.sentimentScore < 0.3 ? 'Negative' : 'Neutral',
       platformBreakdown: aiScores,
-      totalMentions: Number((geminiBreakdown.mentionsScore || 0).toFixed(5))
+      totalMentions: Number(mainMentions.toFixed(5))
     };
   };
 
@@ -1195,9 +1218,9 @@ export function Overview() {
             </div>
 
             {/* Competitor Analysis Heading - Always show when there's analysis data */}
-            <div className="mb-6">
+            <div className="mb-6 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-gray-900">Competitor Analysis</h2>
-              
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
             </div>  
 
             {/* Competitor Performance Overview Chart */}

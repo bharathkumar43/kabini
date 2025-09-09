@@ -1,3 +1,4 @@
+// (moved) Period Badges route defined after app/db initialization
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -4402,6 +4403,79 @@ app.get('/api/ai-visibility/:company', async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch AI visibility data', details: error.message });
   }
 });
+// GEO Engagement & Growth endpoint
+app.get('/api/geo-engagement-growth/:competitor', async (req, res) => {
+  try {
+    const competitor = req.params.competitor;
+    const { period = 'month' } = req.query;
+    const now = new Date();
+    const toIso = now.toISOString();
+    const from = new Date(now);
+    if (String(period).toLowerCase() === 'week') {
+      from.setDate(from.getDate() - 7);
+    } else if (String(period).toLowerCase() === 'quarter') {
+      from.setMonth(from.getMonth() - 3);
+    } else {
+      from.setMonth(from.getMonth() - 1);
+    }
+    const fromIso = from.toISOString();
+    const rows = await db.getAiVisibilityRunsByCompetitorBetween(competitor, fromIso, toIso);
+    // Group by calendar period boundaries (current and previous period)
+    const byPeriod = { current: [], previous: [] };
+    const mid = new Date(from);
+    const prevStart = new Date(from);
+    const prevEnd = new Date(from);
+    // previous window: same length immediately before 'from'
+    if (String(period).toLowerCase() === 'week') {
+      prevStart.setDate(prevStart.getDate() - 7);
+      prevEnd.setDate(prevEnd.getDate() - 1);
+    } else if (String(period).toLowerCase() === 'quarter') {
+      prevStart.setMonth(prevStart.getMonth() - 3);
+      prevEnd.setDate(prevEnd.getDate() - 1);
+    } else {
+      prevStart.setMonth(prevStart.getMonth() - 1);
+      prevEnd.setDate(prevEnd.getDate() - 1);
+    }
+    rows.forEach(r => {
+      const d = new Date(r.createdAt);
+      if (d >= from && d <= now) byPeriod.current.push(r);
+      else if (d >= prevStart && d <= prevEnd) byPeriod.previous.push(r);
+    });
+
+    const aggregate = (arr) => {
+      const totals = { chatgpt: 0, gemini: 0, perplexity: 0, claude: 0 };
+      arr.forEach(r => {
+        const s = r.aiScores || {};
+        totals.chatgpt += Number(s.chatgpt || 0);
+        totals.gemini += Number(s.gemini || 0);
+        totals.perplexity += Number(s.perplexity || 0);
+        totals.claude += Number(s.claude || 0);
+      });
+      const totalScore = totals.chatgpt + totals.gemini + totals.perplexity + totals.claude;
+      const coverageCount = ['chatgpt','gemini','perplexity','claude'].filter(k => totals[k] > 0).length;
+      const modelCoverage = (coverageCount / 4) * 100;
+      return { totals, totalScore, modelCoverage };
+    };
+
+    const cur = aggregate(byPeriod.current);
+    const prev = aggregate(byPeriod.previous);
+    const eps = 1;
+    const denom = prev.totalScore > 0 ? prev.totalScore : eps;
+    const geoTrend = ((cur.totalScore - denom) / denom) * 100;
+
+    res.json({
+      success: true,
+      competitor,
+      period,
+      engagement: { modelCoverage: Number(cur.modelCoverage.toFixed(2)) },
+      growth: { geoTrend: Number(geoTrend.toFixed(2)) },
+      debug: { currentCount: byPeriod.current.length, previousCount: byPeriod.previous.length }
+    });
+  } catch (e) {
+    console.error('[GEO Engagement] Error:', e);
+    res.status(500).json({ success: false, error: 'Failed to compute engagement & growth' });
+  }
+});
 
 // Analyze Single Competitor Route
 app.post('/api/ai-visibility/analyze-competitor', async (req, res) => {
@@ -6040,4 +6114,39 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Authentication: Enabled`);
   console.log(`Database: Connected`);
   console.log(`Structural Content Crawler: Available at /api/structural-content/crawl`);
+});
+
+// Period Badges: rolling averages for metrics (moved below app/db init)
+app.get('/api/period-averages/:competitor', async (req, res) => {
+  try {
+    const competitor = req.params.competitor;
+    const { metric = 'RAVI' } = req.query;
+    const now = new Date();
+    const toIso = now.toISOString();
+    const monthlyFrom = new Date(now); monthlyFrom.setDate(monthlyFrom.getDate() - 30);
+    const yearlyFrom = new Date(now); yearlyFrom.setDate(yearlyFrom.getDate() - 365);
+    const monthlyRows = await db.getVisibilityLogsBetween(competitor, String(metric), monthlyFrom.toISOString(), toIso);
+    const yearlyRows = await db.getVisibilityLogsBetween(competitor, String(metric), yearlyFrom.toISOString(), toIso);
+    const avg = (rows) => rows.length > 0 ? rows.reduce((a, r) => a + (Number(r.value) || 0), 0) / rows.length : null;
+    const monthlyAvg = avg(monthlyRows);
+    const yearlyAvg = avg(yearlyRows);
+    res.json({
+      success: true,
+      competitor,
+      metric,
+      monthly: {
+        avg: monthlyAvg !== null ? Number(monthlyAvg.toFixed(2)) : null,
+        lowConfidence: monthlyRows.length < 5,
+        count: monthlyRows.length
+      },
+      yearly: {
+        avg: yearlyAvg !== null ? Number(yearlyAvg.toFixed(2)) : null,
+        lowConfidence: yearlyRows.length < 5,
+        count: yearlyRows.length
+      }
+    });
+  } catch (e) {
+    console.error('[Period Averages] Error:', e);
+    res.status(500).json({ success: false, error: 'Failed to compute period averages' });
+  }
 });
