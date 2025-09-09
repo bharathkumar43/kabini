@@ -1,6 +1,6 @@
 # Email Configuration - Copy these lines to your .env file
 # Replace the placeholder values with your actual Gmail credentials
-
+`
 # Gmail SMTP Configuration for sending real emails
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587

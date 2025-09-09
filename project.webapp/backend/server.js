@@ -10,6 +10,7 @@ const GoogleAuthService = require('./googleAuth');
 const JSONStorage = require('./jsonStorage');
 const MemoryStorage = require('./memoryStorage');
 const EmailService = require('./emailService');
+const emailVerificationService = require('./emailVerificationService');
 const { LLMService, getGeminiEmbedding } = require('./llmService');
 // const FanoutQueryDensity = require('./fanoutQueryDensity');
 // const GEOFanoutDensity = require('./geoFanoutDensity');
@@ -172,9 +173,15 @@ if (ENABLE_LOCAL_AUTH) {
         });
       }
 
-      // Validate email
+      // Validate email format
       if (!localAuthService.validateEmail(email)) {
         return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Validate email domain (check for disposable emails)
+      const domainValidation = await emailVerificationService.validateEmailDomain(email);
+      if (!domainValidation.valid) {
+        return res.status(400).json({ error: domainValidation.error });
       }
 
       // Validate password
@@ -193,7 +200,7 @@ if (ENABLE_LOCAL_AUTH) {
       // Hash password
       const hashedPassword = await localAuthService.hashPassword(password);
       
-      // Create user
+      // Create user with email_verified = false
       const userData = {
         id: uuidv4(),
         email,
@@ -202,47 +209,169 @@ if (ENABLE_LOCAL_AUTH) {
         password: hashedPassword,
         roles: ['user'],
         isActive: true,
+        emailVerified: false, // Email not verified initially
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       
       await db.createUser(userData);
       
-      // Generate tokens
-      const accessToken = localAuthService.generateJWT(userData);
+      // Generate email verification token
+      const verificationToken = emailVerificationService.generateVerificationToken(email);
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours
+      
+      // Save verification token to database
+      await db.createEmailVerificationToken(userData.id, verificationToken, expiresAt.toISOString());
+      
+      // Send verification email
+      try {
+        const emailResult = await emailVerificationService.sendVerificationEmail(email, name, verificationToken);
+        if (!emailResult.success) {
+          console.error('❌ Failed to send verification email:', emailResult.error);
+          // Don't fail registration, but log the error
+        } else {
+          console.log(`✅ Verification email sent to ${email}`);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send verification email:', emailError);
+        // Don't fail registration if email fails
+      }
+      
+      // Generate limited tokens (for unverified users)
+      const accessToken = localAuthService.generateJWT({ ...userData, emailVerified: false });
       const refreshToken = localAuthService.generateRefreshToken(userData);
       
       // Calculate expiration time
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
+      const tokenExpiresAt = new Date();
+      tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 7);
       
       // Save session
-      await db.saveUserSession(userData.id, refreshToken, expiresAt.toISOString());
+      await db.saveUserSession(userData.id, refreshToken, tokenExpiresAt.toISOString());
       
       // Remove password from response
       const { password: _, ...userResponse } = userData;
-      
-      // Send welcome email
-      try {
-        await emailService.sendWelcomeEmail(email, name);
-        console.log(`✅ Welcome email sent to ${email}`);
-      } catch (emailError) {
-        console.error('❌ Failed to send welcome email:', emailError);
-        // Don't fail registration if email fails
-      }
       
       res.json({
         success: true,
         user: userResponse,
         accessToken,
         refreshToken,
-        expiresAt: expiresAt.toISOString()
+        expiresAt: tokenExpiresAt.toISOString(),
+        emailVerificationRequired: true,
+        message: 'Account created successfully! Please check your email to verify your account.'
       });
       
     } catch (error) {
       console.error('Registration error:', error);
       res.status(500).json({ 
         error: 'Registration failed',
+        details: error.message 
+      });
+    }
+  });
+
+  // Email verification endpoint
+  app.post('/api/auth/verify-email', async (req, res) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ error: 'Verification token is required' });
+      }
+
+      // Get user by verification token
+      const user = await db.getUserByVerificationToken(token);
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired verification token' });
+      }
+
+      // Check if token is expired
+      const now = new Date();
+      const tokenExpiresAt = new Date(user.token_expires_at);
+      if (now > tokenExpiresAt) {
+        return res.status(400).json({ error: 'Verification token has expired' });
+      }
+
+      // Mark email as verified
+      await db.updateEmailVerificationStatus(user.id, true);
+      
+      // Mark token as used
+      await db.markEmailVerificationTokenAsUsed(token);
+      
+      console.log(`✅ Email verified for user: ${user.email}`);
+      
+      res.json({
+        success: true,
+        message: 'Email verified successfully! You can now access all features.',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          displayName: user.display_name,
+          emailVerified: true
+        }
+      });
+      
+    } catch (error) {
+      console.error('Email verification error:', error);
+      res.status(500).json({ 
+        error: 'Email verification failed',
+        details: error.message 
+      });
+    }
+  });
+
+  // Resend verification email endpoint
+  app.post('/api/auth/resend-verification', async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      // Get user by email
+      const user = await db.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.email_verified) {
+        return res.status(400).json({ error: 'Email is already verified' });
+      }
+
+      // Generate new verification token
+      const verificationToken = emailVerificationService.generateVerificationToken(email);
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours
+      
+      // Save verification token to database
+      await db.createEmailVerificationToken(user.id, verificationToken, expiresAt.toISOString());
+      
+      // Send verification email
+      try {
+        const emailResult = await emailVerificationService.sendVerificationEmail(email, user.name, verificationToken);
+        if (!emailResult.success) {
+          console.error('❌ Failed to resend verification email:', emailResult.error);
+          return res.status(500).json({ error: 'Failed to send verification email' });
+        } else {
+          console.log(`✅ Verification email resent to ${email}`);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to resend verification email:', emailError);
+        return res.status(500).json({ error: 'Failed to send verification email' });
+      }
+      
+      res.json({
+        success: true,
+        message: 'Verification email sent successfully! Please check your inbox.'
+      });
+      
+    } catch (error) {
+      console.error('Resend verification error:', error);
+      res.status(500).json({ 
+        error: 'Failed to resend verification email',
         details: error.message 
       });
     }
@@ -268,6 +397,15 @@ if (ENABLE_LOCAL_AUTH) {
       // Check if user is active
       if (!user.is_active) {
         return res.status(401).json({ error: 'Your account has been deactivated. Please contact support for assistance.' });
+      }
+
+      // Check if email is verified
+      if (!user.email_verified) {
+        return res.status(401).json({ 
+          error: 'Please verify your email address before logging in. Check your inbox for a verification email.',
+          emailVerificationRequired: true,
+          email: user.email
+        });
       }
 
       // Verify password
@@ -4785,14 +4923,32 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       // Generate secure reset token
       const resetToken = require('crypto').randomBytes(32).toString('hex');
       
-      // Set expiration (1 hour from now)
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 1);
+      // Set expiration (1 hour from now) - using UTC to avoid timezone issues
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + (60 * 60 * 1000)); // Add 1 hour in milliseconds
+      
+      console.log('💾 [Forgot Password] Token timing:', {
+        now: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        timeUntilExpiry: Math.round((expiresAt.getTime() - now.getTime()) / 1000 / 60) + ' minutes',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      });
+      
+      // Clean up expired tokens before creating new one
+      await db.deleteExpiredPasswordResetTokens();
+      console.log('🧹 [Forgot Password] Cleaned up expired tokens');
       
       console.log('💾 [Forgot Password] Saving token to database...');
       
       // Save token to database
-      await db.createPasswordResetToken(user.id, resetToken, expiresAt.toISOString());
+      console.log('💾 [Forgot Password] Saving token to database:', {
+        userId: user.id,
+        token: `${resetToken.substring(0, 10)}...`,
+        expiresAt: expiresAt.toISOString()
+      });
+      
+      const tokenId = await db.createPasswordResetToken(user.id, resetToken, expiresAt.toISOString());
+      console.log('✅ [Forgot Password] Token saved with ID:', tokenId);
       
       // Create reset link
       const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
@@ -4903,16 +5059,56 @@ app.post('/api/auth/send-test-email', async (req, res) => {
 app.post('/api/auth/reset-password', async (req, res) => {
   const { token, newPassword } = req.body;
   
+  console.log('🔐 [Reset Password] Request received:', { 
+    token: token ? `${token.substring(0, 10)}...` : 'null', 
+    hasPassword: !!newPassword 
+  });
+  
   if (!token || !newPassword) {
+    console.log('❌ [Reset Password] Missing token or password');
     return res.status(400).json({ error: 'Token and new password are required' });
   }
 
   try {
     // Get token from database
+    console.log('🔍 [Reset Password] Looking up token in database...');
     const resetToken = await db.getPasswordResetToken(token);
+    
     if (!resetToken) {
+      console.log('❌ [Reset Password] Token not found or expired');
+      console.log('🔍 [Reset Password] Checking if token exists at all...');
+      
+      // Additional debugging - check if token exists but is expired/used
+      const client = await db.pool.connect();
+      try {
+        const allTokensResult = await client.query(
+          'SELECT token, used, expires_at, created_at FROM password_reset_tokens WHERE token = $1',
+          [token]
+        );
+        
+        if (allTokensResult.rows.length > 0) {
+          const tokenInfo = allTokensResult.rows[0];
+          console.log('🔍 [Reset Password] Token found but invalid:', {
+            used: tokenInfo.used,
+            expires_at: tokenInfo.expires_at,
+            created_at: tokenInfo.created_at,
+            is_expired: new Date(tokenInfo.expires_at) < new Date()
+          });
+        } else {
+          console.log('🔍 [Reset Password] Token does not exist in database');
+        }
+      } finally {
+        client.release();
+      }
+      
       return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
+    
+    console.log('✅ [Reset Password] Token found and valid:', {
+      user_id: resetToken.user_id,
+      expires_at: resetToken.expires_at,
+      created_at: resetToken.created_at
+    });
 
     // Validate password
     if (!localAuthService.validatePassword(newPassword)) {

@@ -17,16 +17,27 @@ const SignUp = () => {
     confirmPassword: ""
   });
   const [validationError, setValidationError] = useState("");
+  const [emailValidationError, setEmailValidationError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordOk, setPasswordOk] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [preventAutofill, setPreventAutofill] = useState(true);
   const navigate = useNavigate();
   const { login, error, clearError, isAuthenticated } = useAuth();
   
   // Enhanced emoji blocking hook
   const { handleInputChangeAggressive: handleEmojiFilteredInput, handlePaste, handleKeyDown } = useEmojiBlocking();
+
+  // Effect to prevent autofill by temporarily making fields read-only
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPreventAutofill(false);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   // Effect to redirect after successful authentication
   useEffect(() => {
@@ -71,20 +82,22 @@ const SignUp = () => {
     
     // Clear validation error when user starts typing
     if (validationError) setValidationError('');
+    if (emailValidationError) setEmailValidationError('');
     
     // Real-time validation for email
     if (name === 'email') {
       if (!value.trim()) {
         // Don't show error while typing, only when field is empty
+        setEmailValidationError('');
       } else {
         // Use comprehensive Gmail email validation for real-time feedback
         const emailValidation = validateProfessionalEmail(value);
         if (!emailValidation.isValid) {
           // Show real-time validation error
-          setValidationError(getEmailValidationMessage(value, emailValidation));
+          setEmailValidationError(getEmailValidationMessage(value, emailValidation));
         } else {
           // Clear validation error if email is valid
-          setValidationError('');
+          setEmailValidationError('');
         }
       }
     }
@@ -95,9 +108,15 @@ const SignUp = () => {
       const hasLowercase = /[a-z]/.test(value);
       const hasNumber = /\d/.test(value);
       const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value);
-      const isLongEnough = value.length >= 8;
+      const isLongEnough = value.length >= 4;
+      const notTooLong = value.length <= 128;
       
-      const allRequirementsMet = hasUppercase && hasLowercase && hasNumber && hasSpecialChar && isLongEnough;
+      // Check for weak patterns
+      const noRepeatedChars = !/(.)\1{2,}/.test(value);
+      const noSequential = !/abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz|123|234|345|456|567|678|789|321|432|543|654|765|876|987/i.test(value);
+      const noKeyboardPatterns = !/qwerty|asdfgh|zxcvbn|123456|654321/i.test(value);
+      
+      const allRequirementsMet = hasUppercase && hasLowercase && hasNumber && hasSpecialChar && isLongEnough && notTooLong && noRepeatedChars && noSequential && noKeyboardPatterns;
       setPasswordOk(allRequirementsMet);
       
       // Clear validation error when password is valid
@@ -110,6 +129,7 @@ const SignUp = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError('');
+    setEmailValidationError('');
     setAuthError(null);
     
     // Validate all required fields
@@ -134,50 +154,115 @@ const SignUp = () => {
       return;
     }
     
-    // Validate first and last name: letters only (A–Z, a–z)
+    // Enhanced name validation: letters only, no emojis, no special characters
     const nameRegex = /^[A-Za-z]+$/;
+    
+    // Check for emojis and special characters in first name
     if (!nameRegex.test(formData.firstName)) {
-      setValidationError('First name can contain only letters (A–Z, a–z)');
+      if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(formData.firstName)) {
+        setValidationError('First name cannot contain emojis');
+        return;
+      }
+      if (/[^A-Za-z]/.test(formData.firstName)) {
+        setValidationError('First name can only contain letters (A-Z, a-z). No numbers, spaces, or special characters allowed.');
+        return;
+      }
+      setValidationError('First name can contain only letters (A-Z, a-z)');
       return;
     }
+    
+    // Check for emojis and special characters in last name
     if (!nameRegex.test(formData.lastName)) {
-      setValidationError('Last name can contain only letters (A–Z, a–z)');
+      if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(formData.lastName)) {
+        setValidationError('Last name cannot contain emojis');
+        return;
+      }
+      if (/[^A-Za-z]/.test(formData.lastName)) {
+        setValidationError('Last name can only contain letters (A-Z, a-z). No numbers, spaces, or special characters allowed.');
+        return;
+      }
+      setValidationError('Last name can contain only letters (A-Z, a-z)');
+      return;
+    }
+    
+    // Check name length requirements
+    if (formData.firstName.trim().length < 2) {
+      setValidationError('First name must be at least 2 characters long');
+      return;
+    }
+    if (formData.firstName.trim().length > 30) {
+      setValidationError('First name cannot exceed 30 characters');
+      return;
+    }
+    if (formData.lastName.trim().length < 2) {
+      setValidationError('Last name must be at least 2 characters long');
+      return;
+    }
+    if (formData.lastName.trim().length > 30) {
+      setValidationError('Last name cannot exceed 30 characters');
       return;
     }
     
     // Use comprehensive email validation for professional domains
     const emailValidation = validateProfessionalEmail(formData.email);
     if (!emailValidation.isValid) {
-      setValidationError(getEmailValidationMessage(formData.email, emailValidation));
+      setEmailValidationError(getEmailValidationMessage(formData.email, emailValidation));
       return;
     }
     
     // Clear any email validation errors before proceeding
-    setValidationError('');
+    setEmailValidationError('');
     
-    // Validate password strength with enhanced requirements
-    if (formData.password.length < 8) {
-      setValidationError('Password must be at least 8 characters long');
+    // Enhanced password validation with comprehensive checks
+    const password = formData.password;
+    
+    // Check password length
+    if (password.length < 4) {
+      setValidationError('Password must be at least 4 characters long');
       return;
     }
-    if (!/[A-Z]/.test(formData.password)) {
-      setValidationError('Password must contain at least one uppercase letter');
-      return;
-    }
-    if (!/[a-z]/.test(formData.password)) {
-      setValidationError('Password must contain at least one lowercase letter');
-      return;
-    }
-    if (!/\d/.test(formData.password)) {
-      setValidationError('Password must contain at least one number');
-      return;
-    }
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password)) {
-      setValidationError('Password must contain at least one special character');
+    if (password.length > 128) {
+      setValidationError('Password cannot exceed 128 characters');
       return;
     }
     
-    // Validate password confirmation
+    // Check for required character types
+    if (!/[A-Z]/.test(password)) {
+      setValidationError('Password must contain at least one uppercase letter (A-Z)');
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setValidationError('Password must contain at least one lowercase letter (a-z)');
+      return;
+    }
+    if (!/\d/.test(password)) {
+      setValidationError('Password must contain at least one number (0-9)');
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      setValidationError('Password must contain at least one special character (!@#$%^&*()_+-=[]{};\':"\\|,.<>/?`)');
+      return;
+    }
+    
+    // Check for common weak patterns
+    if (/(.)\1{2,}/.test(password)) {
+      setValidationError('Password cannot contain 3 or more repeated characters');
+      return;
+    }
+    
+    // Check for sequential characters
+    if (/abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz/i.test(password)) {
+      setValidationError('Password cannot contain sequential characters (abc, 123, etc.)');
+      return;
+    }
+    
+    // Check for keyboard patterns
+    if (/qwerty|asdfgh|zxcvbn|123456|654321/i.test(password)) {
+      setValidationError('Password cannot contain common keyboard patterns');
+      return;
+    }
+    
+    // Check password confirmation match
     if (formData.password !== formData.confirmPassword) {
       setValidationError('Passwords do not match');
       return;
@@ -195,16 +280,37 @@ const SignUp = () => {
       });
 
       if (response.success) {
-        console.log('[SignUp] Sign up successful, user is now logged in');
-        // User is already logged in after successful registration
-        // The authService.register already stored tokens and returned user data
-        // Clear any errors and redirect immediately
-        setAuthError(''); // Clear any previous errors
-        setValidationError(''); // Clear any validation errors
+        console.log('[SignUp] Sign up successful');
         
-        // Force immediate navigation to overview
-        console.log('[SignUp] Forcing immediate navigation to overview...');
-        navigate('/overview', { replace: true });
+        // Check if email verification is required
+        if (response.emailVerificationRequired) {
+          // Show success message and redirect to login with verification message
+          setAuthError('');
+          setValidationError('');
+          setEmailValidationError('');
+          
+          // Show success message
+          setAuthError('Account created successfully! Please check your email to verify your account before logging in.');
+          
+          // Redirect to login after a delay
+          setTimeout(() => {
+            navigate('/login', { 
+              state: { 
+                message: 'Account created successfully! Please check your email to verify your account.',
+                email: formData.email 
+              }
+            });
+          }, 3000);
+        } else {
+          // User is already logged in after successful registration
+          setAuthError('');
+          setValidationError('');
+          setEmailValidationError('');
+          
+          // Force immediate navigation to overview
+          console.log('[SignUp] Forcing immediate navigation to overview...');
+          navigate('/overview', { replace: true });
+        }
       } else {
         setValidationError(response.error || 'Sign up failed. Please try again.');
       }
@@ -241,6 +347,7 @@ const SignUp = () => {
       
       // Clear any inline validation errors since we're showing authentication error as toggle
       setValidationError('');
+      setEmailValidationError('');
     } finally {
       setIsLoading(false);
     }
@@ -282,11 +389,19 @@ const SignUp = () => {
                 name="firstName"
                 value={formData.firstName}
                 onChange={(e) => handleEmojiFilteredInput(e, (value) => {
-                  // Allow only letters for first name
+                  // Allow only letters for first name - no emojis, no special characters
                   const filteredValue = value.replace(/[^A-Za-z]/g, '');
+                  
+                  // Check for emojis specifically
+                  if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(value)) {
+                    setValidationError('First name cannot contain emojis');
+                    return;
+                  }
+                  
                   setFormData(prev => ({ ...prev, firstName: filteredValue }));
                   // Clear any previous validation popup once user starts correcting
                   if (validationError) setValidationError('');
+                  if (emailValidationError) setEmailValidationError('');
                   // Don't clear authError - let it remain as toggle notification
                 })}
                 onPaste={(e) => handlePaste(e, (value) => {
@@ -300,7 +415,9 @@ const SignUp = () => {
                 required
                 placeholder="Enter your first name *"
                 pattern="[A-Za-z]+"
-                autoComplete="given-name"
+                autoComplete="off"
+                data-form-type="other"
+                readOnly={preventAutofill}
                 className="w-full px-4 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
               />
             </div>
@@ -311,11 +428,19 @@ const SignUp = () => {
                 name="lastName"
                 value={formData.lastName}
                 onChange={(e) => handleEmojiFilteredInput(e, (value) => {
-                  // Allow only letters for last name
+                  // Allow only letters for last name - no emojis, no special characters
                   const filteredValue = value.replace(/[^A-Za-z]/g, '');
+                  
+                  // Check for emojis specifically
+                  if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(value)) {
+                    setValidationError('Last name cannot contain emojis');
+                    return;
+                  }
+                  
                   setFormData(prev => ({ ...prev, lastName: filteredValue }));
                   // Clear any previous validation popup once user starts correcting
                   if (validationError) setValidationError('');
+                  if (emailValidationError) setEmailValidationError('');
                   // Don't clear authError - let it remain as toggle notification
                 })}
                 onPaste={(e) => handlePaste(e, (value) => {
@@ -329,7 +454,9 @@ const SignUp = () => {
                 required
                 placeholder="Enter your last name *"
                 pattern="[A-Za-z]+"
-                autoComplete="family-name"
+                autoComplete="off"
+                data-form-type="other"
+                readOnly={preventAutofill}
                 className="w-full px-4 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
               />
             </div>
@@ -346,17 +473,18 @@ const SignUp = () => {
                 setFormData(prev => ({ ...prev, email: formattedEmail }));
                 // Clear any previous validation popup once user starts correcting
                 if (validationError) setValidationError('');
+                if (emailValidationError) setEmailValidationError('');
                 // Don't clear authError here - let it remain as toggle notification
                 
                 // Real-time email validation - show inline validation for email format
                 if (!formattedEmail.trim()) {
-                  setValidationError('');
+                  setEmailValidationError('');
                 } else {
                   const emailValidation = validateProfessionalEmail(formattedEmail);
                   if (!emailValidation.isValid) {
-                    setValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
+                    setEmailValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
                   } else {
-                    setValidationError('');
+                    setEmailValidationError('');
                   }
                 }
               })}
@@ -366,9 +494,9 @@ const SignUp = () => {
                 // Trigger validation after paste
                 const emailValidation = validateProfessionalEmail(formattedEmail);
                 if (!emailValidation.isValid) {
-                  setValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
+                  setEmailValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
                 } else {
-                  setValidationError('');
+                  setEmailValidationError('');
                 }
               })}
               onKeyDown={handleKeyDown}
@@ -376,20 +504,20 @@ const SignUp = () => {
               onCompositionUpdate={(e) => e.preventDefault()}
               onCompositionEnd={(e) => e.preventDefault()}
               required
+              autoComplete="off"
+              data-form-type="other"
+              readOnly={preventAutofill}
               placeholder="Enter your email address *"
               className={`w-full px-4 py-4 border-2 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${
-                validationError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
+                emailValidationError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
               }`}
             />
             
-            {/* Inline email validation message below email field */}
-            {validationError && (
-              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                {validationError}
-              </p>
+            {/* Simple Red Text for Email Validation Errors */}
+            {emailValidationError && (
+              <div className="mt-2 text-sm text-red-600">
+                Please enter valid email address
+              </div>
             )}
           </div>
 
@@ -404,6 +532,7 @@ const SignUp = () => {
                   setFormData(prev => ({ ...prev, password: value }));
                   // Clear any previous validation popup once user starts correcting
                   if (validationError) setValidationError('');
+                  if (emailValidationError) setEmailValidationError('');
                   // Don't clear authError - let it remain as toggle notification
                   // Check password strength
                   const hasUppercase = /[A-Z]/.test(value);
@@ -442,6 +571,9 @@ const SignUp = () => {
                 onCompositionUpdate={(e) => e.preventDefault()}
                 onCompositionEnd={(e) => e.preventDefault()}
                 required
+                autoComplete="new-password"
+                data-form-type="other"
+                readOnly={preventAutofill}
                 placeholder="Create a password *"
                 className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
               />
@@ -484,6 +616,9 @@ const SignUp = () => {
               onCompositionUpdate={(e) => e.preventDefault()}
               onCompositionEnd={(e) => e.preventDefault()}
               required
+              autoComplete="new-password"
+              data-form-type="other"
+              readOnly={preventAutofill}
               placeholder="Re-enter your password *"
               className="w-full px-4 pr-12 py-4 border-2 border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
             />

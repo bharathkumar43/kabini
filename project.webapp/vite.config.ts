@@ -18,4 +18,25 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate vendor chunks for better caching
+          vendor: ['react', 'react-dom'],
+          router: ['react-router-dom'],
+          ui: ['lucide-react'],
+          // Keep large components separate
+          components: [
+            './src/components/AIVisibilityAnalysis.tsx',
+            './src/components/ContentStructureAnalysis.tsx',
+            './src/components/Overview.tsx',
+            './src/components/Statistics.tsx'
+          ]
+        }
+      }
+    },
+    // Increase chunk size warning limit
+    chunkSizeWarningLimit: 1000,
+  },
 });
