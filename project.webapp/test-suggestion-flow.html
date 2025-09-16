@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Single Suggestion Application</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .original { background-color: #f9f9f9; }
+        .improved { background-color: #e8f5e8; }
+        .suggestion { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Single Suggestion Application Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Enter a website URL and run content structure analysis</li>
+            <li>Wait for suggestions to be generated</li>
+            <li>Click "Apply Suggestion" on any individual suggestion</li>
+            <li>Check the "Improved Content" tab for changes</li>
+            <li>Click "Compare Pages" to see side-by-side comparison</li>
+        </ol>
+    </div>
+
+    <div class="test-section original">
+        <h2>📄 Original Content (Expected)</h2>
+        <p>This is what the original content should look like before applying suggestions.</p>
+        <pre id="original-content">Loading original content...</pre>
+    </div>
+
+    <div class="test-section improved">
+        <h2>✨ Improved Content (Expected After Suggestion)</h2>
+        <p>This is what the improved content should look like after applying a suggestion.</p>
+        <pre id="improved-content">Loading improved content...</pre>
+    </div>
+
+    <div class="test-section suggestion">
+        <h2>💡 Test Suggestion</h2>
+        <p>Example suggestion that should be applied:</p>
+        <pre id="test-suggestion">Loading test suggestion...</pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Expected Behavior</h2>
+        <ul>
+            <li><strong>Progress Notification:</strong> Shows "Applying Suggestion..." with progress bar</li>
+            <li><strong>Success Notification:</strong> Shows "Suggestion Applied Successfully!" with details</li>
+            <li><strong>Content Update:</strong> Improved content page shows the changes</li>
+            <li><strong>Tab Switch:</strong> Automatically switches to "Improved Content" tab</li>
+            <li><strong>State Update:</strong> Updates analysis.structuredContent and analysis.fullPageHtml</li>
+        </ul>
+    </div>
+
+    <div class="test-section error">
+        <h2>❌ Common Issues to Check</h2>
+        <ul>
+            <li><strong>No Changes Visible:</strong> Check console for "[Apply Suggestions]" logs</li>
+            <li><strong>Fallback Notification:</strong> Look for green notification box if suggestions fail</li>
+            <li><strong>HTML Parsing Errors:</strong> Check for DOMParser errors in console</li>
+            <li><strong>Pattern Matching:</strong> Verify exactReplacement patterns are found</li>
+            <li><strong>State Updates:</strong> Check if setImprovedFullPageHtml is called</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 Debug Information</h2>
+        <p>Open browser console and look for these log patterns:</p>
+        <pre>
+[Frontend] Applying single suggestion: {...}
+[Apply Suggestions] Starting to apply suggestions: {...}
+[Apply Suggestions] Applying [suggestion_type]: {...}
+[Apply Suggestions] Successfully applied [suggestion_type]: {...}
+[Content Analysis] Suggestion application result: {...}
+[Content Analysis] Updating analysis with improved content: {...}
+        </pre>
+    </div>
+
+    <script>
+        // Simulate the test scenario
+        const testHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page</title>
+</head>
+<body>
+    <h1>Welcome to Our Website</h1>
+    <p>This is a test paragraph that needs improvement. The content is not very engaging and could be enhanced for better user experience.</p>
+    <p>Another paragraph with some basic content that could be optimized for better readability and SEO.</p>
+</body>
+</html>`;
+
+        const testSuggestion = {
+            type: 'paragraph',
+            description: 'Improve the first paragraph for better engagement',
+            currentContent: 'This is a test paragraph that needs improvement. The content is not very engaging and could be enhanced for better user experience.',
+            enhancedContent: 'Welcome to our amazing platform! This carefully crafted paragraph delivers exceptional value and creates an engaging experience that will captivate your audience and drive meaningful results.',
+            exactReplacement: {
+                find: 'This is a test paragraph that needs improvement. The content is not very engaging and could be enhanced for better user experience.',
+                replace: 'Welcome to our amazing platform! This carefully crafted paragraph delivers exceptional value and creates an engaging experience that will captivate your audience and drive meaningful results.'
+            }
+        };
+
+        // Display the test content
+        document.getElementById('original-content').textContent = testHtml;
+        document.getElementById('test-suggestion').textContent = JSON.stringify(testSuggestion, null, 2);
+        
+        // Simulate the improved content
+        const improvedHtml = testHtml.replace(
+            'This is a test paragraph that needs improvement. The content is not very engaging and could be enhanced for better user experience.',
+            'Welcome to our amazing platform! This carefully crafted paragraph delivers exceptional value and creates an engaging experience that will captivate your audience and drive meaningful results.'
+        );
+        document.getElementById('improved-content').textContent = improvedHtml;
+    </script>
+</body>
+</html>

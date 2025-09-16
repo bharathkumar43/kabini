@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Precise Matching Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Precise Matching Fix Test</h1>
+    
+    <div class="test-section success">
+        <h2>✅ Fixes Applied</h2>
+        <ul>
+            <li><strong>Exact Text Matching:</strong> First tries to find exact text in HTML with tags stripped</li>
+            <li><strong>High Similarity Matching:</strong> Uses 80%+ similarity threshold for sentence replacement</li>
+            <li><strong>Content Validation:</strong> Validates that replacement actually changed the content</li>
+            <li><strong>Precise Fallback:</strong> Aggressive fallback uses 90%+ similarity for very high precision</li>
+            <li><strong>Better Debugging:</strong> Shows similarity scores and content previews</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Enter a website URL and run content structure analysis</li>
+            <li>Wait for suggestions to be generated</li>
+            <li>Click "Apply Suggestion" on the sentence_replacement suggestion</li>
+            <li>Check the browser console for detailed similarity scores</li>
+            <li>Verify that the CORRECT sentence is replaced</li>
+            <li>Check "Compare Pages" to see the actual changes</li>
+        </ol>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🔍 What to Look For in Console</h2>
+        <p>You should now see detailed similarity analysis:</p>
+        <pre>
+[Apply Suggestions] Found exact match in HTML text, trying replacement: {
+  altFind: "Migration between Microsoft 365 tenants can be challenging...",
+  altReplace: "Migrating between Microsoft 365 tenants presents significant challenges..."
+}
+
+[Apply Suggestions] Successfully applied sentence_replacement with exact HTML text matching
+
+OR
+
+[Apply Suggestions] Checking sentence similarity: {
+  sentence: "Migration between Microsoft 365 tenants can be challenging...",
+  target: "Migration between Microsoft 365 tenants can be challenging...",
+  similarity: 0.95
+}
+
+[Apply Suggestions] Found high-similarity sentence, trying replacement: {...}
+[Apply Suggestions] Successfully applied sentence_replacement with high-similarity sentence matching
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Key Improvements Made</h2>
+        <h3>Precision Matching:</h3>
+        <ul>
+            <li>Exact text matching with HTML tags stripped</li>
+            <li>High similarity threshold (80%+) for sentence replacement</li>
+            <li>Very high similarity (90%+) for aggressive fallback</li>
+            <li>Content validation to ensure changes are made</li>
+        </ul>
+        
+        <h3>Better Debugging:</h3>
+        <ul>
+            <li>Similarity scores for each sentence checked</li>
+            <li>Content previews before and after replacement</li>
+            <li>Validation that content actually changed</li>
+            <li>Detailed logging of matching process</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Expected Results</h2>
+        <ul>
+            <li><strong>Correct Sentence Replaced:</strong> The exact sentence from the suggestion should be replaced</li>
+            <li><strong>High Similarity Scores:</strong> Console should show similarity scores > 0.8</li>
+            <li><strong>Content Validation:</strong> Should confirm that content actually changed</li>
+            <li><strong>Real Differences:</strong> Compare pages should show the correct sentence replacement</li>
+        </ul>
+    </div>
+
+    <div class="test-section warning">
+        <h2>⚠️ What Should NOT Happen</h2>
+        <ul>
+            <li><strong>Wrong Text Replaced:</strong> Should not replace a different sentence</li>
+            <li><strong>Low Similarity Matches:</strong> Should not match sentences with < 80% similarity</li>
+            <li><strong>No Content Change:</strong> Should not show "applied" but no actual change</li>
+            <li><strong>Fallback Notifications:</strong> Should not show green notification if exact match found</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🎯 Precise Matching Fix Test Page Loaded');
+        console.log('Key improvements:');
+        console.log('1. Exact text matching with HTML tags stripped');
+        console.log('2. High similarity thresholds (80%+ for normal, 90%+ for fallback)');
+        console.log('3. Content validation to ensure changes are made');
+        console.log('4. Detailed similarity scoring and debugging');
+    </script>
+</body>
+</html>

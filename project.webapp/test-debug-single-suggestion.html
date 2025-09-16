@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Single Suggestion Application</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Single Suggestion Application</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Current Issue</h2>
+        <p>When applying a single sentence replacement suggestion, the improved page shows mixed content with keywords and concatenated text instead of just replacing the sentence.</p>
+        <p><strong>Mixed content example:</strong></p>
+        <pre>"Search for: ProductsMigrateContent MigrationGoogle Workspace MigrationMicrosoft 365 MigrationOther MigrationsChat MigrationMeta Workplace to Google Chat MigrationSlack To Teams MigrationSlack to Google Chat MigrationMicrosoft Teams to Google Chat Migration Tenant to Tenant MigrationGoogle Workspace Tenant MigrationMicrosoft 365 Tenant MigrationSharePoint Tenant MigrationMicrosoft Teams Tenant MigrationEmail MigrationGmail MigrationOutlook MigrationManageSaaS Management PlatformNewUser Onboarding & OffboardingShadow ITLicense ManagementEnterpriseCustomer StoriesPricingResourcesBlogWhite PapersCase StudiesUse CasesFREE TRIAL..."</pre>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Debug Steps Added</h2>
+        <h3>1. Critical Error Checks:</h3>
+        <ul>
+            <li><strong>Analysis Object Check:</strong> Detects if entire analysis object is passed instead of single suggestion</li>
+            <li><strong>Suggestions Array Check:</strong> Detects if suggestion contains nested suggestions array</li>
+            <li><strong>Mixed Content Check:</strong> Detects if suggestion contains "Search for:" keywords</li>
+            <li><strong>Length Check:</strong> Warns if enhancedContent is unusually long</li>
+        </ul>
+
+        <h3>2. Enhanced Logging:</h3>
+        <ul>
+            <li><strong>Before Application:</strong> Shows suggestion data before processing</li>
+            <li><strong>During Processing:</strong> Shows each step of the application process</li>
+            <li><strong>After Application:</strong> Shows result and content changes</li>
+        </ul>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on a sentence replacement suggestion</li>
+            <li>Look for the debug messages in the console</li>
+            <li>Check if any critical errors are detected</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 What to Look For in Console</h2>
+        <h3>✅ Normal Flow (Should See):</h3>
+        <pre>
+[Frontend] Applying single suggestion: {
+  type: "sentence_replacement",
+  currentContent: "Original sentence...",
+  enhancedContent: "Improved sentence...",
+  totalSuggestionsInAnalysis: 3
+}
+
+[Apply Suggestions] Starting to apply suggestions: {
+  suggestionsCount: 1,
+  suggestions: [
+    {
+      type: "sentence_replacement",
+      enhancedContentPreview: "Improved sentence..."
+    }
+  ]
+}
+        </pre>
+
+        <h3>❌ Error Cases (Should NOT See):</h3>
+        <pre>
+[Frontend] CRITICAL ERROR: The entire analysis object was passed instead of a single suggestion!
+[Frontend] CRITICAL ERROR: Suggestion contains suggestions array - this is the analysis object!
+[Frontend] WARNING: Suggestion contains mixed content with keywords: Search for: ProductsMigrateContent...
+[Frontend] WARNING: Suggestion enhancedContent is very long, might contain multiple content blocks: 1500 characters
+        </pre>
+    </div>
+
+    <div class="test-section error">
+        <h2>🚨 Possible Root Causes</h2>
+        <ol>
+            <li><strong>Wrong Suggestion Data:</strong> The suggestion being passed might be the entire analysis object instead of a single suggestion</li>
+            <li><strong>Multiple Suggestions:</strong> The suggestion might contain multiple suggestions in a nested array</li>
+            <li><strong>Corrupted Data:</strong> The suggestion data might be corrupted with mixed content</li>
+            <li><strong>Backend Issue:</strong> The backend might be generating suggestions with mixed content</li>
+        </ol>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Next Steps</h2>
+        <ol>
+            <li><strong>Run the test</strong> and check console for debug messages</li>
+            <li><strong>Identify the root cause</strong> based on the error messages</li>
+            <li><strong>Fix the issue</strong> based on what's detected</li>
+            <li><strong>Verify the fix</strong> by applying a single suggestion again</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Fix</h2>
+        <p>After identifying and fixing the root cause, you should see:</p>
+        <ul>
+            <li>✅ Only the selected sentence is replaced</li>
+            <li>✅ No mixed content with keywords</li>
+            <li>✅ Clean, readable content in the improved page</li>
+            <li>✅ Console shows only one suggestion being processed</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔍 Debug Single Suggestion Application Test Page Loaded');
+        console.log('Debug checks added:');
+        console.log('1. Analysis object detection');
+        console.log('2. Suggestions array detection');
+        console.log('3. Mixed content detection');
+        console.log('4. Enhanced logging throughout the process');
+        console.log('5. Critical error prevention');
+    </script>
+</body>
+</html>

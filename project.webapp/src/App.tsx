@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, BarChart3, FileText, History as HistoryIcon, DollarSign, Zap, Menu, X, Target, Globe, Plus, Loader2, RefreshCw, LogOut, Eye, Settings } from 'lucide-react';
+import { User, BarChart3, FileText, History as HistoryIcon, DollarSign, Zap, Menu, X, Target, Globe, Plus, Loader2, RefreshCw, LogOut, Eye, Settings, ShoppingCart } from 'lucide-react';
 import { ContentInput } from './components/ContentInput';
 import { historyService } from './services/historyService';
 import { Statistics } from './components/Statistics';
@@ -29,7 +29,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocat
 import { Overview } from './components/Overview.tsx';
 import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
 import EmailVerification from './components/EmailVerification';
-import { CompetitorInsight } from './components/AIVisibilityAnalysis';
 
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
 // Content structure pages disabled
@@ -38,6 +37,8 @@ import { ContentStructureLanding } from './components/ContentStructureLanding';
 import SignUp from './components/SignUp';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
+import { Configuration } from './components/Configuration';
+import { EcommerceAIVisibility } from './components/EcommerceAIVisibility';
 import NotificationTest from './components/ui/NotificationTest';
 import { FAQContentAnalyzer } from './components/FAQContentAnalyzer';
 
@@ -54,6 +55,8 @@ const NAV_ITEMS = [
       { label: 'Content Enhancement', icon: <FileText />, path: '/enhance-content' },
   // { label: 'Content Analysis', icon: <BarChart3 />, path: '/content-analysis' },
   { label: 'Structure Analysis', icon: <Target />, path: '/content-structure-analysis' },
+    { label: 'E-commerce AI', icon: <ShoppingCart />, path: '/ecommerce-ai-visibility' },
+    { label: 'Settings', icon: <Settings />, path: '/configuration' },
   // { label: 'Smart Competitor Analysis', icon: <BarChart3 />, path: '/smart-competitor-analysis' },
   { label: 'History', icon: <HistoryIcon />, path: '/history' },
   { label: 'Statistics', icon: <BarChart3 />, path: '/statistics' },
@@ -370,7 +373,7 @@ function AppContent() {
           <div className="main-content-container">
             <Routes>
               <Route path="/overview" element={<Overview />} />
-              <Route path="/ai-visibility-analysis" element={<CompetitorInsight />} />
+              <Route path="/ai-visibility-analysis" element={<CompetitorBenchmarking competitorDomains={competitorDomains} />} />
               <Route path="/qa-generation" element={<QAGenerationPage />} />
               <Route path="/enhance-content" element={<QAGenerationPage />} />
               {/* Content Analysis disabled */}
@@ -378,6 +381,19 @@ function AppContent() {
       
               {/* <Route path="/smart-competitor-analysis" element={<SmartCompetitorAnalysis />} /> */}
               <Route path="/content-structure-analysis" element={<ContentStructureAnalysisRoute />} />
+              <Route path="/ecommerce-ai-visibility" element={<EcommerceAIVisibility storeId="default" />} />
+              <Route path="/configuration" element={<Configuration 
+                questionProvider={"gemini"}
+                questionModel={"gemini-1.5-flash"}
+                onQuestionProviderChange={() => {}}
+                onQuestionModelChange={() => {}}
+                answerProvider={"gemini"}
+                answerModel={"gemini-1.5-flash"}
+                onAnswerProviderChange={() => {}}
+                onAnswerModelChange={() => {}}
+                questionCount={5}
+                onQuestionCountChange={() => {}}
+              />} />
               {/* <Route path="/content-structure-landing" element={<ContentStructureLanding />} /> */}
               <Route path="/history" element={<History qaItems={sessions.flatMap(s => s.qaData)} onExport={downloadFile} />} />
               <Route path="/statistics" element={<Statistics sessions={sessions} currentSession={currentSession} />} />

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix isApplying State Issue</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix isApplying State Issue</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Root Cause Identified</h2>
+        <p><strong>Problem:</strong> The `isApplying` state was not being set in `applySingleSuggestion`, causing the useEffect to run and call `applySuggestionsWithDOM` with all 8 suggestions.</p>
+        <p><strong>Evidence:</strong> The call stack shows that `comparePages` is being called, which means the useEffect is not being prevented from running.</p>
+        <p><strong>Root Cause:</strong> Missing `setIsApplying(true)` and `setIsApplying(false)` calls in `applySingleSuggestion` function.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Fixes Applied</h2>
+        <h3>1. Added isApplying State Management:</h3>
+        <pre>
+const applySingleSuggestion = async (suggestion: any) => {
+  // CRITICAL: Set isApplying to true to prevent useEffect from running
+  setIsApplying(true);
+  
+  // ... validation checks ...
+  
+  try {
+    // ... apply suggestion logic ...
+  } catch (error) {
+    // ... error handling ...
+  } finally {
+    // CRITICAL: Always reset isApplying to false
+    setIsApplying(false);
+  }
+};
+        </pre>
+
+        <h3>2. Added Event Propagation Prevention:</h3>
+        <pre>
+<button
+  onClick={(e) => {
+    e.stopPropagation(); // Prevent event propagation
+    e.preventDefault(); // Prevent default behavior
+    // ... apply suggestion logic ...
+  }}
+>
+  Apply This Suggestion
+</button>
+        </pre>
+
+        <h3.3. Added isApplying to All Return Statements:</h3>
+        <pre>
+if (!analysis) {
+  console.log('[Frontend] No analysis object, returning');
+  setIsApplying(false);
+  return;
+}
+
+if (suggestion === analysis) {
+  // ... error handling ...
+  setIsApplying(false);
+  return;
+}
+
+// ... all other return statements ...
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Check console for the correct flow</li>
+            <li>Verify that only one suggestion is processed</li>
+            <li>Check that compare pages works correctly</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        <h3>✅ Correct Behavior (Should See):</h3>
+        <pre>
+[Frontend] ===== BUTTON CLICKED =====
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Frontend] ===== USEEFFECT TRIGGERED =====
+[Frontend] ===== USEEFFECT SKIPPED - APPLYING SINGLE SUGGESTION =====
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] Arguments received: { suggestionsCount: 1, ... }
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Apply Suggestions] Applied sentence_replacement with high-similarity aggressive matching
+        </pre>
+
+        <h3>❌ Problem Cases (Should NOT See):</h3>
+        <pre>
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+[Apply Suggestions] Number of suggestions: 8
+[Apply Suggestions] CRITICAL ERROR: This function is being called from useEffect or comparePages!
+[Frontend] ===== USEEFFECT APPLYING ALL SUGGESTIONS =====
+[Apply Suggestions] Processing suggestion 4/8: Object
+[Apply Suggestions] Processing suggestion 5/8: Object
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Results</h2>
+        <ul>
+            <li>✅ useEffect is skipped when applying single suggestion</li>
+            <li>✅ Only one suggestion is processed</li>
+            <li>✅ No console spam from similarity checks</li>
+            <li>✅ Compare pages shows the correct changes</li>
+            <li>✅ Single suggestion is applied correctly</li>
+            <li>✅ No multiple suggestions are processed</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Fix isApplying State Issue Test Page Loaded');
+        console.log('Fixes applied:');
+        console.log('1. Added setIsApplying(true) at start of applySingleSuggestion');
+        console.log('2. Added setIsApplying(false) to all return statements');
+        console.log('3. Added finally block to ensure isApplying is always reset');
+        console.log('4. Added event propagation prevention to button click');
+        console.log('5. This should prevent useEffect from running during single suggestion application');
+    </script>
+</body>
+</html>

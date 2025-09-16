@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Comprehensive Debug Test</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Current Issue</h2>
+        <p><strong>Problem:</strong> Even after applying one suggestion, all suggestions are still being processed, causing mixed content.</p>
+        <p><strong>Evidence:</strong> Console shows repeated "Checking sentence similarity" calls and processing of multiple suggestions.</p>
+        <p><strong>Root Cause:</strong> Multiple functions are calling `applySuggestionsWithDOM` with all suggestions instead of just one.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Comprehensive Debugging Added</h2>
+        <h3>1. Function Call Tracking:</h3>
+        <ul>
+            <li><strong>applySingleSuggestion:</strong> Logs when called and what data is received</li>
+            <li><strong>applySuggestionsWithDOM:</strong> Logs call stack and arguments received</li>
+            <li><strong>comparePages:</strong> Logs when called and why</li>
+            <li><strong>useEffect:</strong> Logs when triggered and what conditions are met</li>
+        </ul>
+
+        <h3>2. Data Flow Tracking:</h3>
+        <ul>
+            <li><strong>Button Click:</strong> Shows exactly what suggestion data is passed</li>
+            <li><strong>Function Arguments:</strong> Shows what arguments are passed to each function</li>
+            <li><strong>Call Stack:</strong> Shows what function called `applySuggestionsWithDOM`</li>
+            <li><strong>State Changes:</strong> Shows when and why state changes trigger other functions</li>
+        </ul>
+
+        <h3>3. Critical Error Detection:</h3>
+        <ul>
+            <li><strong>Multiple Suggestions:</strong> Detects when multiple suggestions are received</li>
+            <li><strong>Wrong Data Structure:</strong> Detects when wrong data is passed</li>
+            <li><strong>Function Override:</strong> Detects when functions override each other</li>
+        </ul>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Watch the console for debug messages</li>
+            <li>Look for the sequence of function calls</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        <h3>✅ Correct Behavior (Should See):</h3>
+        <pre>
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Frontend] Suggestion received: { type: "sentence_replacement", ... }
+[Frontend] ===== CALLING applySuggestionsWithDOM WITH SINGLE SUGGESTION =====
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] ===== STARTING TO APPLY SUGGESTIONS =====
+[Apply Suggestions] Arguments received: { suggestionsCount: 1, ... }
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Frontend] ===== applySuggestionsWithDOM RETURNED =====
+        </pre>
+
+        <h3>❌ Problem Cases (Should NOT See):</h3>
+        <pre>
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+[Apply Suggestions] Number of suggestions: 8
+[Frontend] ===== USEEFFECT APPLYING ALL SUGGESTIONS =====
+[Frontend] ===== COMPARE PAGES CALLED =====
+[Apply Suggestions] Processing suggestion 4/8: Object
+[Apply Suggestions] Processing suggestion 5/8: Object
+        </pre>
+    </div>
+
+    <div class="test-section error">
+        <h2>🚨 Possible Root Causes</h2>
+        <ol>
+            <li><strong>useEffect Override:</strong> The useEffect is being triggered and applying all suggestions</li>
+            <li><strong>comparePages Call:</strong> The comparePages function is being called automatically</li>
+            <li><strong>State Management:</strong> State changes are triggering multiple functions</li>
+            <li><strong>Data Structure:</strong> The suggestion data contains multiple suggestions</li>
+            <li><strong>Function Chain:</strong> One function is calling another that applies all suggestions</li>
+        </ol>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Debug Information to Look For</h2>
+        <h3>1. Function Call Sequence:</h3>
+        <p>Look for the order of function calls in the console. The correct sequence should be:</p>
+        <ol>
+            <li>Button clicked with suggestion data</li>
+            <li>applySingleSuggestion called</li>
+            <li>applySuggestionsWithDOM called with single suggestion</li>
+            <li>Only one suggestion processed</li>
+        </ol>
+
+        <h3>2. Call Stack Information:</h3>
+        <p>The call stack will show exactly what function called `applySuggestionsWithDOM`. Look for:</p>
+        <ul>
+            <li>If it's called from `applySingleSuggestion` (correct)</li>
+            <li>If it's called from `useEffect` (problematic)</li>
+            <li>If it's called from `comparePages` (problematic)</li>
+        </ul>
+
+        <h3>3. State Change Triggers:</h3>
+        <p>Look for useEffect triggers that might be causing the issue:</p>
+        <ul>
+            <li>When `codeViewType` changes</li>
+            <li>When `improvedFullPageHtml` changes</li>
+            <li>When `analysis` changes</li>
+        </ul>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Fix</h2>
+        <p>After identifying the root cause, the fix should ensure:</p>
+        <ul>
+            <li>✅ Only one suggestion is processed when clicking "Apply This Suggestion"</li>
+            <li>✅ No other functions override the single suggestion application</li>
+            <li>✅ Clean sentence replacement without mixed content</li>
+            <li>✅ Console shows correct function call sequence</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔍 Comprehensive Debug Test Page Loaded');
+        console.log('Debug features added:');
+        console.log('1. Function call tracking');
+        console.log('2. Data flow tracking');
+        console.log('3. Call stack analysis');
+        console.log('4. State change monitoring');
+        console.log('5. Critical error detection');
+    </script>
+</body>
+</html>

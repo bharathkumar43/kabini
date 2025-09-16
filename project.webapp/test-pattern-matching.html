@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pattern Matching Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Pattern Matching Fix Test</h1>
+    
+    <div class="test-section success">
+        <h2>✅ Fixes Applied</h2>
+        <ul>
+            <li><strong>Detailed Debugging:</strong> Added comprehensive logging to see exact patterns and content</li>
+            <li><strong>Multiple Fallback Strategies:</strong> Case-insensitive, partial, and whitespace-normalized matching</li>
+            <li><strong>Similar Sentence Matching:</strong> Finds and replaces similar sentences even when exact patterns fail</li>
+            <li><strong>Aggressive Fallback:</strong> Tries multiple approaches to apply suggestions</li>
+            <li><strong>Better Error Handling:</strong> More detailed error messages and debugging information</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Enter a website URL and run content structure analysis</li>
+            <li>Wait for suggestions to be generated</li>
+            <li>Click "Apply Suggestion" on the sentence_replacement suggestion</li>
+            <li>Check the browser console for detailed debugging information</li>
+            <li>Check the "Improved Content" tab for actual changes</li>
+            <li>Click "Compare Pages" to see the differences</li>
+        </ol>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🔍 What to Look For in Console</h2>
+        <p>You should now see much more detailed logging:</p>
+        <pre>
+[Apply Suggestions] Applying sentence_replacement: {
+  find: "Even small errors can lead to...",
+  replace: "Minor errors during migration can result in...",
+  found: false,
+  fullFind: "Even small errors can lead to compliance risks, data integrity issues, downtime, and productivity loss for thousands of users.",
+  fullReplace: "Minor errors during migration can result in compliance violations, data corruption, service outages impacting thousands of users, and substantial productivity losses, potentially costing the company significant revenue and time.",
+  htmlPreview: "<!DOCTYPE html>..."
+}
+
+[Apply Suggestions] Alternative pattern details: {
+  altFind: "Even small errors can lead to...",
+  altReplace: "Minor errors during migration can result in...",
+  found: false,
+  fullAltFind: "Even small errors can lead to compliance risks, data integrity issues, downtime, and productivity loss for thousands of users."
+}
+
+[Apply Suggestions] Found similar sentence, trying replacement: {
+  matchingSentence: "Even small errors can lead to compliance risks...",
+  altReplace: "Minor errors during migration can result in..."
+}
+
+[Apply Suggestions] Successfully applied sentence_replacement with similar sentence matching
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Key Improvements Made</h2>
+        <h3>Pattern Matching:</h3>
+        <ul>
+            <li>Case-insensitive matching</li>
+            <li>Partial pattern matching for longer content</li>
+            <li>Whitespace-normalized matching</li>
+            <li>Similar sentence detection and replacement</li>
+        </ul>
+        
+        <h3>Fallback Strategies:</h3>
+        <ul>
+            <li>Multiple attempts with different approaches</li>
+            <li>Aggressive fallback that tries to apply any suggestion</li>
+            <li>Better error handling and debugging</li>
+            <li>Comprehensive logging for troubleshooting</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Expected Results</h2>
+        <ul>
+            <li><strong>Actual Content Changes:</strong> You should see the sentence actually replaced in the improved content</li>
+            <li><strong>Real Differences:</strong> Compare pages should show actual content differences</li>
+            <li><strong>Success Messages:</strong> Console should show "Successfully applied sentence_replacement with similar sentence matching"</li>
+            <li><strong>No Fallback Notifications:</strong> Should not see the green "AI Improvements Applied" box if suggestions are applied successfully</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Pattern Matching Fix Test Page Loaded');
+        console.log('Key improvements:');
+        console.log('1. Detailed debugging with full pattern and content visibility');
+        console.log('2. Multiple fallback strategies for pattern matching');
+        console.log('3. Similar sentence detection and replacement');
+        console.log('4. Aggressive fallback that ensures suggestions are applied');
+    </script>
+</body>
+</html>

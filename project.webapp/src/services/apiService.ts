@@ -788,6 +788,75 @@ class ApiService {
   // Webflow disabled
   // async publishToWebflow(...) {}
 
+  // ===================== Store Integrations (Read-only) =====================
+  async storeConnect(params: { platform: 'shopify' | 'woocommerce' | 'magento'; credentials: any }) {
+    return this.request('/store/connect', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+  async storeTest(params: { platform: 'shopify' | 'woocommerce' | 'magento'; credentials: any }) {
+    return this.request('/store/test', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+  async storeListProducts(params?: { page?: number; limit?: number }) {
+    const search = new URLSearchParams();
+    if (params?.page) search.append('page', String(params.page));
+    if (params?.limit) search.append('limit', String(params.limit));
+    const qs = search.toString() ? `?${search.toString()}` : '';
+    return this.request(`/store/products${qs}`, { method: 'GET' });
+  }
+  async storeFetchProductHtml(idOrUrl: string) {
+    const qs = `?idOrUrl=${encodeURIComponent(idOrUrl)}`;
+    return this.request(`/store/product-html${qs}`, { method: 'GET' });
+  }
+
+  // E-commerce AI Visibility Methods
+  async getShopperBehaviorData(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/shopper-behavior${qs}`, { method: 'GET' });
+  }
+
+  async getCartAbandonmentAnalysis(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/cart-abandonment${qs}`, { method: 'GET' });
+  }
+
+  async getQueryIntentAnalysis(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/query-intent${qs}`, { method: 'GET' });
+  }
+
+  async getEngagementFunnel(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/engagement-funnel${qs}`, { method: 'GET' });
+  }
+
+  async getRealTimeMetrics(storeId: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}`;
+    return this.request(`/ecommerce/real-time-metrics${qs}`, { method: 'GET' });
+  }
+
+  async getAIInsights(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/ai-insights${qs}`, { method: 'GET' });
+  }
+
+  // E-commerce Content Generation
+  async generateEcommerceContent(data: {
+    type: 'product' | 'category' | 'faq';
+    inputs: any;
+    provider: string;
+    model: string;
+  }) {
+    return this.request('/ecommerce/generate-content', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
   // Webflow OAuth helpers
   // getWebflowAuthUrl(): string { return ''; }
 

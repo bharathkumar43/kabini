@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Immediate Suggestion Display</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Test Immediate Suggestion Display</h1>
+    
+    <div class="test-section error">
+        <h2>❌ User Requirement</h2>
+        <p><strong>Requirement:</strong> When clicking "Apply This Suggestion" button, the suggestion must be applied and visible immediately in the landing page preview, without needing to click "Compare Pages".</p>
+        <p><strong>Current Issue:</strong> Changes are not visible immediately after applying a single suggestion.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Fixes Applied</h2>
+        
+        <h3>1. Updated Landing Page Preview to Use Improved Content ✅</h3>
+        <pre>
+{codeViewType === 'landing' ? (
+  <div className="bg-gray-50 rounded-lg p-2 w-full">
+    <LandingPreviewFrame 
+      key={`landing-${improvedFullPageHtml?.length || 0}-${Date.now()}`}
+      html={improvedFullPageHtml || analysis.structuredContent} 
+    />
+  </div>
+) : (
+  // ... other views
+)}
+        </pre>
+
+        <h3>2. Added Key Prop for Force Re-render ✅</h3>
+        <pre>
+<LandingPreviewFrame 
+  key={`landing-${improvedFullPageHtml?.length || 0}-${Date.now()}`}
+  html={improvedFullPageHtml || analysis.structuredContent} 
+/>
+        </pre>
+
+        <h3>3. Enhanced Debugging in LandingPreviewFrame ✅</h3>
+        <pre>
+const LandingPreviewFrame = ({ html }: { html: string }) => {
+  console.log('[LandingPreviewFrame] Rendering with HTML:', {
+    htmlLength: html?.length || 0,
+    htmlPreview: html?.substring(0, 200) + '...',
+    hasHtml: !!html
+  });
+  
+  const srcDoc = React.useMemo(() => {
+    console.log('[LandingPreviewFrame] Processing HTML for iframe:', {
+      originalLength: fullHtml.length,
+      hasDoctype: fullHtml.includes('<!DOCTYPE html>'),
+      hasHtmlTag: fullHtml.includes('<html')
+    });
+    // ... rest of processing
+  }, [html]);
+  // ... rest of component
+};
+        </pre>
+
+        <h3>4. Enhanced Debugging in applySingleSuggestion ✅</h3>
+        <pre>
+// Switch to landing tab to show the updated content
+setCodeViewType('landing');
+console.log('[Content Analysis] Switched to landing tab to show updated content');
+console.log('[Content Analysis] Landing preview will show improved content:', {
+  improvedFullPageHtmlLength: improvedCode.length,
+  improvedFullPageHtmlPreview: improvedCode.substring(0, 200) + '...',
+  codeViewType: 'landing'
+});
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Check console for debug messages</li>
+            <li>Verify that the landing page preview shows the changes immediately</li>
+            <li>Verify that you don't need to click "Compare Pages" to see the changes</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        
+        <h3>✅ After Clicking "Apply This Suggestion":</h3>
+        <pre>
+[Frontend] ===== BUTTON CLICKED =====
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Apply Suggestions] Applied sentence_replacement successfully
+[Frontend] Setting improvedFullPageHtml with single suggestion result
+[Content Analysis] Updating analysis with improved content
+[Content Analysis] Switched to landing tab to show updated content
+[Content Analysis] Landing preview will show improved content: Object
+[LandingPreviewFrame] Rendering with HTML: Object
+[LandingPreviewFrame] Processing HTML for iframe: Object
+[Frontend] Suggestion Applied Successfully!
+        </pre>
+
+        <h3>✅ Landing Page Preview Should Show:</h3>
+        <ul>
+            <li>✅ The applied suggestion changes immediately</li>
+            <li>✅ Updated text content</li>
+            <li>✅ Improved styling (if applicable)</li>
+            <li>✅ No need to click "Compare Pages"</li>
+        </ul>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Results</h2>
+        <ul>
+            <li>✅ Single suggestion is applied immediately when clicking "Apply This Suggestion"</li>
+            <li>✅ Changes are visible in the landing page preview right away</li>
+            <li>✅ No need to click "Compare Pages" to see the changes</li>
+            <li>✅ Landing page preview updates automatically</li>
+            <li>✅ Console shows proper debugging information</li>
+            <li>✅ User gets immediate visual feedback</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Key Changes Made</h2>
+        <ul>
+            <li><strong>Landing Preview Content:</strong> Now uses `improvedFullPageHtml` instead of `analysis.structuredContent`</li>
+            <li><strong>Force Re-render:</strong> Added key prop to force LandingPreviewFrame to re-render</li>
+            <li><strong>Enhanced Debugging:</strong> Added comprehensive logging to track content flow</li>
+            <li><strong>Immediate Display:</strong> Changes are visible immediately after applying suggestion</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🎯 Test Immediate Suggestion Display Page Loaded');
+        console.log('Key fixes applied:');
+        console.log('1. Landing page preview now uses improvedFullPageHtml');
+        console.log('2. Added key prop to force re-render');
+        console.log('3. Enhanced debugging to track content flow');
+        console.log('4. Changes should be visible immediately after applying suggestion');
+        console.log('This should make suggestions visible immediately without needing Compare Pages!');
+    </script>
+</body>
+</html>

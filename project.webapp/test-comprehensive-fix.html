@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Fix for Single Suggestion Application</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Comprehensive Fix for Single Suggestion Application</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Root Cause Analysis</h2>
+        <p><strong>Problem:</strong> When clicking "Apply This Suggestion", `comparePages` is being called twice:</p>
+        <ol>
+            <li><strong>First call:</strong> `preventAutoCompare` flag is `true` - blocked ✅</li>
+            <li><strong>Second call:</strong> `preventAutoCompare` flag is `false` - proceeds and calls `applySuggestionsWithDOM` with all 8 suggestions ❌</li>
+        </ol>
+        <p><strong>Evidence:</strong> Console logs show both calls coming from the same button click at line 2854.</p>
+        <p><strong>Root Cause:</strong> Event propagation or rapid double-clicking causing `comparePages` to be called twice.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Comprehensive Fixes Applied</h2>
+        
+        <h3>1. Enhanced preventAutoCompare Flag Management ✅</h3>
+        <pre>
+// Don't reset the flag immediately - let it persist
+if (preventAutoCompare) {
+  console.log('[Frontend] ===== COMPARE PAGES BLOCKED - AUTO COMPARE PREVENTED =====');
+  // Don't reset the flag here - let it be reset only after single suggestion is complete
+  return;
+}
+        </pre>
+
+        <h3>2. Timeout-Based Flag Reset ✅</h3>
+        <pre>
+// CRITICAL: Reset the flag after a delay to allow manual comparePages calls
+setTimeout(() => {
+  setPreventAutoCompare(false);
+  console.log('[Frontend] ===== PREVENT AUTO COMPARE FLAG RESET =====');
+}, 2000); // 2 second delay
+        </pre>
+
+        <h3>3. Enhanced Event Handling ✅</h3>
+        <pre>
+// CRITICAL: Prevent double clicks
+if (event) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+        </pre>
+
+        <h3>4. Debounce Mechanism ✅</h3>
+        <pre>
+// CRITICAL: Debounce rapid successive calls
+const now = Date.now();
+if (now - lastComparePagesCall < 1000) { // 1 second debounce
+  console.log('[Frontend] ===== COMPARE PAGES DEBOUNCED - TOO SOON =====');
+  return;
+}
+setLastComparePagesCall(now);
+        </pre>
+
+        <h3>5. Apply This Suggestion Button Protection ✅</h3>
+        <pre>
+<button
+  onClick={(e) => {
+    e.stopPropagation(); // Prevent event propagation
+    e.preventDefault(); // Prevent default behavior
+    // ... rest of onClick logic ...
+    applySingleSuggestion(suggestion);
+  }}
+>
+  Apply This Suggestion
+</button>
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Check console for debug messages</li>
+            <li>Verify that comparePages is NOT called automatically</li>
+            <li>Wait 2 seconds, then manually click "Compare Pages" button</li>
+            <li>Verify that compare pages works correctly</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        
+        <h3>✅ After Clicking "Apply This Suggestion":</h3>
+        <pre>
+[Frontend] ===== BUTTON CLICKED =====
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Apply Suggestions] Applied sentence_replacement successfully
+[Frontend] Setting improvedFullPageHtml with single suggestion result
+[Frontend] Suggestion Applied Successfully!
+[Frontend] ===== PREVENT AUTO COMPARE FLAG RESET =====
+        </pre>
+
+        <h3>✅ If comparePages is called (should be blocked):</h3>
+        <pre>
+[Frontend] ===== COMPARE PAGES CALLED =====
+[Frontend] ===== COMPARE PAGES DEBUG INFO =====
+[Frontend] Prevent auto compare flag: true
+[Frontend] ===== COMPARE PAGES BLOCKED - AUTO COMPARE PREVENTED =====
+        </pre>
+
+        <h3>✅ After Manual Click on "Compare Pages" (after 2 seconds):</h3>
+        <pre>
+[Frontend] ===== COMPARE PAGES CALLED =====
+[Frontend] ===== COMPARE PAGES DEBUG INFO =====
+[Frontend] Prevent auto compare flag: false
+[Compare Pages] Using existing improved HTML, skipping applySuggestionsWithDOM call
+        </pre>
+
+        <h3>❌ Should NOT See:</h3>
+        <pre>
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+[Apply Suggestions] Number of suggestions: 8
+[Apply Suggestions] CRITICAL ERROR: This function is being called from useEffect or comparePages!
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Results</h2>
+        <ul>
+            <li>✅ Single suggestion is applied correctly without being overridden</li>
+            <li>✅ comparePages is NOT called automatically after single suggestion</li>
+            <li>✅ Manual click on "Compare Pages" button works correctly after 2 seconds</li>
+            <li>✅ No console spam from multiple suggestions</li>
+            <li>✅ Improved content shows only the single applied suggestion</li>
+            <li>✅ Compare pages shows the correct differences</li>
+            <li>✅ Debounce prevents rapid double-clicks</li>
+            <li>✅ Event propagation is properly handled</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Debug Information</h2>
+        <p><strong>Key Changes Made:</strong></p>
+        <ul>
+            <li>Enhanced `preventAutoCompare` flag management</li>
+            <li>Added timeout-based flag reset (2 seconds)</li>
+            <li>Added debounce mechanism (1 second)</li>
+            <li>Enhanced event handling with preventDefault and stopPropagation</li>
+            <li>Added comprehensive debugging logs</li>
+        </ul>
+        
+        <p><strong>State Variables Added:</strong></p>
+        <ul>
+            <li><code>preventAutoCompare</code> - Prevents automatic comparePages calls</li>
+            <li><code>lastComparePagesCall</code> - Tracks last comparePages call for debouncing</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Comprehensive Fix for Single Suggestion Application Test Page Loaded');
+        console.log('Fixes applied:');
+        console.log('1. Enhanced preventAutoCompare flag management');
+        console.log('2. Timeout-based flag reset (2 seconds)');
+        console.log('3. Debounce mechanism (1 second)');
+        console.log('4. Enhanced event handling');
+        console.log('5. Comprehensive debugging');
+        console.log('This should completely fix the single suggestion application issue!');
+    </script>
+</body>
+</html>

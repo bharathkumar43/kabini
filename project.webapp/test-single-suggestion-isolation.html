@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Suggestion Isolation Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Single Suggestion Isolation Fix Test</h1>
+    
+    <div class="test-section success">
+        <h2>✅ Root Cause Identified and Fixed</h2>
+        <ul>
+            <li><strong>useEffect Override:</strong> Fixed useEffect that was applying all suggestions when codeViewType changed</li>
+            <li><strong>State Protection:</strong> Added check to prevent overriding single suggestion applications</li>
+            <li><strong>Isolation:</strong> Single suggestion application is now completely isolated</li>
+            <li><strong>Debug Logging:</strong> Added detailed logging to track suggestion application flow</li>
+        </ul>
+    </div>
+
+    <div class="test-section error">
+        <h2>❌ Previous Issues</h2>
+        <ul>
+            <li><strong>useEffect Override:</strong> When applying single suggestion, useEffect was triggered and applied ALL suggestions</li>
+            <li><strong>State Conflict:</strong> Single suggestion result was being overwritten by all suggestions</li>
+            <li><strong>Content Corruption:</strong> Mixed text from multiple suggestions appeared in the result</li>
+            <li><strong>No Isolation:</strong> Single suggestion application wasn't isolated from other functions</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Fixes Applied</h2>
+        <h3>1. Fixed useEffect Override Issue:</h3>
+        <pre>
+// BEFORE (PROBLEMATIC):
+useEffect(() => {
+  if (codeViewType === 'improved' && fullPageHtml && analysis && analysis.suggestions.length > 0) {
+    const improved = applySuggestionsWithDOM(fullPageHtml, analysis.suggestions, { highlight: true });
+    setImprovedFullPageHtml(improved); // This was overriding single suggestion results!
+  }
+}, [codeViewType, fullPageHtml, analysis]);
+
+// AFTER (FIXED):
+useEffect(() => {
+  if (codeViewType === 'improved' && fullPageHtml && analysis && analysis.suggestions.length > 0) {
+    // Only generate improved code if we don't already have improved content
+    // This prevents overriding single suggestion applications
+    if (!improvedFullPageHtml || improvedFullPageHtml === fullPageHtml) {
+      const improved = applySuggestionsWithDOM(fullPageHtml, analysis.suggestions, { highlight: true });
+      setImprovedFullPageHtml(improved);
+    }
+  }
+}, [codeViewType, fullPageHtml, analysis, improvedFullPageHtml]);
+        </pre>
+
+        <h3>2. Added State Protection:</h3>
+        <pre>
+// Added check to prevent overriding single suggestion applications
+if (!improvedFullPageHtml || improvedFullPageHtml === fullPageHtml) {
+  // Only apply all suggestions if no single suggestion has been applied
+}
+        </pre>
+
+        <h3>3. Enhanced Debug Logging:</h3>
+        <pre>
+console.log('[Frontend] Setting improvedFullPageHtml with single suggestion result:', {
+  improvedCodeLength: improvedCode.length,
+  improvedCodePreview: improvedCode.substring(0, 200) + '...',
+  suggestionType: suggestion.type
+});
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Apply a single sentence replacement suggestion</li>
+            <li>Verify that only the selected suggestion is applied</li>
+            <li>Check that the content is not corrupted with mixed text</li>
+            <li>Verify that other suggestions are not applied</li>
+            <li>Check console logs to confirm single suggestion flow</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Behavior</h2>
+        <h3>When Applying Single Suggestion:</h3>
+        <ul>
+            <li>✅ Only the selected suggestion is applied</li>
+            <li>✅ Content is clean and not corrupted</li>
+            <li>✅ No mixed text from multiple suggestions</li>
+            <li>✅ Other suggestions remain unchanged</li>
+            <li>✅ useEffect doesn't override the single suggestion result</li>
+        </ul>
+
+        <h3>Console Logs to Look For:</h3>
+        <pre>
+[Frontend] Setting improvedFullPageHtml with single suggestion result: {
+  improvedCodeLength: 12345,
+  improvedCodePreview: "Clean content without mixed text...",
+  suggestionType: "sentence_replacement"
+}
+
+[Apply Suggestions] Starting to apply suggestions: {
+  suggestionsCount: 1,  // Should be 1, not multiple
+  suggestions: [
+    {
+      type: "sentence_replacement",
+      enhancedContentPreview: "Actual enhanced content..."
+    }
+  ]
+}
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>⚠️ What Should NOT Happen</h2>
+        <ul>
+            <li>❌ Content corrupted with mixed text from multiple suggestions</li>
+            <li>❌ Large blocks of concatenated keywords and text</li>
+            <li>❌ Multiple suggestions being applied when selecting one</li>
+            <li>❌ useEffect overriding single suggestion results</li>
+            <li>❌ Console showing multiple suggestions being processed</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 Debug Information</h2>
+        <p>If you still see issues, check the console for:</p>
+        <ul>
+            <li><strong>Single Suggestion Logs:</strong> Should show only one suggestion being processed</li>
+            <li><strong>State Protection:</strong> Should show improvedFullPageHtml being set with single suggestion result</li>
+            <li><strong>No Override:</strong> Should not show useEffect applying all suggestions after single suggestion</li>
+            <li><strong>Clean Content:</strong> Should show clean content without mixed text</li>
+        </ul>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Key Improvements</h2>
+        <ul>
+            <li><strong>Complete Isolation:</strong> Single suggestion application is now completely isolated</li>
+            <li><strong>State Protection:</strong> Prevents other functions from overriding single suggestion results</li>
+            <li><strong>Clean Content:</strong> No more corrupted content with mixed text</li>
+            <li><strong>Proper Flow:</strong> Single suggestion → Clean result → No override</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🎯 Single Suggestion Isolation Fix Test Page Loaded');
+        console.log('Key fixes:');
+        console.log('1. Fixed useEffect override issue');
+        console.log('2. Added state protection for single suggestions');
+        console.log('3. Enhanced debug logging');
+        console.log('4. Ensured complete isolation of single suggestion application');
+    </script>
+</body>
+</html>

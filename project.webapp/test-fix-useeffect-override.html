@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix useEffect Override Issue</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix useEffect Override Issue</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Root Cause Identified</h2>
+        <p><strong>Problem:</strong> The call stack shows that `applySuggestionsWithDOM` is being called from `comparePages` (line 1098), not from `applySingleSuggestion`.</p>
+        <p><strong>Evidence:</strong></p>
+        <pre>
+[Apply Suggestions] Call stack: Error
+    at applySuggestionsWithDOM (http://localhost:5173/src/utils/analysis.ts:746:54)
+    at comparePages (http://localhost:5173/src/components/ContentStructureAnalysis.tsx:1098:27)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=7cb0d2de:3680:22)
+        </pre>
+        <p><strong>Root Cause:</strong> A useEffect is being triggered when you click "Apply This Suggestion", which calls `applySuggestionsWithDOM` with all 8 suggestions.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Fix Applied</h2>
+        <h3>useEffect Override Prevention:</h3>
+        <pre>
+// Generate improved code when needed
+useEffect(() => {
+  console.log('[Frontend] ===== USEEFFECT TRIGGERED =====');
+  console.log('[Frontend] useEffect conditions:', {
+    codeViewType,
+    hasFullPageHtml: !!fullPageHtml,
+    hasAnalysis: !!analysis,
+    suggestionsLength: analysis?.suggestions?.length || 0,
+    hasImprovedFullPageHtml: !!improvedFullPageHtml,
+    improvedEqualsOriginal: improvedFullPageHtml === fullPageHtml
+  });
+  
+  // CRITICAL: Don't run this useEffect if we're in the middle of applying a single suggestion
+  // This prevents the useEffect from overriding single suggestion applications
+  if (isApplying) {
+    console.log('[Frontend] ===== USEEFFECT SKIPPED - APPLYING SINGLE SUGGESTION =====');
+    return;
+  }
+  
+  if (codeViewType === 'improved' && fullPageHtml && analysis && analysis.suggestions.length > 0) {
+    // Only generate improved code if we don't already have improved content
+    // This prevents overriding single suggestion applications
+    if (!improvedFullPageHtml || improvedFullPageHtml === fullPageHtml) {
+      console.log('[Frontend] ===== USEEFFECT APPLYING ALL SUGGESTIONS =====');
+      console.log('[Frontend] This will apply ALL suggestions, not just one!');
+      setIsImprovingCode(true);
+      try {
+        const improved = applySuggestionsWithDOM(fullPageHtml, analysis.suggestions, { highlight: true });
+        setImprovedFullPageHtml(improved);
+      } catch {
+        setImprovedFullPageHtml('Failed to generate improved code.');
+      } finally {
+        setIsImprovingCode(false);
+      }
+    } else {
+      console.log('[Frontend] ===== USEEFFECT SKIPPED - ALREADY HAS IMPROVED CONTENT =====');
+    }
+  }
+}, [codeViewType, fullPageHtml, analysis, improvedFullPageHtml, isApplying]);
+        </pre>
+
+        <h3>Key Changes:</h3>
+        <ul>
+            <li><strong>isApplying Check:</strong> Added check to prevent useEffect from running when applying single suggestion</li>
+            <li><strong>Early Return:</strong> Returns early if `isApplying` is true</li>
+            <li><strong>Dependency Update:</strong> Added `isApplying` to the dependency array</li>
+            <li><strong>Debug Logging:</strong> Added logging to show when useEffect is skipped</li>
+        </ul>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Check the console for debug messages</li>
+            <li>Verify that only one suggestion is processed</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        <h3>✅ Correct Behavior (Should See):</h3>
+        <pre>
+[Frontend] ===== BUTTON CLICKED =====
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Frontend] ===== CALLING applySuggestionsWithDOM WITH SINGLE SUGGESTION =====
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] Arguments received: { suggestionsCount: 1, ... }
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Frontend] ===== USEEFFECT TRIGGERED =====
+[Frontend] ===== USEEFFECT SKIPPED - APPLYING SINGLE SUGGESTION =====
+        </pre>
+
+        <h3>❌ Problem Cases (Should NOT See):</h3>
+        <pre>
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+[Apply Suggestions] Number of suggestions: 8
+[Apply Suggestions] CRITICAL ERROR: This function is being called from useEffect or comparePages!
+[Frontend] ===== USEEFFECT APPLYING ALL SUGGESTIONS =====
+[Apply Suggestions] Processing suggestion 4/8: Object
+[Apply Suggestions] Processing suggestion 5/8: Object
+        </pre>
+    </div>
+
+    <div class="test-section error">
+        <h2>🚨 What Was Happening Before</h2>
+        <ol>
+            <li><strong>Button Click:</strong> User clicks "Apply This Suggestion"</li>
+            <li><strong>applySingleSuggestion:</strong> Function is called with single suggestion</li>
+            <li><strong>State Update:</strong> `isApplying` is set to true</li>
+            <li><strong>useEffect Triggered:</strong> State change triggers useEffect</li>
+            <li><strong>useEffect Override:</strong> useEffect calls `applySuggestionsWithDOM` with all 8 suggestions</li>
+            <li><strong>Mixed Content:</strong> All suggestions are applied, causing mixed content</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 What Should Happen Now</h2>
+        <ol>
+            <li><strong>Button Click:</strong> User clicks "Apply This Suggestion"</li>
+            <li><strong>applySingleSuggestion:</strong> Function is called with single suggestion</li>
+            <li><strong>State Update:</strong> `isApplying` is set to true</li>
+            <li><strong>useEffect Triggered:</strong> State change triggers useEffect</li>
+            <li><strong>useEffect Skipped:</strong> useEffect detects `isApplying` is true and skips execution</li>
+            <li><strong>Single Suggestion Applied:</strong> Only the selected suggestion is applied</li>
+            <li><strong>Clean Content:</strong> Clean sentence replacement without mixed content</li>
+        </ol>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Debug Information to Look For</h2>
+        <h3>1. useEffect Skipping:</h3>
+        <p>Look for: <code>[Frontend] ===== USEEFFECT SKIPPED - APPLYING SINGLE SUGGESTION =====</code></p>
+
+        <h3>2. Single Suggestion Mode:</h3>
+        <p>Look for: <code>[Apply Suggestions] Single suggestion mode: true</code></p>
+
+        <h3>3. No Multiple Suggestions:</h3>
+        <p>Should NOT see: <code>[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!</code></p>
+
+        <h3>4. No useEffect Override:</h3>
+        <p>Should NOT see: <code>[Frontend] ===== USEEFFECT APPLYING ALL SUGGESTIONS =====</code></p>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Result</h2>
+        <p>After this fix, you should see:</p>
+        <ul>
+            <li>✅ Only one suggestion is processed when clicking "Apply This Suggestion"</li>
+            <li>✅ useEffect is skipped when applying single suggestion</li>
+            <li>✅ No multiple suggestions are processed</li>
+            <li>✅ Clean sentence replacement without mixed content</li>
+            <li>✅ Console shows correct single suggestion flow</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Fix useEffect Override Issue Test Page Loaded');
+        console.log('Fix applied:');
+        console.log('1. Added isApplying check to prevent useEffect override');
+        console.log('2. Added early return when applying single suggestion');
+        console.log('3. Updated dependency array to include isApplying');
+        console.log('4. Added debug logging to show when useEffect is skipped');
+    </script>
+</body>
+</html>

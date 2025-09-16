@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Improved Suggestions Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Improved Suggestions Test</h1>
+    
+    <div class="test-section success">
+        <h2>✅ Fixes Applied</h2>
+        <ul>
+            <li><strong>Backend Pattern Generation:</strong> More specific and reliable exactReplacement patterns</li>
+            <li><strong>Frontend Pattern Matching:</strong> Multiple fallback strategies (case-insensitive, partial, whitespace-normalized)</li>
+            <li><strong>Aggressive Fallback:</strong> Tries to apply suggestions even when patterns don't match exactly</li>
+            <li><strong>Better Debugging:</strong> Comprehensive logging to track suggestion application</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Enter a website URL and run content structure analysis</li>
+            <li>Wait for suggestions to be generated</li>
+            <li>Click "Apply Suggestion" on any individual suggestion</li>
+            <li>Check the "Improved Content" tab - you should now see ACTUAL changes</li>
+            <li>Click "Compare Pages" - you should see real differences, not just notifications</li>
+        </ol>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🔍 What to Look For</h2>
+        <ul>
+            <li><strong>Actual Content Changes:</strong> Headings, paragraphs, or other content should be modified</li>
+            <li><strong>Real Differences:</strong> Compare pages should show actual content differences</li>
+            <li><strong>Console Logs:</strong> Check browser console for detailed debugging information</li>
+            <li><strong>Success Messages:</strong> Should show "Successfully applied [suggestion_type]" instead of just fallback notifications</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 Expected Console Logs</h2>
+        <p>Look for these patterns in the browser console:</p>
+        <pre>
+[Backend] Created heading suggestion: {...}
+[Backend] Created paragraph suggestion: {...}
+[Apply Suggestions] Applying heading: {...}
+[Apply Suggestions] Successfully applied heading: {...}
+[Apply Suggestions] Applied heading with case-insensitive matching
+[Apply Suggestions] Applied paragraph with aggressive fallback
+[Content Analysis] Suggestion application result: {...}
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Key Improvements Made</h2>
+        <h3>Backend (server.js):</h3>
+        <ul>
+            <li>More specific pattern matching for HTML content</li>
+            <li>Better detection of body tags and content structure</li>
+            <li>Improved exactReplacement pattern generation</li>
+        </ul>
+        
+        <h3>Frontend (analysis.ts):</h3>
+        <ul>
+            <li>Case-insensitive pattern matching</li>
+            <li>Partial pattern matching for longer content</li>
+            <li>Whitespace-normalized matching</li>
+            <li>Aggressive fallback that tries multiple approaches</li>
+            <li>Better error handling and debugging</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Next Steps</h2>
+        <ol>
+            <li>Test the application with the new improvements</li>
+            <li>Check if suggestions are now being applied successfully</li>
+            <li>Verify that compare pages show actual content differences</li>
+            <li>Report any remaining issues with specific console logs</li>
+        </ol>
+    </div>
+
+    <script>
+        console.log('🔧 Improved Suggestions Test Page Loaded');
+        console.log('Key improvements:');
+        console.log('1. Better backend pattern generation');
+        console.log('2. Multiple frontend fallback strategies');
+        console.log('3. Aggressive suggestion application');
+        console.log('4. Comprehensive debugging');
+    </script>
+</body>
+</html>

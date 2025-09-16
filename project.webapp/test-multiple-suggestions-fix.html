@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Suggestions Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .step { margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>🔄 Multiple Suggestions Fix Test</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Previous Issue (Fixed)</h2>
+        <p><strong>Problem:</strong> When applying multiple suggestions, only the first suggestion was visible. Subsequent suggestions didn't show changes.</p>
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>✅ First suggestion applied successfully</li>
+            <li>✅ Compare pages shows first change</li>
+            <li>❌ Second suggestion applied but no changes visible</li>
+            <li>❌ Third suggestion applied but no changes visible</li>
+            <li>❌ Only the first suggestion was cumulative</li>
+        </ul>
+        <p><strong>Root Cause:</strong> The `applySingleSuggestion` function was always using `analysis.fullPageHtml` (original content) as the source, instead of using the current `improvedFullPageHtml` (content with previous changes).</p>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Fix Applied</h2>
+        
+        <h3>1. Fixed Source HTML Selection ✅</h3>
+        <pre>
+// BEFORE (Problematic):
+const sourceHtml = analysis.fullPageHtml;  // ❌ Always used original content
+let improvedHtml = sourceHtml;
+
+// AFTER (Fixed):
+const sourceHtml = improvedFullPageHtml && improvedFullPageHtml.trim().length > 0 
+  ? improvedFullPageHtml   // ✅ Use current improved content if available
+  : analysis.fullPageHtml; // ✅ Fall back to original if no improvements yet
+let improvedHtml = sourceHtml;
+        </pre>
+
+        <h3>2. Added Debug Logging ✅</h3>
+        <pre>
+console.log('[Frontend] Source HTML selection:', {
+  hasImprovedFullPageHtml: !!improvedFullPageHtml,
+  improvedFullPageHtmlLength: improvedFullPageHtml?.length || 0,
+  usingImprovedAsSource: improvedFullPageHtml && improvedFullPageHtml.trim().length > 0,
+  sourceHtmlLength: sourceHtml.length,
+  originalHtmlLength: analysis.fullPageHtml.length
+});
+        </pre>
+    </div>
+
+    <div class="test-section info">
+        <h2>🎯 How It Works Now</h2>
+        
+        <div class="step">
+            <h3>Step 1: Apply First Suggestion</h3>
+            <ul>
+                <li>Uses `analysis.fullPageHtml` (original content) as source</li>
+                <li>Applies the suggestion to create `improvedFullPageHtml`</li>
+                <li>Updates `improvedFullPageHtml` with the change</li>
+                <li>Shows changes in landing page preview and compare pages</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Apply Second Suggestion</h3>
+            <ul>
+                <li>Uses `improvedFullPageHtml` (content with first change) as source</li>
+                <li>Applies the second suggestion to the already-improved content</li>
+                <li>Updates `improvedFullPageHtml` with both changes</li>
+                <li>Shows cumulative changes in landing page preview and compare pages</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Apply Third Suggestion</h3>
+            <ul>
+                <li>Uses `improvedFullPageHtml` (content with first two changes) as source</li>
+                <li>Applies the third suggestion to the already-improved content</li>
+                <li>Updates `improvedFullPageHtml` with all three changes</li>
+                <li>Shows all cumulative changes in landing page preview and compare pages</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Expected Results</h2>
+        <ul>
+            <li>✅ <strong>First suggestion applied</strong> - Changes visible in landing page preview</li>
+            <li>✅ <strong>Second suggestion applied</strong> - Additional changes visible on top of first</li>
+            <li>✅ <strong>Third suggestion applied</strong> - All changes cumulative and visible</li>
+            <li>✅ <strong>Compare pages shows all changes</strong> - Original vs fully improved content</li>
+            <li>✅ <strong>Cumulative improvements</strong> - Each suggestion builds on the previous ones</li>
+            <li>✅ <strong>Debug logs show progression</strong> - Source HTML selection logs show the progression</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li><strong>Apply first suggestion</strong> - Click "Apply This Suggestion" on any suggestion</li>
+            <li><strong>Verify first change</strong> - Check landing page preview and compare pages</li>
+            <li><strong>Apply second suggestion</strong> - Click "Apply This Suggestion" on a different suggestion</li>
+            <li><strong>Verify cumulative changes</strong> - Both changes should be visible</li>
+            <li><strong>Apply third suggestion</strong> - Click "Apply This Suggestion" on another suggestion</li>
+            <li><strong>Verify all changes</strong> - All three changes should be visible cumulatively</li>
+            <li><strong>Check console logs</strong> - Should see "usingImprovedAsSource: true" for subsequent suggestions</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🔍 Key Changes Made</h2>
+        <ul>
+            <li><strong>Source HTML Selection:</strong> Use current improved content as source for subsequent suggestions</li>
+            <li><strong>Cumulative Application:</strong> Each suggestion builds on the previous improvements</li>
+            <li><strong>Debug Logging:</strong> Added detailed logging to track source HTML selection</li>
+            <li><strong>State Management:</strong> Proper tracking of improved content across multiple applications</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>📊 Debug Logs to Watch For</h2>
+        <pre>
+[Frontend] Source HTML selection: {
+  hasImprovedFullPageHtml: true,
+  improvedFullPageHtmlLength: 445099,
+  usingImprovedAsSource: true,  // ✅ This should be true for subsequent suggestions
+  sourceHtmlLength: 445099,
+  originalHtmlLength: 445112
+}
+        </pre>
+        <p><strong>Key indicators:</strong></p>
+        <ul>
+            <li><code>usingImprovedAsSource: true</code> - Means it's using improved content as source</li>
+            <li><code>improvedFullPageHtmlLength</code> - Should show the length of current improved content</li>
+            <li><code>sourceHtmlLength</code> - Should match improved content length for subsequent suggestions</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔄 Multiple Suggestions Fix Applied');
+        console.log('Key fixes:');
+        console.log('1. Source HTML Selection: Use improvedFullPageHtml as source for subsequent suggestions');
+        console.log('2. Cumulative Application: Each suggestion builds on previous improvements');
+        console.log('3. Debug Logging: Track source HTML selection progression');
+        console.log('4. State Management: Proper tracking of improved content');
+        console.log('Multiple suggestions should now work cumulatively!');
+    </script>
+</body>
+</html>

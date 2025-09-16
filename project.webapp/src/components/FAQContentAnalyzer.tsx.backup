@@ -97,53 +97,6 @@ export function FAQContentAnalyzer() {
   // E-commerce Content State
   const [ecommerceContent, setEcommerceContent] = useState<EcommerceContent | null>(null);
   const [isGeneratingEcommerce, setIsGeneratingEcommerce] = useState(false);
-
-  // Persist e-commerce content and selected tab across navigation
-  const ECOMMERCE_CONTENT_KEY = 'kabini_ecommerce_content';
-  const ECOMMERCE_CONTENT_TYPE_KEY: 'kabini_ecommerce_content_type' = 'kabini_ecommerce_content_type';
-
-  // Restore on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(ECOMMERCE_CONTENT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const normalized = normalizeEcommerceContent(parsed);
-        if (normalized) setEcommerceContent(normalized);
-      }
-      const savedType = localStorage.getItem(ECOMMERCE_CONTENT_TYPE_KEY);
-      if (savedType === 'product' || savedType === 'category' || savedType === 'faq') {
-        setContentType(savedType as 'product' | 'category' | 'faq');
-      }
-    } catch (_err) {
-      // ignore persistence errors
-    }
-  }, []);
-
-  // Save when content changes
-  useEffect(() => {
-    try {
-      if (ecommerceContent) {
-        localStorage.setItem(ECOMMERCE_CONTENT_KEY, JSON.stringify(ecommerceContent));
-      } else {
-        localStorage.removeItem(ECOMMERCE_CONTENT_KEY);
-      }
-    } catch (_err) {}
-  }, [ecommerceContent]);
-
-  // Save current tab
-  useEffect(() => {
-    try {
-      localStorage.setItem(ECOMMERCE_CONTENT_TYPE_KEY, contentType);
-    } catch (_err) {}
-  }, [contentType]);
-
-  // Only clear content when leaving e-commerce industry
-  useEffect(() => {
-    if (selectedIndustry !== 'ecommerce') {
-      setEcommerceContent(null);
-    }
-  }, [selectedIndustry]);
   
   // Product Content Inputs
   const [productInputs, setProductInputs] = useState({
@@ -194,7 +147,6 @@ export function FAQContentAnalyzer() {
   
   // Helper function to get user-specific storage keys
   const getUserSpecificKey = (baseKey: string, userId: string) => `${baseKey}_${userId}`;
-  const getFaqPersistKey = () => getUserSpecificKey('faq_last_persisted', (user?.id || 'anonymous') as string);
   
   // Helper function to detect if content is a URL
   const isUrl = (text: string): boolean => {
@@ -289,62 +241,6 @@ export function FAQContentAnalyzer() {
       }
     }
   }, [user?.id]);
-  
-  // Restore last persisted FAQ UI state if no current session (navigation persistence)
-  useEffect(() => {
-    try {
-      if (currentSession) return; // Prefer restoring from session if present
-      const key = getFaqPersistKey();
-      const persisted = localStorage.getItem(key);
-      if (!persisted) return;
-      const parsed = JSON.parse(persisted);
-      // Optional freshness window: 24h
-      if (parsed?.savedAt && (Date.now() - parsed.savedAt) > 24 * 60 * 60 * 1000) return;
-
-      console.log('[FAQ Persist] Restoring last persisted FAQ state');
-      if (parsed.selectedIndustry === 'general' || parsed.selectedIndustry === 'ecommerce') {
-        setSelectedIndustry(parsed.selectedIndustry);
-      }
-      if (parsed.contentType === 'product' || parsed.contentType === 'category' || parsed.contentType === 'faq') {
-        setContentType(parsed.contentType);
-      }
-      if (typeof parsed.content === 'string') setContent(parsed.content);
-      if (Array.isArray(parsed.generatedQuestions)) setGeneratedQuestions(parsed.generatedQuestions);
-      if (Array.isArray(parsed.faqs)) setFaqs(parsed.faqs);
-      if (typeof parsed.faqProvider === 'string') setFaqProvider(parsed.faqProvider);
-      if (typeof parsed.faqModel === 'string') setFaqModel(parsed.faqModel);
-      if (typeof parsed.showQuestionsSection === 'boolean') setShowQuestionsSection(parsed.showQuestionsSection);
-      if (typeof parsed.showFAQSection === 'boolean') setShowFAQSection(parsed.showFAQSection);
-      if (parsed.ecommerceContent) {
-        const normalized = normalizeEcommerceContent(parsed.ecommerceContent);
-        if (normalized) setEcommerceContent(normalized);
-      }
-    } catch (e) {
-      console.warn('[FAQ Persist] Failed to restore persisted FAQ state:', e);
-    }
-  }, [currentSession, user?.id]);
-  
-  // Persist FAQ UI state for navigation
-  useEffect(() => {
-    try {
-      const payload = {
-        selectedIndustry,
-        contentType,
-        content,
-        generatedQuestions,
-        faqs,
-        faqProvider,
-        faqModel,
-        showQuestionsSection,
-        showFAQSection,
-        ecommerceContent,
-        savedAt: Date.now()
-      };
-      localStorage.setItem(getFaqPersistKey(), JSON.stringify(payload));
-    } catch (e) {
-      // Ignore quota errors silently
-    }
-  }, [selectedIndustry, contentType, content, generatedQuestions, faqs, faqProvider, faqModel, showQuestionsSection, showFAQSection, ecommerceContent, user?.id]);
   
   // Save sessions to localStorage whenever they change
   useEffect(() => {
@@ -1070,62 +966,6 @@ export function FAQContentAnalyzer() {
     }
   };
 
-  // Normalize backend response into EcommerceContent shape
-  const normalizeEcommerceContent = (data: any): EcommerceContent | null => {
-    if (!data) return null;
-    // If already in expected shape, return as-is
-    if (
-      typeof data === 'object' && (
-        'productContent' in data || 'categoryContent' in data || 'faqs' in data
-      )
-    ) {
-      return data as EcommerceContent;
-    }
-    // If it looks like a raw product content object, wrap it
-    if (typeof data === 'object' && 'shortDescription' in data && 'longDescription' in data) {
-      return {
-        productContent: data as ProductContent,
-        categoryContent: undefined,
-        faqs: [],
-        seoRecommendations: {
-          schemaSuggestions: [],
-          contentDepthScore: 0,
-          aiOptimizationTips: [],
-          technicalSeoReminders: [],
-        },
-      };
-    }
-    // If it looks like raw FAQs result (supports nested shape)
-    if (typeof data === 'object' && ('faqs' in (data as any))) {
-      const maybeNested = (data as any).faqs;
-      let faqsArray: any[] = [];
-      if (Array.isArray(maybeNested)) {
-        faqsArray = maybeNested;
-      } else if (Array.isArray(maybeNested?.faqs)) {
-        faqsArray = maybeNested.faqs;
-      } else if (maybeNested && typeof maybeNested === 'object') {
-        try {
-          faqsArray = Object.values(maybeNested);
-        } catch (_) {
-          faqsArray = [];
-        }
-      }
-      const seo = (data as any).seoRecommendations || maybeNested?.seoRecommendations || {
-        schemaSuggestions: [],
-        contentDepthScore: 0,
-        aiOptimizationTips: [],
-        technicalSeoReminders: [],
-      };
-      return {
-        productContent: undefined,
-        categoryContent: undefined,
-        faqs: faqsArray,
-        seoRecommendations: seo,
-      };
-    }
-    return null;
-  };
-
   // E-commerce Content Generation Functions
   const generateProductContent = async () => {
     if (!productInputs.name.trim() || !productInputs.features.trim()) {
@@ -1144,8 +984,7 @@ export function FAQContentAnalyzer() {
 
       if (response.success) {
         console.log('[Product Content] Received data:', response.data);
-        const normalized = normalizeEcommerceContent(response.data);
-        setEcommerceContent(normalized);
+        setEcommerceContent(response.data || null);
         setNotificationMessage('Product content generated successfully!');
       } else {
         console.error('[Product Content] API error:', response.error);
@@ -1176,8 +1015,7 @@ export function FAQContentAnalyzer() {
 
       if (response.success) {
         console.log('[Category Content] Received data:', response.data);
-        const normalized = normalizeEcommerceContent(response.data);
-        setEcommerceContent(normalized);
+        setEcommerceContent(response.data || null);
         setNotificationMessage('Category content generated successfully!');
       } else {
         console.error('[Category Content] API error:', response.error);
@@ -1208,8 +1046,7 @@ export function FAQContentAnalyzer() {
 
       if (response.success) {
         console.log('[E-commerce FAQs] Received data:', response.data);
-        const normalized = normalizeEcommerceContent(response.data);
-        setEcommerceContent(normalized);
+        setEcommerceContent(response.data || null);
         setNotificationMessage('E-commerce FAQs generated successfully!');
       } else {
         console.error('[E-commerce FAQs] API error:', response.error);
@@ -1384,7 +1221,7 @@ export function FAQContentAnalyzer() {
 
                 {/* Category Content Form */}
                 {contentType === 'category' && (
-                  <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                  <div className="space-y-4 p-4 bg-green-50 rounded-lg">
                     <h3 className="text-lg font-semibold text-black">Category Page Content Generator</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -1421,7 +1258,7 @@ export function FAQContentAnalyzer() {
                         <button
                       onClick={generateCategoryContent}
                       disabled={isGeneratingEcommerce}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
                         >
                       {isGeneratingEcommerce ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                       Generate Category Content
@@ -1431,7 +1268,7 @@ export function FAQContentAnalyzer() {
 
                 {/* E-commerce FAQ Form */}
                 {contentType === 'faq' && (
-                  <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                  <div className="space-y-4 p-4 bg-purple-50 rounded-lg">
                     <h3 className="text-lg font-semibold text-black">E-commerce FAQ Generator</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -1461,7 +1298,7 @@ export function FAQContentAnalyzer() {
                         <button
                       onClick={generateEcommerceFAQs}
                       disabled={isGeneratingEcommerce}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50"
                         >
                       {isGeneratingEcommerce ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                       Generate E-commerce FAQs
@@ -1473,123 +1310,120 @@ export function FAQContentAnalyzer() {
 
             {/* Unified Content Input - Only show for general industry */}
             {selectedIndustry === 'general' && (
-              <>
               <div>
-               <label className="block text-base font-semibold text-black mb-3 flex items-center gap-2">
-                 <FileText className="w-5 h-5 text-black" />
-                 Paste your content or enter a URL
-               </label>
-               <div className="relative">
-                 <textarea
-                   ref={textareaRef}
-                   value={content}
-                   onChange={(e) => {
-                     setContent(e.target.value);
-                     // Auto-expand textarea with maximum height limit
-                     const target = e.target;
-                     target.style.height = 'auto';
-                     const newHeight = Math.max(36, Math.min(target.scrollHeight, 150));
-                     target.style.height = newHeight + 'px';
-                   }}
-                   placeholder="Paste URL or content here..."
-                   rows={1}
-                   className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 pr-12 text-black text-base placeholder-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none scrollbar-hide"
-                   style={{ 
-                     minHeight: '36px', 
-                     maxHeight: '150px',
-                     height: 'auto',
-                     overflow: 'auto',
-                     scrollbarWidth: 'none',
-                     msOverflowStyle: 'none'
-                   }}
-                 />
-                 {/* File Upload Plus Icon */}
-                 <div className="absolute right-3 bottom-3">
-                   <input
-                     type="file"
-                     id="file-upload"
-                     accept=".txt,.md,.doc,.docx"
-                     onChange={(e) => {
-                       const file = (e.target as HTMLInputElement).files?.[0];
-                       if (file) {
-                         const reader = new FileReader();
-                         reader.onload = (e) => {
-                           const text = (e.target?.result as string) || '';
-                           setContent(text);
-                           // Trigger height adjustment after content is set
-                           setTimeout(() => {
-                             if (textareaRef.current) {
-                               textareaRef.current.style.height = 'auto';
-                               const newHeight = Math.max(36, Math.min(textareaRef.current.scrollHeight, 150));
-                               textareaRef.current.style.height = newHeight + 'px';
-                             }
-                           }, 100);
-                         };
-                         reader.readAsText(file);
-                       }
-                     }}
-                     className="hidden"
-                   />
-                   <label
-                     htmlFor="file-upload"
-                     className="cursor-pointer p-1.5 rounded-full transition-all duration-200 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800"
-                     title="Upload file (.txt, .md, .doc, .docx)"
-                   >
-                     <Plus className="w-4 h-4" />
-                   </label>
-                 </div>
-               </div>
-             </div>
- 
-             {/* Generate Questions Button */}
-             <div className="flex items-center gap-4">
-               {!user ? (
-                 <div className="flex items-center gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                   <span className="text-yellow-800">⚠️ Please log in to generate questions</span>
-                 </div>
-               ) : (
-                 <div className="flex items-center gap-4">
-                   {/* Provider Selection for Questions */}
-                   <div className="flex items-center gap-2">
-                     <label className="text-sm font-medium text-black">Provider:</label>
-                     <select
-                       value={faqProvider}
-                       onChange={(e) => setFaqProvider(e.target.value)}
-                       className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                     >
-                       <option value="gemini">Gemini</option>
-                       <option value="openai">ChatGPT</option>
-                       <option value="perplexity">Perplexity</option>
-                       <option value="claude">Claude</option>
-                     </select>
-                   </div>
-                   
-                   {/* Question Generation Button */}
-                   <button
-                     type="button"
-                     onClick={generateQuestions}
-                     disabled={isGeneratingQuestions || !content.trim()}
-                     className="bg-blue-600 text-white font-bold px-8 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-lg shadow"
-                   >
-                     {isGeneratingQuestions ? (
-                       <>
-                         <Loader2 className="w-5 h-5 animate-spin" />
-                         Generating Questions...
-                       </>
-                     ) : (
-                       <>
-                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                         </svg>
-                         Generate AI Questions
-                       </>
-                     )}
-                   </button>
-                 </div>
-               )}
-             </div>
-             </>
-             )}
+              <label className="block text-base font-semibold text-black mb-3 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-black" />
+                Paste your content or enter a URL
+              </label>
+              <div className="relative">
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={(e) => {
+                    setContent(e.target.value);
+                    // Auto-expand textarea with maximum height limit
+                    const target = e.target;
+                    target.style.height = 'auto';
+                    const newHeight = Math.max(36, Math.min(target.scrollHeight, 150));
+                    target.style.height = newHeight + 'px';
+                  }}
+                  placeholder="Paste URL or content here..."
+                  rows={1}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 pr-12 text-black text-base placeholder-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none scrollbar-hide"
+                  style={{ 
+                    minHeight: '36px', 
+                    maxHeight: '150px',
+                    height: 'auto',
+                    overflow: 'auto',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none'
+                  }}
+                />
+                {/* File Upload Plus Icon */}
+                <div className="absolute right-3 bottom-3">
+                  <input
+                    type="file"
+                    id="file-upload"
+                    accept=".txt,.md,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                          const text = e.target?.result as string;
+                          setContent(text);
+                          // Trigger height adjustment after content is set
+                          setTimeout(() => {
+                            if (textareaRef.current) {
+                              textareaRef.current.style.height = 'auto';
+                              const newHeight = Math.max(36, Math.min(textareaRef.current.scrollHeight, 150));
+                              textareaRef.current.style.height = newHeight + 'px';
+                            }
+                          }, 100);
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer p-1.5 rounded-full transition-all duration-200 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800"
+                    title="Upload file (.txt, .md, .doc, .docx)"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Generate Questions Button */}
+            <div className="flex items-center gap-4">
+              {!user ? (
+                <div className="flex items-center gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <span className="text-yellow-800">⚠️ Please log in to generate questions</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  {/* Provider Selection for Questions */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-black">Provider:</label>
+                    <select
+                      value={faqProvider}
+                      onChange={(e) => setFaqProvider(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="gemini">Gemini</option>
+                      <option value="openai">ChatGPT</option>
+                      <option value="perplexity">Perplexity</option>
+                      <option value="claude">Claude</option>
+                    </select>
+                  </div>
+                  
+                  {/* Question Generation Button */}
+                  <button
+                    type="button"
+                    onClick={generateQuestions}
+                    disabled={isGeneratingQuestions || !content.trim()}
+                    className="bg-blue-600 text-white font-bold px-8 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-lg shadow"
+                  >
+                    {isGeneratingQuestions ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Generating Questions...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Generate AI Questions
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Questions Section - Only show for general industry */}
@@ -1698,15 +1532,24 @@ export function FAQContentAnalyzer() {
             </div>
           )}
 
+          {/* Debug Info */}
+          {selectedIndustry === 'ecommerce' && (
+            <div className="bg-yellow-50 p-4 rounded-lg mb-4">
+              <h4 className="font-semibold text-black mb-2">Debug Info:</h4>
+              <p className="text-sm text-gray-700">Selected Industry: {selectedIndustry}</p>
+              <p className="text-sm text-gray-700">E-commerce Content: {ecommerceContent ? 'Present' : 'Not Present'}</p>
+              {ecommerceContent && (
+                <div className="mt-2">
+                  <p className="text-sm text-gray-700">Product Content: {ecommerceContent.productContent ? 'Present' : 'Not Present'}</p>
+                  <p className="text-sm text-gray-700">Category Content: {ecommerceContent.categoryContent ? 'Present' : 'Not Present'}</p>
+                  <p className="text-sm text-gray-700">FAQs: {ecommerceContent.faqs ? ecommerceContent.faqs.length : 0} items</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* E-commerce Content Display */}
-          {selectedIndustry === 'ecommerce' && (() => {
-            const hasRelevantContent = !!(
-              (contentType === 'product' && ecommerceContent && ecommerceContent.productContent) ||
-              (contentType === 'category' && ecommerceContent && ecommerceContent.categoryContent) ||
-              (contentType === 'faq' && ecommerceContent && ecommerceContent.faqs && ecommerceContent.faqs.length > 0)
-            );
-            if (!hasRelevantContent) return false;
+          {selectedIndustry === 'ecommerce' && ecommerceContent && (() => {
             console.log('[E-commerce Display] Rendering content:', ecommerceContent);
             return true;
           })() && (
@@ -1717,7 +1560,7 @@ export function FAQContentAnalyzer() {
               </div>
 
               {/* Product Content Display */}
-              {contentType === 'product' && ecommerceContent.productContent && (
+              {ecommerceContent.productContent && (
                 <div className="space-y-6">
                   <div className="bg-blue-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
@@ -1842,9 +1685,9 @@ export function FAQContentAnalyzer() {
               )}
 
               {/* Category Content Display */}
-              {contentType === 'category' && ecommerceContent.categoryContent && (
+              {ecommerceContent.categoryContent && (
                 <div className="space-y-6">
-                  <div className="bg-blue-50 p-6 rounded-lg">
+                  <div className="bg-green-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
                       <Tag className="w-5 h-5" />
                       Category Page Content
@@ -1883,9 +1726,9 @@ export function FAQContentAnalyzer() {
               )}
 
               {/* FAQ Content Display */}
-              {contentType === 'faq' && ecommerceContent.faqs && ecommerceContent.faqs.length > 0 && (
+              {ecommerceContent.faqs && ecommerceContent.faqs.length > 0 && (
                 <div className="space-y-6">
-                  <div className="bg-blue-50 p-6 rounded-lg">
+                  <div className="bg-purple-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
                       <Search className="w-5 h-5" />
                       Generated FAQs
@@ -1904,13 +1747,7 @@ export function FAQContentAnalyzer() {
               )}
 
               {/* SEO Recommendations */}
-              {selectedIndustry === 'ecommerce'
-                && ecommerceContent.seoRecommendations
-                && (
-                  (contentType === 'product' && !!ecommerceContent.productContent)
-                  || (contentType === 'category' && !!ecommerceContent.categoryContent)
-                  || (contentType === 'faq' && !!(ecommerceContent.faqs && ecommerceContent.faqs.length > 0))
-                ) && (
+              {ecommerceContent.seoRecommendations && (
                 <div className="space-y-6">
                   <div className="bg-yellow-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
@@ -1924,9 +1761,7 @@ export function FAQContentAnalyzer() {
                         <ul className="text-gray-700 bg-white p-3 rounded border">
                           {ecommerceContent.seoRecommendations.schemaSuggestions.map((suggestion, index) => (
                             <li key={index} className="flex items-start gap-2">
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                              <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                               {suggestion}
                             </li>
                           ))}
@@ -2000,8 +1835,6 @@ export function FAQContentAnalyzer() {
                 localStorage.removeItem(userCurrentSessionKey);
                 localStorage.removeItem(pendingKey);
                 localStorage.removeItem(generatedFAQsKey);
-                // Clear last persisted FAQ UI state
-                try { localStorage.removeItem(getFaqPersistKey()); } catch {}
               }
               // Reset textarea height to original state
               if (textareaRef.current) {
