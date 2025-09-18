@@ -910,48 +910,24 @@ export function CompetitorInsight() {
     };
   };
 
-  // Placement/Visibility aggregation (UI-side heuristic if backend lacks explicit placements)
+  // Placement/Visibility aggregation (backend-only; no static fallback)
   type PlacementDatum = { name: string; first: number; second: number; third: number };
   const computePlacementData = (result: any): PlacementDatum[] => {
     const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
     if (competitors.length === 0) return [];
 
-    // Derive a visibility weight using brand mentions or average aiScores
-    const weights = competitors.map((c) => {
-      const mentions = Number(
-        c?.keyMetrics?.gemini?.brandMentions ??
-        c?.keyMetrics?.gemini?.mentionsCount ??
-        c?.brandMentions ?? 0
-      );
-      const aiScores = c?.aiScores || {};
-      const avgScore = ['chatgpt','gemini','perplexity','claude']
-        .map((k) => Number(aiScores?.[k] || 0))
-        .reduce((a,b) => a + b, 0) / 4;
-      const w = mentions > 0 ? mentions : avgScore;
-      return { name: c.name || 'Unknown', weight: w };
+    const out: PlacementDatum[] = [];
+    competitors.forEach((c) => {
+      const name = c?.name || 'Unknown';
+      const p = c?.aiTraffic?.placementTotals;
+      const total = Number(c?.aiTraffic?.totalMentions || 0);
+      if (!p || total <= 0) return;
+      const toPct = (n: number) => Math.max(0, Math.min(100, Math.round((Number(n || 0) / total) * 100)));
+      const first = toPct(p.first);
+      const second = toPct(p.second);
+      const third = Math.max(0, 100 - first - second);
+      out.push({ name, first, second, third });
     });
-
-    // Normalize and rank
-    const totalW = Math.max(1e-6, weights.reduce((s, x) => s + (isFinite(x.weight) ? x.weight : 0), 0));
-    const ranked = weights
-      .map(w => ({ ...w, norm: Math.max(0, Number(w.weight)) / totalW }))
-      .sort((a, b) => b.norm - a.norm);
-
-    // Heuristic placement split by rank
-    const out: PlacementDatum[] = ranked.map((r, idx) => {
-      // Base split templates favoring higher ranks
-      let first = 0.25, second = 0.35, third = 0.40; // default (others)
-      if (idx === 0) { first = 0.60; second = 0.25; third = 0.15; }
-      else if (idx === 1) { first = 0.35; second = 0.40; third = 0.25; }
-      // Convert to percentages and round
-      return {
-        name: r.name,
-        first: Math.round(first * 100),
-        second: Math.round(second * 100),
-        third: Math.max(0, 100 - Math.round(first * 100) - Math.round(second * 100))
-      };
-    });
-
     return out;
   };
 
@@ -975,20 +951,13 @@ export function CompetitorInsight() {
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4 space-y-2">
             <div>
-              Shows overall brand presence (Share of Visibility) and placement quality (1st / 2nd / 3rd). Use these formulas:
+              Shows overall brand presence and placement quality using raw counts: per competitor we count 1st, 2nd and 3rd+ mentions across AI answers and normalize each bar to 100%.
             </div>
             <div className="font-mono text-xs leading-5">
-              <div>P1_c = count of 1st-place mentions</div>
-              <div>P2_c = count of 2nd-place mentions</div>
-              <div>P3_c = count of 3rd+ mentions</div>
-              <div className="mt-2">M_c = P1_c + P2_c + P3_c</div>
-              <div>T = Σ_c M_c</div>
-              <div className="mt-2">SoV_c = M_c / T</div>
-              <div className="mt-2">Share1_c = P1_c / M_c</div>
-              <div>Share2_c = P2_c / M_c</div>
-              <div>Share3_c = P3_c / M_c</div>
-              <div className="mt-2">WSOV_c = (3·P1_c + 2·P2_c + 1·P3_c) / Σ_c(3·P1_c + 2·P2_c + 1·P3_c)</div>
-              <div>PromIdx_c = (3·P1_c + 2·P2_c + 1·P3_c) / (3·M_c)</div>
+              <div>P1 = count of 1st-place mentions</div>
+              <div>P2 = count of 2nd-place mentions</div>
+              <div>P3 = count of 3rd+ mentions</div>
+              <div className="mt-2">Bar = 100% stacked from P1/P2/P3 (per competitor)</div>
             </div>
           </div>
         )}
@@ -1002,29 +971,38 @@ export function CompetitorInsight() {
               <div className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-sm bg-blue-500"></span>3rd</div>
             </div>
 
-            {/* Single combined stacked bar chart */}
+            {/* Single combined stacked bar chart with Y axis (0..100%) */}
             <div className="w-full overflow-x-auto">
               <div className="min-w-[640px] flex items-end gap-4 px-1 py-2">
+                {/* Y axis */}
+                <div className="flex flex-col justify-between h-56 pr-2 text-[10px] text-gray-500 select-none">
+                  <span>100</span>
+                  <span>80</span>
+                  <span>60</span>
+                  <span>40</span>
+                  <span>20</span>
+                  <span>0</span>
+                </div>
                 {data.map((d) => (
                   <div key={d.name} className="flex flex-col items-center w-24">
                     <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex flex-col-reverse shadow-sm">
-                      {/* 3rd */}
+                      {/* 1st (bottom) */}
                       <div
-                        className="bg-blue-500"
-                        style={{ height: `${d.third}%` }}
-                        title={`3rd: ${d.third}%`}
+                        className="bg-green-500"
+                        style={{ height: `${d.first}%` }}
+                        title={`1st: ${d.first}%`}
                       />
-                      {/* 2nd */}
+                      {/* 2nd (middle) */}
                       <div
                         className="bg-yellow-400"
                         style={{ height: `${d.second}%` }}
                         title={`2nd: ${d.second}%`}
                       />
-                      {/* 1st */}
+                      {/* 3rd+ (top) */}
                       <div
-                        className="bg-green-500"
-                        style={{ height: `${d.first}%` }}
-                        title={`1st: ${d.first}%`}
+                        className="bg-blue-500"
+                        style={{ height: `${d.third}%` }}
+                        title={`3rd: ${d.third}%`}
                       />
                     </div>
                     <div className="mt-2 text-xs text-gray-800 font-medium text-center truncate w-full" title={d.name}>{d.name}</div>
@@ -1064,38 +1042,18 @@ export function CompetitorInsight() {
   };
   const computeShoppingVisibilityData = (result: any): ShoppingDatum[] => {
     const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
-    const out: ShoppingDatum[] = [];
-    competitors.forEach((c) => {
-      const name = c?.name || 'Unknown';
-      const aliases = buildAliasList(name);
-      const texts: string[] = [
-        c?.analysis,
-        c?.breakdowns?.gemini?.analysis,
-        c?.breakdowns?.chatgpt?.analysis,
-        c?.breakdowns?.perplexity?.analysis,
-        c?.breakdowns?.claude?.analysis
-      ].filter(Boolean);
-      let count = 0;
-      texts.forEach(txt => {
-        aliases.forEach(a => { if (textIncludesNear(txt, a, transactionalKeywords)) count += 1; });
-      });
-      out.push({ name, count });
-    });
-    // Sort by count desc
-    return out.sort((a,b) => b.count - a.count);
+    if (competitors.length === 0) return [];
+
+    // Use ONLY backend transactional counts. If zero across the board, show nothing.
+    const fromBackend: ShoppingDatum[] = competitors
+      .map((c) => ({ name: c?.name || 'Unknown', count: Number(c?.shopping?.total || 0) }))
+      .filter((d) => d.count > 0);
+    return fromBackend.sort((a,b) => b.count - a.count);
   };
 
   const ShoppingVisibilitySection: React.FC<{ result: any }> = ({ result }) => {
     const [showInfo, setShowInfo] = useState(false);
-    let data = computeShoppingVisibilityData(result);
-    if (!data || data.every(d => (d.count || 0) === 0)) {
-      // Static fallback
-      data = [
-        { name: 'Example A', count: 3 },
-        { name: 'Example B', count: 2 },
-        { name: 'Example C', count: 1 },
-      ];
-    }
+    const data = computeShoppingVisibilityData(result);
     const maxCount = Math.max(1, ...data.map(d => d.count));
 
     return (
@@ -1139,7 +1097,7 @@ export function CompetitorInsight() {
             </div>
           </div>
         ) : (
-          <div className="text-sm text-gray-600">No transactional mentions found yet. Run an analysis to populate this chart.</div>
+          <div className="text-sm text-gray-600">No transactional mentions found for the selected product/country.</div>
         )}
       </div>
     );
@@ -1162,8 +1120,17 @@ export function CompetitorInsight() {
     const rows: MentionByTool[] = [];
     comps.forEach(c => {
       const name = c?.name || 'Unknown';
-      const aliases = buildAliasList(name);
       const byTool: Record<string, number> = {};
+      // 1) Prefer backend counts from AI Traffic (mentions across prompts/tools)
+      const trafficTotal = Number(c?.aiTraffic?.totalMentions || 0);
+      if (trafficTotal > 0) {
+        TOOL_KEYS.forEach(tool => { byTool[tool] = Number(c?.aiTraffic?.byModel?.[tool] || 0); });
+        rows.push({ competitor: name, total: trafficTotal, byTool });
+        return;
+      }
+
+      // 2) Fallback – count aliases in analysis text if traffic counts are missing
+      const aliases = buildAliasList(name);
       let total = 0;
       TOOL_KEYS.forEach(tool => {
         const txt = c?.breakdowns?.[tool]?.analysis || '';
@@ -1171,7 +1138,6 @@ export function CompetitorInsight() {
         byTool[tool] = cnt;
         total += cnt;
       });
-      // also include overall analysis field if present
       if (c?.analysis) total += countAliases(c.analysis, aliases);
       rows.push({ competitor: name, total, byTool });
     });
@@ -1180,14 +1146,7 @@ export function CompetitorInsight() {
 
   const CompetitorMentionsSection: React.FC<{ result: any }> = ({ result }) => {
     const [showInfo, setShowInfo] = useState(false);
-    let rows = computeCompetitorMentions(result);
-    if (!rows || rows.every(r => (r.total || 0) === 0)) {
-      rows = [
-        { competitor: 'Example A', total: 15, byTool: {} },
-        { competitor: 'Example B', total: 10, byTool: {} },
-        { competitor: 'Example C', total: 6, byTool: {} },
-      ];
-    }
+    const rows = computeCompetitorMentions(result).filter(r => (r.total || 0) > 0);
     const maxTotal = Math.max(1, ...rows.map(r => r.total));
     const palette: Record<string, string> = {
       gemini: 'bg-emerald-500',
@@ -1201,7 +1160,7 @@ export function CompetitorInsight() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Competitor Mentions</h3>
-            <div className="text-xs text-gray-600">Bar graph of competitors by number of mentions across prompts/tools.</div>
+            <div className="text-xs text-gray-600">Bar graph of competitors by number of mentions across prompts.</div>
           </div>
           <button
             onClick={() => setShowInfo(!showInfo)}
@@ -1247,7 +1206,7 @@ export function CompetitorInsight() {
   };
 
   // Product Analysis in GEO – Bubble Chart (Competitor × Attribute)
-  type AttributeMatrix = { attributes: string[]; competitors: string[]; counts: Record<string, Record<string, number>> };
+  type AttributeMatrix = { attributes: string[]; competitors: string[]; counts: Record<string, Record<string, number>>; examples: Record<string, Record<string, string[]>> };
   const ATTRIBUTE_SYNONYMS: Record<string, string[]> = {
     Luxury: ['luxury','premium','high-end','curated'],
     Affordable: ['affordable','budget','low-cost','cheap','value','deal','discount'],
@@ -1262,10 +1221,21 @@ export function CompetitorInsight() {
     const competitors: string[] = (Array.isArray(result?.competitors) ? result.competitors : []).map((c: any) => c?.name || 'Unknown');
     const attributes: string[] = Object.keys(ATTRIBUTE_SYNONYMS);
     const counts: Record<string, Record<string, number>> = {};
-    attributes.forEach(attr => { counts[attr] = {}; competitors.forEach(c => { counts[attr][c] = 0; }); });
+    const examples: Record<string, Record<string, string[]>> = {};
+    attributes.forEach(attr => { counts[attr] = {}; examples[attr] = {}; competitors.forEach(c => { counts[attr][c] = 0; examples[attr][c] = []; }); });
 
     (Array.isArray(result?.competitors) ? result.competitors : []).forEach((c: any) => {
       const name = c?.name || 'Unknown';
+      // Prefer backend computed counts if available
+      if (c?.productAttributes) {
+        attributes.forEach(attr => {
+          const v = Number(c.productAttributes[attr] || 0);
+          counts[attr][name] = isFinite(v) ? v : 0;
+          const ex = Array.isArray(c?.productAttributeExamples?.[attr]) ? c.productAttributeExamples[attr] : [];
+          if (ex && ex.length) examples[attr][name] = ex.slice(0, 5);
+        });
+        return;
+      }
       const aliases = buildAliasList(name);
       const texts: string[] = [
         c?.analysis,
@@ -1274,7 +1244,8 @@ export function CompetitorInsight() {
         c?.breakdowns?.perplexity?.analysis,
         c?.breakdowns?.claude?.analysis
       ].filter(Boolean);
-      const blob = texts.join('\n').toLowerCase();
+      const fullBlob = texts.join('\n');
+      const blob = fullBlob.toLowerCase();
       attributes.forEach(attr => {
         const syns = ATTRIBUTE_SYNONYMS[attr];
         let linkedCount = 0;
@@ -1288,28 +1259,26 @@ export function CompetitorInsight() {
         const hasCompetitor = aliases.some(a => blob.includes(a.toLowerCase()));
         if (hasCompetitor && linkedCount > 0) {
           counts[attr][name] += linkedCount;
+          const sentences = fullBlob.split(/(?<=[.!?])\s+/);
+          const want = ATTRIBUTE_SYNONYMS[attr].map(s => s.toLowerCase());
+          for (const s of sentences) {
+            const sl = s.toLowerCase();
+            if (!aliases.some(a => sl.includes(a.toLowerCase()))) continue;
+            if (!want.some(w => sl.includes(w))) continue;
+            const clean = s.replace(/\s+/g, ' ').trim();
+            if (clean.length > 0 && !examples[attr][name].includes(clean)) examples[attr][name].push(clean.slice(0, 220));
+            if (examples[attr][name].length >= 5) break;
+          }
         }
       });
     });
-    return { attributes, competitors, counts };
+    return { attributes, competitors, counts, examples };
   };
 
   const ProductAttributeBubbleSection: React.FC<{ result: any }> = ({ result }) => {
     const [showInfo, setShowInfo] = useState(false);
-    let matrix = computeAttributeMatrix(result);
+    const matrix = computeAttributeMatrix(result);
     const empty = matrix.attributes.length === 0 || matrix.competitors.length === 0 || matrix.attributes.every(a => Object.values(matrix.counts[a]).every(v => v === 0));
-    if (empty) {
-      matrix = {
-        attributes: ['Luxury', 'Affordable', 'Organic', 'Sustainable'],
-        competitors: ['Example A', 'Example B', 'Example C'],
-        counts: {
-          'Luxury': { 'Example A': 3, 'Example B': 1, 'Example C': 2 },
-          'Affordable': { 'Example A': 1, 'Example B': 3, 'Example C': 2 },
-          'Organic': { 'Example A': 2, 'Example B': 1, 'Example C': 3 },
-          'Sustainable': { 'Example A': 1, 'Example B': 2, 'Example C': 2 },
-        }
-      };
-    }
     const maxCount = Math.max(1, ...matrix.attributes.flatMap(a => Object.values(matrix.counts[a])));
 
     return (
@@ -1327,7 +1296,7 @@ export function CompetitorInsight() {
           </div>
         )}
 
-        {matrix.competitors.length > 0 ? (
+        {!empty ? (
           <div className="w-full overflow-x-auto">
             <div className="min-w-[720px]">
               {/* Axes headers */}
@@ -1346,12 +1315,14 @@ export function CompetitorInsight() {
                       const val = matrix.counts[attr][c] || 0;
                       const size = Math.max(10, Math.round((val / maxCount) * 40)); // 10..40px
                       const opacity = val > 0 ? 0.85 : 0.15;
+                      const ex = (matrix.examples?.[attr]?.[c] || []).slice(0, 3);
+                      const tooltip = ex.length ? `${attr} • ${c}\nMentions: ${val}\n- ${ex.join('\n- ')}` : `${attr} • ${c}\nMentions: ${val}`;
                       return (
                         <div key={`cell-${attr}-${c}`} className="py-2 flex items-center justify-center">
                           <div
                             className="rounded-full bg-sky-500"
                             style={{ width: `${size}px`, height: `${size}px`, opacity }}
-                            title={`${attr} • ${c}: ${val}`}
+                            title={tooltip}
                           />
                         </div>
                       );
@@ -1404,6 +1375,34 @@ export function CompetitorInsight() {
     return out;
   };
 
+  // Prefer backend domain-based classification when available
+  type ToolAgg = { counts: Record<string, number>; domains: Record<string, string[]> };
+  const aggregateBackendSources = (result: any): Record<string, ToolAgg> => {
+    const agg: Record<string, ToolAgg> = {};
+    TOOL_KEYS.forEach(t => {
+      const counts: Record<string, number> = {} as any;
+      const domains: Record<string, string[]> = {} as any;
+      SOURCE_CATEGORIES.forEach(c => { counts[c] = 0; domains[c] = []; });
+      agg[t] = { counts, domains };
+    });
+    const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+    comps.forEach(c => {
+      TOOL_KEYS.forEach(t => {
+        const sbt = c?.sourcesByTool?.[t];
+        if (!sbt) return;
+        const counts = sbt.counts || {};
+        Object.keys(counts).forEach(cat => { agg[t].counts[cat] += Number(counts[cat] || 0); });
+        const examples: Array<{ domain: string; category: string }> = sbt.examples || [];
+        examples.forEach(ex => {
+          if (!ex?.domain || !ex?.category) return;
+          const list = agg[t].domains[ex.category] || [];
+          if (!list.includes(ex.domain)) list.push(ex.domain);
+        });
+      });
+    });
+    return agg;
+  };
+
   const Donut: React.FC<{ counts: SourceCounts; size?: number }> = ({ counts, size = 180 }) => {
     const total = Math.max(1, Object.values(counts).reduce((a,b) => a + b, 0));
     const colors: Record<string, string> = {
@@ -1439,7 +1438,12 @@ export function CompetitorInsight() {
 
   const SourceCitedSection: React.FC<{ result: any }> = ({ result }) => {
     const [showInfo, setShowInfo] = useState(false);
-    let dataByTool = computeSourcesByTool(result);
+    // Prefer backend aggregated domain-based counts when present
+    const backendAgg = aggregateBackendSources(result);
+    const backendHasData = TOOL_KEYS.some(t => Object.values(backendAgg[t]?.counts || {}).some(v => (v || 0) > 0));
+    let dataByTool = backendHasData
+      ? Object.fromEntries(TOOL_KEYS.map(t => [t, backendAgg[t].counts])) as ToolSources
+      : computeSourcesByTool(result);
     const sum = (obj: Record<string, number>) => Object.values(obj || {}).reduce((a,b)=>a+b,0);
     const zeroAll = TOOL_KEYS.every(t => sum(dataByTool[t]) === 0);
     if (zeroAll) {
@@ -1469,7 +1473,26 @@ export function CompetitorInsight() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {toolOrder.map(tool => (
             <div key={`donut-${tool}`} className="border border-gray-200 rounded-lg p-4 flex flex-col items-center">
-              <div className="text-sm font-semibold text-gray-800 mb-3 capitalize">{tool}</div>
+              <div className="text-sm font-semibold text-gray-800 mb-3 capitalize flex items-center gap-2">
+                {tool}
+                {/* Hover info for exact domains */}
+                {backendHasData && (
+                  <div className="relative group">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-xs cursor-default">i</span>
+                    <div className="absolute z-10 hidden group-hover:block -left-2 top-6 w-72 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-xs text-gray-800">
+                      <div className="font-semibold mb-1">Domains cited</div>
+                      {SOURCE_CATEGORIES.map(cat => (
+                        <div key={`${tool}-dom-${cat}`} className="mb-1">
+                          <div className="text-gray-600 mb-0.5">{cat}</div>
+                          <div className="text-gray-800 break-words">
+                            {(backendAgg[tool]?.domains?.[cat] || []).slice(0, 12).join(', ') || '—'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <Donut counts={dataByTool[tool]} />
               <div className="mt-3 space-y-1 text-xs w-full">
                 {SOURCE_CATEGORIES.map(cat => (
@@ -1493,25 +1516,26 @@ export function CompetitorInsight() {
   type CompetitorType = 'Direct' | 'Marketplace' | 'Content' | 'Authority' | 'Indirect';
   const TYPES: CompetitorType[] = ['Direct','Marketplace','Content','Authority','Indirect'];
   const NAME_HINTS: Record<CompetitorType, string[]> = {
-    Direct: ['sephora','ulta','dermstore','walmart','target','bestbuy','cloudfuze','sharegate'],
-    Marketplace: ['amazon','etsy','ebay','walmart marketplace'],
-    Content: ['wirecutter','reddit','quora','youtube','review','guide','blog'],
-    Authority: ['forbes','allure','news','press','editorial','techcrunch'],
-    Indirect: ['the ordinary','tata harper','minimalist','affordable alternative','sustainable luxury']
+    Direct: ['store','shop','official','checkout','cart','buy from','retailer','sephora','ulta','dermstore','target','bestbuy','asos','primark','zara','h&m','massimo dutti','pull & bear','pull&bear'],
+    Marketplace: ['amazon','etsy','ebay','walmart','flipkart','aliexpress','mercadolibre','rakuten'],
+    Content: ['wirecutter','reddit','quora','youtube','influencer','blog','guide','buyers guide','forum','community','review site','trustpilot','capterra','g2'],
+    Authority: ['forbes','allure','bloomberg','wsj','nytimes','the verge','guardian','techcrunch','reuters','cnbc','financial times','ft.com','editorial','press'],
+    Indirect: ['the ordinary','tata harper','minimalist','affordable alternative','alternative','substitute','sustainable luxury','organic skincare','budget skincare']
   };
-  const classifyCompetitorType = (name: string, textBlob: string): CompetitorType => {
+  const classifyCompetitorType = (name: string, textBlob: string, shoppingTotal: number): CompetitorType => {
     const n = String(name || '').toLowerCase();
     const t = String(textBlob || '').toLowerCase();
-    // Name-based priority
+    // Strong marketplace/content/authority signals take precedence
     if (NAME_HINTS.Marketplace.some(h => n.includes(h) || t.includes(h))) return 'Marketplace';
     if (NAME_HINTS.Content.some(h => n.includes(h) || t.includes(h))) return 'Content';
     if (NAME_HINTS.Authority.some(h => n.includes(h) || t.includes(h))) return 'Authority';
-    if (NAME_HINTS.Indirect.some(h => n.includes(h) || t.includes(h))) return 'Indirect';
-    // Default: direct ecommerce if store/shop cues exist
-    if (/store|shop|cart|checkout|official|retail|ecommerce/i.test(t) || NAME_HINTS.Direct.some(h => n.includes(h))) {
-      return 'Direct';
+
+    // Direct vs Indirect heuristics
+    if ((shoppingTotal || 0) > 0) return 'Direct';
+    if (NAME_HINTS.Indirect.some(h => n.includes(h) || t.includes(h)) || /(alternative|substitute|budget|affordable|sustainable\s+luxury)/i.test(t)) {
+      return 'Indirect';
     }
-    // Fallback to Direct
+    if (/store|shop|cart|checkout|official|retail|ecommerce/i.test(t) || NAME_HINTS.Direct.some(h => n.includes(h))) return 'Direct';
     return 'Direct';
   };
   const computeCompetitorTypeCounts = (result: any): { counts: Record<CompetitorType, number> } => {
@@ -1520,7 +1544,7 @@ export function CompetitorInsight() {
     comps.forEach(c => {
       const name = c?.name || 'Unknown';
       const texts = [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis, c?.breakdowns?.perplexity?.analysis, c?.breakdowns?.claude?.analysis].filter(Boolean).join('\n');
-      const type = classifyCompetitorType(name, texts);
+      const type = classifyCompetitorType(name, texts, Number(c?.shopping?.total || 0));
       counts[type] += 1;
     });
     return { counts };
@@ -1597,16 +1621,29 @@ export function CompetitorInsight() {
     const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
     return comps.map(c => {
       const name = c?.name || 'Unknown';
-      const texts = [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis, c?.breakdowns?.perplexity?.analysis, c?.breakdowns?.claude?.analysis]
-        .filter(Boolean)
-        .join('\n')
-        .toLowerCase();
-      const counts: Record<StyleKey, number> = { List: 0, Comparison: 0, Recommendation: 0, FAQ: 0, Editorial: 0 };
-      (Object.keys(STYLE_KEYWORDS) as StyleKey[]).forEach(k => {
-        const kws = STYLE_KEYWORDS[k];
-        let v = 0; kws.forEach(w => { if (texts.includes(w)) v += 1; });
-        counts[k] = v;
-      });
+      // Prefer backend-provided counts if available
+      const backend = c?.contentStyle as Record<StyleKey, number> | undefined;
+      let counts: Record<StyleKey, number>;
+      if (backend && Object.keys(backend).length > 0) {
+        counts = {
+          List: Number(backend.List || 0),
+          Comparison: Number(backend.Comparison || 0),
+          Recommendation: Number(backend.Recommendation || 0),
+          FAQ: Number(backend.FAQ || 0),
+          Editorial: Number(backend.Editorial || 0)
+        };
+      } else {
+        const texts = [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis, c?.breakdowns?.perplexity?.analysis, c?.breakdowns?.claude?.analysis]
+          .filter(Boolean)
+          .join('\n')
+          .toLowerCase();
+        counts = { List: 0, Comparison: 0, Recommendation: 0, FAQ: 0, Editorial: 0 };
+        (Object.keys(STYLE_KEYWORDS) as StyleKey[]).forEach(k => {
+          const kws = STYLE_KEYWORDS[k];
+          let v = 0; kws.forEach(w => { if (texts.includes(w)) v += 1; });
+          counts[k] = v;
+        });
+      }
       const total = STYLE_KEYS.reduce((s, k) => s + (counts[k] || 0), 0);
       return { name, counts, total };
     }).sort((a,b) => b.total - a.total);
@@ -1735,19 +1772,10 @@ export function CompetitorInsight() {
     const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
     return comps.map(c => {
       const name = c?.name || 'Unknown';
-      const text = [c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis, c?.breakdowns?.perplexity?.analysis, c?.breakdowns?.claude?.analysis, c?.analysis]
-        .filter(Boolean)
-        .join(' ');
-      const { tone } = scoreSentiment(text);
-      const source = detectSource(text);
-      const attr = detectAttribute(text);
-      const quote = extractSnippet(text, name);
-      let takeaway = '';
-      if (tone === 'Positive') takeaway = 'Positive framing may boost authority and conversions.';
-      else if (tone === 'Negative') takeaway = 'Visibility present but negative sentiment — address issues with content.';
-      else if (tone === 'Mixed') takeaway = 'Mixed perception — clarify value props where weak.';
-      else takeaway = 'Neutral presence — opportunity to shape narrative.';
-      return { name, tone, quote, source, attr, takeaway };
+      const rows = Array.isArray(c?.sentiment) ? c.sentiment : [];
+      if (rows.length > 0) return rows[0];
+      // Fallback to empty row if backend missing (should be rare)
+      return { name, tone: 'Neutral' as ToneKey, quote: '—', source: '—', attr: '—', takeaway: 'Neutral presence — opportunity to shape narrative.' };
     });
   };
   const toneColor = (tone: ToneKey): string => {

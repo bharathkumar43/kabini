@@ -239,6 +239,49 @@ function getDefaultQueryPool(industry = '', geo = null, companyName = '', produc
   return unique;
 }
 
+// Citation-first prompt bank to elicit explicit sources/domains
+function getCitationPromptBank({ company = '', industry = '', product = '', country = '' }) {
+  const industryCtx = industry || '[industry]';
+  const productCtx = product || '[product]';
+  const countryCtx = country ? ` in ${country}` : '';
+  const wrapper = 'Answer briefly. Then output a Sources section with 3–8 items as: Category | Domain | URL. Use real HTTPS links, one domain per line, no duplicates.';
+  return [
+    `${wrapper}\nWho are the leading vendors in ${industryCtx}? For each key claim include a supporting source.`,
+    `${wrapper}\nCompare ${company} to peers in ${industryCtx}. Cite one link per claim.`,
+    `${wrapper}\nBest buying guides for ${productCtx}${countryCtx}. Provide reputable publication links.`,
+    `${wrapper}\nWhere do users discuss ${productCtx}? Give Trustpilot/Reddit/Quora thread URLs.`,
+    `${wrapper}\nWhere to buy ${productCtx}${countryCtx}? Provide retailer category/bestseller URLs.`,
+    `${wrapper}\nNews/editorial coverage of ${company} in ${industryCtx} (last 12 months). Give major publication links.`
+  ];
+}
+
+// Content-style prompt bank to elicit stylistic patterns explicitly
+function getContentStylePromptBank({ company = '', competitorA = '', competitorB = '', industry = '', product = '', country = '' }) {
+  const ind = industry || '[industry]';
+  const prod = product || '[product]';
+  const geo = country ? ` in ${country}` : '';
+  const compA = competitorA || 'Competitor A';
+  const compB = competitorB || 'Competitor B';
+  const wrap = 'Answer briefly. Then output a Sources section with 3–8 items as: Category | Domain | URL.';
+  return [
+    // List style
+    `${wrap}\nTop 10 ecommerce sites for ${prod}${geo}. Rank them and give one‑line reasons.`,
+    `${wrap}\nBest places to buy ${prod} today; list 5 with key strengths.`,
+    // Comparison style
+    `${wrap}\nCompare ${company} vs ${compA} vs ${compB} on price, selection, shipping, returns. Provide a concise table and pros/cons.`,
+    `${wrap}\n${company} vs ${compA}: which is better for ${prod}? Explain briefly.`,
+    // Recommendation style
+    `${wrap}\nRecommend the best retailer for these personas: budget, premium/luxury, fastest shipping, most reliable returns for ${prod}. Give one pick per persona.`,
+    `${wrap}\nIf I value price vs service vs speed for ${prod}, which vendor should I choose? One sentence each.`,
+    // FAQ style
+    `${wrap}\nWhere can I buy ${prod} safely online${geo}? Include any trust or warranty cues.`,
+    `${wrap}\nIs ${company} legit for ${prod}? What do buyers typically say?`,
+    // Editorial style
+    `${wrap}\nSummarize recent editorial coverage of top ${ind} retailers (last 12 months). Who is called ‘most trusted’ or ‘best overall’ and why?`,
+    `${wrap}\nAccording to major publications, which ${ind} stores lead today? Cite 3–5 sources.`
+  ];
+}
+
 // Prompt bank: 30 geo-intent e-commerce discovery questions
 function getGeoCompetitorPromptBank({ product, category, city, country, region, competitorA, competitorB }) {
   const geo = [city, region, country].filter(Boolean).join('/');
@@ -374,7 +417,13 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   console.log(`   Industry: ${industry}`);
   console.log(`   Fast mode: ${isFast}`);
   
-  const queries = getDefaultQueryPool(industry, opts.geo || null, opts.companyName || '', opts.product || '').slice(0, isFast ? 6 : 12);
+  // Use only the four prompts provided; no additional banks
+  const queries = [
+    `Which companies are leading in ${industry}?`,
+    `What are the top companies offering ${industry} solutions in ${industry}?`,
+    `Compare ${opts.companyName || ''} with other companies in the ${industry}.`,
+    `How does ${opts.companyName || ''} leverage AI in ${industry}?`
+  ];
   console.log(`   Queries to process: ${queries.length} (${queries.join(', ')})`);
   
   const modelKeys = getConfiguredModelKeys();
@@ -387,7 +436,12 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   
   const counts = {};
   const totals = {};
-  modelKeys.forEach(m => { counts[m] = Object.fromEntries(competitorNames.map(n => [n, 0])); totals[m] = 0; });
+  const placements = {}; // per-model placement counters
+  modelKeys.forEach(m => {
+    counts[m] = Object.fromEntries(competitorNames.map(n => [n, 0]));
+    totals[m] = 0;
+    placements[m] = Object.fromEntries(competitorNames.map(n => [n, { first: 0, second: 0, third: 0 }]));
+  });
 
   // Precompute alias lists per competitor for robust detection
   const aliasMap = Object.fromEntries(competitorNames.map(n => [n, buildAliases(n)]));
@@ -443,7 +497,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   const processingPromises = responses.map(async (response) => {
     if (!response.success) {
       console.log(`   ⚠️ Skipping failed response from ${response.model} for "${response.query}"`);
-      return { model: response.model, queryIndex: response.queryIndex, mentions: [] };
+      return { model: response.model, queryIndex: response.queryIndex, mentions: [], ranked: [] };
     }
     
     const lower = String(response.text).toLowerCase();
@@ -458,8 +512,8 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
         console.log(`     ✅ [${response.model}] Found mention of "${name}"`);
       }
     });
-    
-    return { model: response.model, queryIndex: response.queryIndex, mentions };
+    const ranked = rankCompetitorsInText(response.text, competitorNames, aliasMap);
+    return { model: response.model, queryIndex: response.queryIndex, mentions, ranked };
   });
   
   const processedResults = await Promise.all(processingPromises);
@@ -477,42 +531,46 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
     result.mentions.forEach(name => {
       counts[m][name] += 1;
     });
+    // Placement: 1st/2nd/3rd+
+    if (Array.isArray(result.ranked) && result.ranked.length > 0) {
+      const first = result.ranked[0];
+      const second = result.ranked[1];
+      const rest = result.ranked.slice(2);
+      if (first && placements[m][first]) placements[m][first].first += 1;
+      if (second && placements[m][second]) placements[m][second].second += 1;
+      rest.forEach(n => { if (placements[m][n]) placements[m][n].third += 1; });
+    }
     
     console.log(`   [${m}] Query ${queryIndex + 1}: ${result.mentions.length} mentions found`);
   });
 
-  // Convert to shares per formula
-  console.log('\n📊 [computeAiTrafficShares] Finalizing metrics...');
-  const sharesByCompetitor = {};
+  // Finalize raw counts only (no formulas)
+  console.log('\n📊 [computeAiTrafficShares] Finalizing counts...');
+  const countsByCompetitor = {};
   competitorNames.forEach(name => {
-    console.log(`\n   Processing competitor: ${name}`);
-    const byModel = {};
-    const usableModels = modelKeys.filter(m => (totals[m] || 0) > 0);
-    console.log(`     Usable models: ${usableModels.join(', ')}`);
-    
-    usableModels.forEach(m => {
-      const totalQ = totals[m];
-      const mentions = counts[m][name] || 0;
-      const share = totalQ > 0 ? (mentions / totalQ) * 100 : undefined;
-      byModel[m] = share;
-      console.log(`     ${m}: Mentions=${mentions}, Total=${totalQ}, Share=${share ? share.toFixed(1) + '%' : 'undefined'}`);
+    const byModelCounts = {};
+    const placementByModel = {};
+    let totalMentions = 0;
+    modelKeys.forEach(m => {
+      const c = counts[m][name] || 0;
+      totalMentions += c;
+      byModelCounts[m] = c;
+      placementByModel[m] = {
+        first: placements[m][name]?.first || 0,
+        second: placements[m][name]?.second || 0,
+        third: placements[m][name]?.third || 0
+      };
     });
-    
-    const globalNum = usableModels.reduce((s, m) => s + (counts[m][name] || 0), 0);
-    const globalDen = usableModels.reduce((s, m) => s + (totals[m] || 0), 0);
-    const global = globalDen > 0 ? (globalNum / globalDen) * 100 : 0;
-    const weightedEqual = usableModels.length > 0
-      ? usableModels.reduce((s, m) => s + (((counts[m][name] || 0) / (totals[m] || 1)) * 100), 0) / usableModels.length
-      : 0;
-    
-    console.log(`     Global: Mentions=${globalNum}, Total=${globalDen}, Share=${global.toFixed(1)}%`);
-    console.log(`     Weighted Equal: ${weightedEqual.toFixed(1)}%`);
-    
-    sharesByCompetitor[name] = { byModel, global, weightedGlobal: weightedEqual };
+    const placementTotals = {
+      first: modelKeys.reduce((s, m) => s + (placements[m][name]?.first || 0), 0),
+      second: modelKeys.reduce((s, m) => s + (placements[m][name]?.second || 0), 0),
+      third: modelKeys.reduce((s, m) => s + (placements[m][name]?.third || 0), 0)
+    };
+    countsByCompetitor[name] = { totalMentions, byModel: byModelCounts, placementByModel, placementTotals };
   });
   
-  console.log('\n✅ [computeAiTrafficShares] Calculation completed successfully');
-  return { sharesByCompetitor, totals, counts, queries };
+  console.log('\n✅ [computeAiTrafficShares] Calculation completed (counts only)');
+  return { countsByCompetitor, queries };
 }
 
 // --- AI Citation Metrics (mention + sentiment + prominence) ---
@@ -656,6 +714,404 @@ function detectMentionRobust(text, name, domainKeywords = []) {
   let count = 0;
   aliases.forEach(a => { const m = t.match(new RegExp(a.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'ig')); count += (m ? m.length : 0); });
   return { detected: true, count: Math.max(1, Math.min(3, count)) };
+}
+
+// --- Competitor type classification (backend logging)
+const NAME_HINTS_TYPES = {
+  Direct: ['store','shop','official','checkout','cart','buy from','retailer','asos','primark','zara','h&m','massimo dutti','pull & bear','pull&bear','uniqlo','mango','gap','topshop','bershka','forever 21'],
+  Marketplace: ['amazon','etsy','ebay','walmart','flipkart','aliexpress','mercadolibre','rakuten'],
+  Content: ['wirecutter','reddit','quora','youtube','influencer','blog','guide','buyers guide','forum','community','review site','trustpilot','capterra','g2'],
+  Authority: ['forbes','allure','bloomberg','wsj','nytimes','the verge','guardian','techcrunch','reuters','cnbc','financial times','ft.com','editorial','press'],
+  Indirect: ['the ordinary','tata harper','minimalist','affordable alternative','alternative','substitute','sustainable luxury','organic skincare','budget skincare']
+};
+function classifyCompetitorTypeServer(name, textBlob, shoppingTotal) {
+  const n = String(name || '').toLowerCase();
+  const t = String(textBlob || '').toLowerCase();
+  const hasAny = (arr) => arr.some(k => n.includes(k) || t.includes(k));
+  if (hasAny(NAME_HINTS_TYPES.Marketplace)) return 'Marketplace';
+  if (hasAny(NAME_HINTS_TYPES.Content)) return 'Content';
+  if (hasAny(NAME_HINTS_TYPES.Authority)) return 'Authority';
+  if ((Number(shoppingTotal) || 0) > 0) return 'Direct';
+  if (hasAny(NAME_HINTS_TYPES.Indirect) || /(alternative|substitute|budget|affordable|sustainable\s+luxury)/i.test(t)) return 'Indirect';
+  if (/store|shop|cart|checkout|official|retail|ecommerce/i.test(t) || hasAny(NAME_HINTS_TYPES.Direct)) return 'Direct';
+  return 'Direct';
+}
+
+// --- Source extraction and classification (exact URLs/domains) ---
+const SOURCE_CATEGORIES_DOMAIN_LIST = {
+  'Blogs / Guides': [
+    'wirecutter.com', 'nytimes.com', 'thewirecutter.com', 'howtogeek.com', 'tomsguide.com', 'pcmag.com',
+    'blogspot.', 'medium.com', 'substack.com', 'wp.com', 'wordpress.com'
+  ],
+  'Review Sites / Forums': [
+    'trustpilot.com', 'reddit.com', 'quora.com', 'stackexchange.com', 'stackoverflow.com', 'hackernews.com', 'ycombinator.com', 'producthunt.com'
+  ],
+  'Marketplaces': [
+    'amazon.', 'etsy.com', 'ebay.', 'walmart.', 'aliexpress.', 'flipkart.', 'shopify.com', 'mercadolibre.'
+  ],
+  'News / PR Mentions': [
+    'forbes.com', 'techcrunch.com', 'theverge.com', 'bloomberg.com', 'wsj.com', 'nytimes.com', 'guardian.com', 'prnewswire.com', 'businesswire.com'
+  ],
+  'Directories / Comparison': [
+    'top10.com', 'capterra.com', 'g2.com', 'getapp.com', 'trustradius.com', 'comparitech.com'
+  ]
+};
+
+function normalizeHost(urlOrHost) {
+  try {
+    const url = urlOrHost.includes('://') ? new URL(urlOrHost) : new URL(`https://${urlOrHost}`);
+    return url.hostname.replace(/^www\./, '').toLowerCase();
+  } catch { return String(urlOrHost || '').replace(/^www\./, '').toLowerCase(); }
+}
+
+function classifyDomain(host) {
+  const h = normalizeHost(host);
+  const containsAny = (list) => list.some(d => h.includes(d));
+  if (containsAny(SOURCE_CATEGORIES_DOMAIN_LIST['Blogs / Guides'])) return 'Blogs / Guides';
+  if (containsAny(SOURCE_CATEGORIES_DOMAIN_LIST['Review Sites / Forums'])) return 'Review Sites / Forums';
+  if (containsAny(SOURCE_CATEGORIES_DOMAIN_LIST['Marketplaces'])) return 'Marketplaces';
+  if (containsAny(SOURCE_CATEGORIES_DOMAIN_LIST['News / PR Mentions'])) return 'News / PR Mentions';
+  if (containsAny(SOURCE_CATEGORIES_DOMAIN_LIST['Directories / Comparison'])) return 'Directories / Comparison';
+  return null;
+}
+
+function extractUrls(text) {
+  try {
+    const t = String(text || '');
+    const rx = /(https?:\/\/[^\s)]+)|(\b[\w.-]+\.[a-z]{2,}\b)/gi;
+    const found = new Set();
+    let m;
+    while ((m = rx.exec(t)) !== null) {
+      const raw = m[0];
+      // Skip if looks like a sentence ending with dot and no TLD
+      if (!raw) continue;
+      try {
+        const host = normalizeHost(raw);
+        if (host && /[a-z]/i.test(host)) found.add(host);
+      } catch {}
+    }
+    return Array.from(found);
+  } catch { return []; }
+}
+
+function computeSourcesByToolFromTexts(breakdowns) {
+  const result = {};
+  const tools = ['gemini','chatgpt','perplexity','claude'];
+  tools.forEach(tool => {
+    const analysis = String(breakdowns?.[tool]?.analysis || '');
+    const hosts = extractUrls(analysis);
+    const counts = { 'Blogs / Guides': 0, 'Review Sites / Forums': 0, 'Marketplaces': 0, 'News / PR Mentions': 0, 'Directories / Comparison': 0 };
+    const examples = [];
+    hosts.forEach(h => {
+      const cat = classifyDomain(h);
+      if (cat) { counts[cat] += 1; examples.push({ domain: h, category: cat }); }
+    });
+    result[tool] = { counts, examples };
+  });
+  return result;
+}
+
+// --- Content Style classification (FAQ, List, Comparison, Recommendation, Editorial)
+const CONTENT_STYLE_KEYWORDS = {
+  List: ['top ', 'top-', 'best ', 'best-', 'list of', 'roundup', 'top 5', 'top five', 'top 10', 'ranking'],
+  Comparison: [' vs ', 'versus', 'compare', 'comparison', 'compared to'],
+  Recommendation: ['recommend', 'we suggest', 'try ', 'good for', 'ideal for', 'if you want', 'alternative', 'pick'],
+  FAQ: ['where can i', 'how do i', 'faq', 'q:', 'where to buy', 'is it safe', 'can i', 'best place to buy'],
+  Editorial: ['according to', 'editorial', 'news', 'press', 'reported', 'magazine', 'forbes', 'allure', 'techcrunch']
+};
+function computeContentStyleCountsFromText(text) {
+  try {
+    const blob = String(text || '').toLowerCase();
+    const counts = { List: 0, Comparison: 0, Recommendation: 0, FAQ: 0, Editorial: 0 };
+    Object.keys(CONTENT_STYLE_KEYWORDS).forEach(k => {
+      const kws = CONTENT_STYLE_KEYWORDS[k] || [];
+      let v = 0; kws.forEach(w => { if (blob.includes(w)) v += 1; });
+      counts[k] = v;
+    });
+    return counts;
+  } catch { return { List: 0, Comparison: 0, Recommendation: 0, FAQ: 0, Editorial: 0 }; }
+}
+function mergeStyleCounts(a, b) {
+  const out = { List: 0, Comparison: 0, Recommendation: 0, FAQ: 0, Editorial: 0 };
+  Object.keys(out).forEach(k => { out[k] = (a?.[k] || 0) + (b?.[k] || 0); });
+  return out;
+}
+
+// --- Product Attribute Mentions (backend) ---
+const ATTRIBUTE_SYNONYMS = {
+  Luxury: ['luxury','premium','high-end','curated'],
+  Affordable: ['affordable','budget','low-cost','cheap','value','deal','discount'],
+  'Cheap Deals': ['cheap deals','best deal','discount','low price','bargain','sale'],
+  'Fast Shipping': ['fast shipping','same-day','next-day','prime delivery','quick delivery'],
+  Organic: ['organic','clean beauty','natural'],
+  Sustainable: ['sustainable','eco-friendly','green','recyclable'],
+  Minimalist: ['minimalist','simple ingredients','minimal ingredients'],
+  Variety: ['variety','wide selection','assortment','many options']
+};
+function computeAttributeCountsFromText(text, competitorName) {
+  try {
+    const out = {};
+    Object.keys(ATTRIBUTE_SYNONYMS).forEach(k => (out[k] = 0));
+    const t = String(text || '').toLowerCase();
+    if (!t) return out;
+    const name = String(competitorName || '').toLowerCase();
+    const hasName = !!name && t.includes(name);
+    Object.entries(ATTRIBUTE_SYNONYMS).forEach(([attr, syns]) => {
+      let count = 0;
+      syns.forEach(s => {
+        const rx = new RegExp(`(?:^|[^a-z0-9])${s.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')}(?:[^a-z0-9]|$)`, 'gi');
+        const m = t.match(rx);
+        count += m ? m.length : 0;
+      });
+      if (hasName && count > 0) out[attr] += count;
+    });
+    return out;
+  } catch { return {}; }
+}
+function mergeAttributeCounts(a, b) {
+  const out = {};
+  Object.keys(ATTRIBUTE_SYNONYMS).forEach(k => { out[k] = (a?.[k] || 0) + (b?.[k] || 0); });
+  return out;
+}
+
+// --- Sentiment helpers (backend) ---
+const SENTIMENT_POS_WORDS = ['trusted','reliable','affordable','great','excellent','fast','love','best','top','high quality','recommend'];
+const SENTIMENT_NEG_WORDS = ['expensive','slow','overwhelming','poor','bad','negative','issue','problem','weak','concern','not recommended'];
+const ATTR_CONTEXT_MAP = {
+  Trust: ['trust','trusted','authority','credible','reliable'],
+  Price: ['price','affordable','cheap','expensive','deal','value','budget'],
+  Delivery: ['delivery','shipping','fast','slow','prime','same-day','next-day'],
+  Sustainability: ['sustainable','organic','eco','green','environment'],
+  UX: ['ux','experience','overwhelming','easy','hard','simple']
+};
+function detectToneFromText(text) {
+  const t = String(text || '').toLowerCase();
+  let pos = 0, neg = 0;
+  SENTIMENT_POS_WORDS.forEach(w => { if (t.includes(w)) pos += 1; });
+  SENTIMENT_NEG_WORDS.forEach(w => { if (t.includes(w)) neg += 1; });
+  if (pos > 0 && neg === 0) return 'Positive';
+  if (neg > 0 && pos === 0) return 'Negative';
+  if (pos > 0 && neg > 0) return 'Mixed';
+  return 'Neutral';
+}
+function detectAttributeFromText(text) {
+  const t = String(text || '').toLowerCase();
+  let best = 'General'; let max = 0;
+  Object.keys(ATTR_CONTEXT_MAP).forEach(key => {
+    const kws = ATTR_CONTEXT_MAP[key];
+    let hits = 0; kws.forEach(k => { if (t.includes(k)) hits += 1; });
+    if (hits > max) { max = hits; best = key; }
+  });
+  return best;
+}
+function extractSnippetAroundName(text, name, window = 140) {
+  try {
+    const t = String(text || '');
+    const n = String(name || '');
+    const idx = t.toLowerCase().indexOf(n.toLowerCase());
+    if (idx >= 0) {
+      const start = Math.max(0, idx - Math.floor(window/2));
+      const end = Math.min(t.length, idx + n.length + Math.floor(window/2));
+      return t.slice(start, end).replace(/\s+/g, ' ').trim();
+    }
+    const m = t.match(/[^.!?]*[.!?]/);
+    return (m ? m[0] : t).slice(0, window).trim();
+  } catch { return String(text || '').slice(0, window); }
+}
+function extractSentenceWithName(text, name) {
+  try {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    const n = String(name || '');
+    if (!t) return '';
+    const parts = t.split(/(?<=[.!?])\s+/);
+    const ci = n.toLowerCase();
+    for (const s of parts) {
+      if (s.toLowerCase().includes(ci)) return s.trim().slice(0, 280);
+    }
+    return extractSnippetAroundName(t, n, 160);
+  } catch { return String(text || '').slice(0, 160); }
+}
+function extractQuotedSentenceWithName(text, name) {
+  try {
+    const n = String(name || '').toLowerCase();
+    const t = String(text || '');
+    const quoteRegex = /"([^"]{3,280})"|'([^']{3,280})'/g;
+    let match;
+    while ((match = quoteRegex.exec(t)) !== null) {
+      const seg = (match[1] || match[2] || '').trim();
+      if (seg && seg.toLowerCase().includes(n)) return seg;
+    }
+    return '';
+  } catch { return ''; }
+}
+function isNonInformativeSentimentText(text) {
+  const t = String(text || '').toLowerCase();
+  return /please\s+provide\s+the\s+\[?product\]?|need\s+the\s+product\s+name|what\s+specific\s+product/i.test(t);
+}
+function classifySourceCategoryFromText(text) {
+  const hosts = extractUrls(text);
+  for (const h of hosts) {
+    const cat = classifyDomain(h);
+    if (cat) return cat;
+  }
+  const t = String(text || '').toLowerCase();
+  if (/reddit|quora|forum|community|trustpilot/.test(t)) return 'Review Sites / Forums';
+  if (/forbes|bloomberg|wsj|nytimes|guardian|techcrunch|press|editorial/.test(t)) return 'News / PR Mentions';
+  if (/amazon|etsy|ebay|walmart|flipkart|aliexpress/.test(t)) return 'Marketplaces';
+  if (/blog|guide|buyers guide|how to|list of/.test(t)) return 'Blogs / Guides';
+  return '—';
+}
+
+// --- Shopping Visibility (Transactional Mentions) ---
+function getTransactionalPromptBank(product = '', country = '') {
+  const loc = country ? ` in ${country}` : '';
+  const p = product || '[product]';
+  return [
+    `Best website to buy ${p} online${loc}`,
+    `Top ${p} ecommerce stores${loc}`,
+    `Trusted online stores for ${p}${loc}`,
+    `Affordable ${p} retailers online${loc}`,
+    `Where can I buy high-quality ${p} with warranty${loc}?`
+  ];
+}
+
+function textIncludesNear(text, term, keywords) {
+  try {
+    const lower = String(text || '').toLowerCase();
+    const t = String(term || '').toLowerCase();
+    const idx = lower.indexOf(t);
+    if (idx < 0) return false;
+    const window = lower.slice(Math.max(0, idx - 60), Math.min(lower.length, idx + t.length + 60));
+    return keywords.some(k => window.includes(k));
+  } catch { return false; }
+}
+
+async function computeShoppingVisibilityCounts(competitorNames, product, country, isFast) {
+  console.log('\n🛍️ [computeShoppingVisibilityCounts] Starting transactional mentions calculation...');
+  console.log(`   Competitors: ${competitorNames.join(', ')}`);
+  console.log(`   Product: ${product || '(none)'}`);
+  console.log(`   Country: ${country || '(none)'}`);
+  console.log(`   Fast mode: ${isFast}`);
+
+  const queries = getTransactionalPromptBank(product, country);
+  console.log(`   Queries to process: ${queries.length}`);
+  queries.forEach((q, i) => console.log(`     Q${i + 1}: ${q}`));
+
+  const modelKeys = getConfiguredModelKeys();
+  console.log(`   Configured models: ${modelKeys.join(', ')}`);
+  if (modelKeys.length === 0) {
+    console.log('❌ [computeShoppingVisibilityCounts] No models configured - returning empty result');
+    return { countsByCompetitor: {}, queries };
+  }
+
+  const counts = {};
+  modelKeys.forEach(m => { counts[m] = Object.fromEntries(competitorNames.map(n => [n, 0])); });
+
+  const aliasMap = Object.fromEntries(competitorNames.map(n => [n, buildAliases(n)]));
+  const listVendors = competitorNames.join(', ');
+  const transactionalKeywords = ['buy','purchase','order','shop','store','checkout','cart','pricing','price','deal','discount','sold at','retailer','best place to buy'];
+
+  const promptFor = (q) => `For the topic: "${q}", consider these vendors: ${listVendors}. Mention the vendors that are commonly recommended as a place to buy. Mention vendor names directly.`;
+
+  console.log('\n🚀 [computeShoppingVisibilityCounts] Creating parallel LLM calls...');
+  const allCalls = [];
+  modelKeys.forEach(m => {
+    queries.forEach((q, i) => {
+      allCalls.push({ model: m, query: q, queryIndex: i, prompt: promptFor(q) });
+    });
+  });
+  console.log(`   Total parallel calls: ${allCalls.length} (${modelKeys.length} models × ${queries.length} queries)`);
+
+  const responses = await Promise.all(allCalls.map(async (call) => {
+    try {
+      console.log(`   📞 [${call.model}] Q${call.queryIndex + 1}: "${call.query}"`);
+      const text = await withTimeout(callModelSimple(call.model, call.prompt), isFast ? 8000 : 12000, '').catch(() => '');
+      const ok = !!(text && String(text).trim());
+      console.log(`   ✅ [${call.model}] Q${call.queryIndex + 1}: ${ok ? (String(text).length + ' chars') : 'empty'}`);
+      return { model: call.model, queryIndex: call.queryIndex, text: text || '', success: ok };
+    } catch {
+      console.log(`   ❌ [${call.model}] Q${call.queryIndex + 1}: error`);
+      return { model: call.model, queryIndex: call.queryIndex, text: '', success: false };
+    }
+  }));
+
+  const processed = await Promise.all(responses.map(async (r) => {
+    if (!r.success) return r;
+    const t = String(r.text || '');
+    const lower = t.toLowerCase();
+    const mentions = [];
+    competitorNames.forEach(name => {
+      const aliases = aliasMap[name] || [name];
+      const mentioned = aliases.some(a => textIncludesNear(lower, a, transactionalKeywords));
+      if (mentioned) mentions.push(name);
+    });
+    console.log(`   🔎 [${r.model}] Q${r.queryIndex + 1}: Mentions → ${mentions.length ? mentions.join(', ') : 'none'}`);
+    return { ...r, mentions };
+  }));
+
+  processed.forEach(res => {
+    if (!res.success) return;
+    const m = res.model;
+    (res.mentions || []).forEach(name => { counts[m][name] += 1; });
+  });
+
+  const countsByCompetitor = {};
+  competitorNames.forEach(name => {
+    const byModel = {};
+    let total = 0;
+    modelKeys.forEach(m => { byModel[m] = counts[m][name] || 0; total += byModel[m]; });
+    countsByCompetitor[name] = { total, byModel };
+  });
+
+  console.log('\n📊 [computeShoppingVisibilityCounts] Final counts:');
+  Object.keys(countsByCompetitor).forEach(k => {
+    const row = countsByCompetitor[k];
+    const byM = modelKeys.map(m => `${m}:${row.byModel[m] || 0}`).join(', ');
+    console.log(`   ${k}: total=${row.total} | ${byM}`);
+  });
+  console.log('✅ [computeShoppingVisibilityCounts] Completed');
+  return { countsByCompetitor, queries };
+}
+
+// Determine placement order (1st/2nd/3rd+) for competitors found in text
+function rankCompetitorsInText(text, competitorNames, aliasMap) {
+  try {
+    const t = String(text || '');
+    const lower = t.toLowerCase();
+    // Prefer explicit numbered lists like "1. Name", "2) Name"
+    const lines = t.split(/\n+/);
+    const ranked = [];
+    const seen = new Set();
+    for (let i = 0; i < Math.min(lines.length, 50); i++) {
+      const line = lines[i];
+      const m = line.match(/^\s*(\d+)[)\.]?\s+(.+)$/);
+      if (!m) continue;
+      const content = m[2] || '';
+      for (const name of competitorNames) {
+        if (!name || seen.has(name)) continue;
+        const aliases = aliasMap[name] || [name];
+        if (aliases.some(a => wordBoundaryRegex(a).test(content))) {
+          ranked.push(name);
+          seen.add(name);
+        }
+      }
+      if (ranked.length >= 3) break;
+    }
+    if (ranked.length >= 2) return ranked;
+    // Fallback to first-occurrence order
+    const positions = competitorNames.map(name => {
+      const aliases = aliasMap[name] || [name];
+      let pos = Infinity;
+      aliases.forEach(a => {
+        const idx = lower.indexOf(String(a).toLowerCase());
+        if (idx >= 0) pos = Math.min(pos, idx);
+      });
+      return { name, pos };
+    }).filter(x => isFinite(x.pos)).sort((a, b) => a.pos - b.pos);
+    return positions.map(x => x.name);
+  } catch {
+    return [];
+  }
 }
 
 async function computeCitationMetrics(competitorNames, industry, isFast, opts = {}) {
@@ -1122,6 +1578,55 @@ Return ONLY a JSON object with this format:
     console.error(`❌ Industry/product detection error:`, error.message);
     return { industry: '', product: '' };
   }
+}
+
+// Lightweight product inference by known-brand heuristics
+function inferProductFromCompanyName(companyName) {
+  const name = String(companyName || '').toLowerCase();
+  const clothingBrands = ['zara','h&m','hm','uniqlo','mango','bershka','massimo dutti','the gap','gap','asos','shein','forever 21','primark','pull & bear','pull and bear','fashion nova'];
+  const pharmacyBrands = ['apollo','apollo pharmacy','walgreens','cvs','rite aid','boots','guardian pharmacy'];
+  const beautyRetail = ['sephora','ulta','nykaa','dermstore'];
+  const marketplaces = ['amazon','walmart','etsy','ebay','flipkart','aliexpress'];
+  if (clothingBrands.some(b => name.includes(b))) return 'clothing';
+  if (pharmacyBrands.some(b => name.includes(b))) return 'medicines';
+  if (beautyRetail.some(b => name.includes(b))) return 'beauty products';
+  if (marketplaces.some(b => name.includes(b))) return 'consumer goods';
+  return '';
+}
+
+// Detect product only (fast prompt on search results)
+async function detectProductOnly(companyName) {
+  try {
+    const queries = [
+      `${companyName} main products`,
+      `${companyName} what do they sell`,
+      `${companyName} category`
+    ];
+    let results = [];
+    for (const q of queries) {
+      const r = await queryCustomSearchAPI(q).catch(() => []);
+      results = results.concat(r);
+      if (results.length >= 5) break;
+    }
+    if (results.length === 0) return { product: '' };
+    const prompt = `From these snippets, infer the PRIMARY product category this company sells.
+Company: ${companyName}
+Snippets:\n${results.map(x => `- ${x.snippet}`).join('\n')}
+Return ONLY JSON: { "product": "..." }`;
+    if (GEMINI_API_KEY) {
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const out = await model.generateContent(prompt);
+      const text = out.response.candidates[0]?.content?.parts[0]?.text || '';
+      try {
+        const clean = text.replace(/```json\s*/g,'').replace(/```/g,'').trim();
+        const m = clean.match(/\{[\s\S]*\}/);
+        const obj = JSON.parse(m ? m[0] : clean);
+        return { product: obj.product || '' };
+      } catch { return { product: '' }; }
+    }
+    return { product: inferProductFromCompanyName(companyName) };
+  } catch { return { product: '' }; }
 }
 
 // Enhanced prompt generation with automatic detection
@@ -2354,14 +2859,14 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           withTimeout(detectIndustryAndProduct(companyName), 8000, { industry: '', product: '' })
             .then(detection => {
               detectedIndustry = detection.industry;
-              detectedProduct = detection.product;
+              detectedProduct = detection.product || inferProductFromCompanyName(companyName);
               console.log(`📊 Quick detected industry: ${detectedIndustry || 'Unknown'}`);
               return { type: 'industry', data: detection };
             })
             .catch(error => {
               console.log('🔍 Quick detection failed, proceeding without industry context');
               detectedIndustry = '';
-              detectedProduct = '';
+              detectedProduct = inferProductFromCompanyName(companyName);
               return { type: 'industry', data: { industry: '', product: '' } };
             })
         );
@@ -2369,12 +2874,19 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         console.log('🔍 No industry specified, detecting automatically...');
         const detection = await detectIndustryAndProduct(companyName);
         detectedIndustry = detection.industry;
-        detectedProduct = detection.product;
+        detectedProduct = detection.product || inferProductFromCompanyName(companyName);
         console.log(`📊 Detected industry: ${detectedIndustry || 'Unknown'}`);
         console.log(`📊 Detected product: ${detectedProduct || 'Unknown'}`);
       }
     }
     
+    // If product still missing, kick off a quick product-only detection in parallel
+    let productOnlyPromise = null;
+    if (!detectedProduct) {
+      console.log('🧪 Product not provided — attempting quick product inference...');
+      productOnlyPromise = withTimeout(detectProductOnly(companyName), 6000, { product: inferProductFromCompanyName(companyName) }).catch(() => ({ product: inferProductFromCompanyName(companyName) }));
+    }
+
     // Get search results for competitors (start in parallel with industry detection)
     const searchQuery = `${companyName} competitors ${detectedIndustry}`.trim();
     console.log('🔍 Search query:', searchQuery);
@@ -2414,7 +2926,14 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     }
     
     const searchTime = Date.now();
-    console.log(`⏱️ Search and industry detection completed in ${searchTime - startTime}ms`);
+    // Set product if quick product inference returned
+    if (productOnlyPromise) {
+      try {
+        const p = await productOnlyPromise;
+        if (!detectedProduct && p?.product) detectedProduct = p.product;
+      } catch {}
+    }
+    console.log(`⏱️ Search and detections completed in ${searchTime - startTime}ms (product=${detectedProduct || 'Unknown'})`);
     
     // Detect competitors (optimized detection)
     console.log('🎯 Starting parallel competitor detection...');
@@ -2670,6 +3189,12 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           claude: claudeResponse.analysis || 'No analysis available',
           chatgpt: chatgptResponse.analysis || 'No analysis available'
         },
+        sourcesByTool: computeSourcesByToolFromTexts({
+          gemini: { analysis: geminiResponse.analysis },
+          perplexity: { analysis: perplexityResponse.analysis },
+          claude: { analysis: claudeResponse.analysis },
+          chatgpt: { analysis: chatgptResponse.analysis }
+        }),
         audienceProfile: audienceProfile || null,
         rawModels: rawModelMetrics,
         snippets: {
@@ -2713,12 +3238,13 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       console.log('📊 Calling computeAiTrafficShares...');
       const trafficPromise = computeAiTrafficShares(allCompanies, detectedIndustry, isFast, { companyName, product: detectedProduct })
         .then(result => {
-          console.log('✅ AI Traffic Share calculation completed successfully');
-          if (result && result.sharesByCompetitor) {
-            console.log('   Traffic results:');
-            Object.keys(result.sharesByCompetitor).forEach(competitor => {
-              const data = result.sharesByCompetitor[competitor];
-              console.log(`     ${competitor}: Global ${data.global.toFixed(1)}%`);
+          console.log('✅ AI Traffic (counts) calculation completed successfully');
+          if (result && result.countsByCompetitor) {
+            console.log('   Traffic results (counts):');
+            Object.keys(result.countsByCompetitor).forEach(competitor => {
+              const data = result.countsByCompetitor[competitor];
+              const p = data.placementTotals || { first: 0, second: 0, third: 0 };
+              console.log(`     ${competitor}: total=${data.totalMentions}, P1=${p.first}, P2=${p.second}, P3+=${p.third}`);
             });
           } else {
             console.log('   ⚠️ Traffic result is null/undefined');
@@ -2756,21 +3282,139 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           return null;
         });
 
-      const [traffic, citations] = await Promise.all([trafficPromise, citationsPromise]);
+      const shoppingPromise = computeShoppingVisibilityCounts(allCompanies, detectedProduct, (options?.country || ''), isFast)
+        .catch(() => null);
+
+      // Run a separate citation-first capture to extract exact domains for source donuts
+      const citationPrompts = getCitationPromptBank({ company: companyName, industry: detectedIndustry, product: detectedProduct, country: options?.country || '' });
+      const sourceCapturePromise = (async () => {
+        const tools = getConfiguredModelKeys();
+        const calls = [];
+        // Mix citation-first and content-style prompts for better style/domain capture
+        const stylePrompts = getContentStylePromptBank({ company: companyName, competitorA: allCompanies[1] || '', competitorB: allCompanies[2] || '', industry: detectedIndustry, product: detectedProduct, country: options?.country || '' });
+        tools.forEach(tool => {
+          citationPrompts.slice(0, isFast ? 3 : 6).forEach((q, i) => { calls.push({ model: tool, idx: i, prompt: q }); });
+          stylePrompts.slice(0, isFast ? 3 : 6).forEach((q, i) => { calls.push({ model: tool, idx: i + 100, prompt: q }); });
+        });
+        const responses = await Promise.all(calls.map(async c => {
+          const text = await withTimeout(callModelSimple(c.model, c.prompt), isFast ? 9000 : 14000, '').catch(() => '');
+          return { model: c.model, text };
+        }));
+        // Aggregate by tool
+        const agg = {};
+        const toolsList = getConfiguredModelKeys();
+        toolsList.forEach(t => { agg[t] = { counts: { 'Blogs / Guides':0, 'Review Sites / Forums':0, 'Marketplaces':0, 'News / PR Mentions':0, 'Directories / Comparison':0 }, examples: [] }; });
+        responses.forEach(r => {
+          const classified = computeSourcesByToolFromTexts({ [r.model]: { analysis: r.text } });
+          const entry = classified[r.model];
+          if (!entry) return;
+          Object.keys(entry.counts || {}).forEach(cat => { agg[r.model].counts[cat] += Number(entry.counts[cat] || 0); });
+          (entry.examples || []).forEach(ex => { agg[r.model].examples.push(ex); });
+        });
+        return agg;
+      })();
+
+      const [traffic, citations, shopping, sourceCapture] = await Promise.all([trafficPromise, citationsPromise, shoppingPromise, sourceCapturePromise]);
       
       console.log('\n📋 Processing results...');
       console.log(`   Traffic result: ${traffic ? 'SUCCESS' : 'FAILED'}`);
       console.log(`   Citations result: ${citations ? 'SUCCESS' : 'FAILED'}`);
       
+      // Sentiment capture – targeted prompts per competitor with citation requirement
+      const toolsForSent = getConfiguredModelKeys();
+      const sentCalls = [];
+      const mkSentPromptsFor = (name) => {
+        const base = [
+          `Summarize shopper sentiment toward ${name} in ${detectedIndustry || '[industry]'} for ${detectedProduct || '[product]'}.
+Answer briefly. Then output a Sources section with 1–3 items as: Category | Domain | URL. Use real HTTPS links (no placeholders). Include ONE short quoted sentence that contains the brand name (e.g., "${name} ..."). Return Tone (Positive/Neutral/Negative/Mixed) and the main reason (price, delivery, trust, sustainability, UX).`,
+          `Pros and cons for ${name} in ${detectedIndustry || '[industry]'}.
+Answer briefly. Then output a Sources section with 1–3 items as: Category | Domain | URL. Include ONE direct quote with the brand name ("${name} ...").`,
+          `Recent perception of ${name}: price, delivery, trust. Provide ONE quoted sentence that includes the brand name.
+Answer briefly. Then output a Sources section with 1–3 items as: Category | Domain | URL.`
+        ];
+        return base.slice(0, isFast ? 1 : 3);
+      };
+      allCompanies.forEach(name => {
+        toolsForSent.forEach(tool => {
+          mkSentPromptsFor(name).forEach((q, i) => sentCalls.push({ model: tool, name, idx: i, prompt: q }));
+        });
+      });
+      const sentResponses = await Promise.all(sentCalls.map(async c => {
+        const text = await withTimeout(callModelSimple(c.model, c.prompt), isFast ? 9000 : 15000, '').catch(() => '');
+        return { model: c.model, name: c.name, text };
+      }));
+      // Build sentiment rows per competitor from these responses
+      const sentimentByCompetitor = {};
+      allCompanies.forEach(n => { sentimentByCompetitor[n] = []; });
+      sentResponses.forEach(rsp => {
+        const name = rsp.name;
+        const txtRaw = String(rsp.text || '');
+        if (!txtRaw) return;
+        if (isNonInformativeSentimentText(txtRaw)) return; // skip prompts asking for product
+        const txt = txtRaw;
+        if (!txt) return;
+        const tone = detectToneFromText(txt);
+        const quoteDirect = extractQuotedSentenceWithName(txt, name);
+        const quote = quoteDirect || extractSentenceWithName(txt, name);
+        const source = classifySourceCategoryFromText(txt);
+        const attr = detectAttributeFromText(txt);
+        const takeaway = tone === 'Positive' ? 'Positive framing may boost authority and conversions.' : tone === 'Negative' ? 'Visibility present but negative sentiment — address issues with content.' : tone === 'Mixed' ? 'Mixed perception — clarify value props where weak.' : 'Neutral presence — opportunity to shape narrative.';
+        sentimentByCompetitor[name].push({ name, tone, quote, source, attr, takeaway });
+      });
+
       analysisResults = analysisResults.map(r => {
-        const aiTraffic = traffic ? (traffic.sharesByCompetitor[r.name] || { byModel: {}, global: 0, weightedGlobal: 0 }) : undefined;
+        const aiTraffic = traffic ? (traffic.countsByCompetitor?.[r.name] || { totalMentions: 0, byModel: {}, placementByModel: {}, placementTotals: { first: 0, second: 0, third: 0 } }) : undefined;
         const citationsFor = citations ? (citations[r.name] || undefined) : undefined;
+        const shoppingFor = shopping ? (shopping.countsByCompetitor?.[r.name] || { total: 0, byModel: {} }) : undefined;
+        // Attach aggregated domain sources by tool (global across prompts)
+        const sourcesByTool = sourceCapture || undefined;
+        // Content style counts from all analyses
+        const styleCounts = mergeStyleCounts(
+          mergeStyleCounts(computeContentStyleCountsFromText(r?.analysis?.gemini), computeContentStyleCountsFromText(r?.analysis?.chatgpt)),
+          mergeStyleCounts(computeContentStyleCountsFromText(r?.analysis?.perplexity), computeContentStyleCountsFromText(r?.analysis?.claude))
+        );
+        const styleSource = 'backend';
         
         console.log(`   ${r.name}:`);
-        console.log(`     AI Traffic: ${aiTraffic ? `Global ${aiTraffic.global.toFixed(1)}%` : 'UNDEFINED'}`);
+        if (aiTraffic) {
+          const p = aiTraffic.placementTotals || { first: 0, second: 0, third: 0 };
+          console.log(`     AI Visibility: total=${aiTraffic.totalMentions}, P1=${p.first}, P2=${p.second}, P3+=${p.third}`);
+        } else {
+          console.log('     AI Visibility: UNDEFINED');
+        }
         console.log(`     Citations: ${citationsFor ? `Global ${(citationsFor.global?.citationScore * 100).toFixed(1)}%` : 'UNDEFINED'}`);
+        console.log(`     Shopping Mentions: ${shoppingFor ? shoppingFor.total : 'UNDEFINED'}`);
+
+        // Backend competitor type classification for logs (parity with UI)
+        try {
+          const texts = [r?.analysis?.gemini, r?.analysis?.chatgpt, r?.analysis?.perplexity, r?.analysis?.claude]
+            .map(x => String(x || '')).join('\n');
+          const t = classifyCompetitorTypeServer(r.name, texts, shoppingFor?.total || 0);
+          console.log(`     Type (heuristic): ${t}`);
+        } catch {}
         
-        return { ...r, aiTraffic, citations: citationsFor };
+        console.log(`     Content Style (source=${styleSource}):`, styleCounts);
+        // Product Attribute Mentions aggregated from model analyses
+        const attrCounts = mergeAttributeCounts(
+          mergeAttributeCounts(
+            computeAttributeCountsFromText(r?.analysis?.gemini, r.name),
+            computeAttributeCountsFromText(r?.analysis?.chatgpt, r.name)
+          ),
+          mergeAttributeCounts(
+            computeAttributeCountsFromText(r?.analysis?.perplexity, r.name),
+            computeAttributeCountsFromText(r?.analysis?.claude, r.name)
+          )
+        );
+        console.log('     Product Attributes:', attrCounts);
+        // Sentiment rows for this competitor
+        // Prioritize rows: Positive/Negative first, then Mixed, then Neutral
+        const rawRows = sentimentByCompetitor[r.name] || [];
+        const priority = { Positive: 0, Negative: 0, Mixed: 1, Neutral: 2 };
+        const sentimentRows = rawRows
+          .sort((a, b) => (priority[a.tone] ?? 3) - (priority[b.tone] ?? 3))
+          .slice(0, 3);
+        sentimentRows.forEach((row, i) => console.log(`     [Sentiment R${i + 1}] Tone=${row.tone} | Quote="${row.quote}" | Source=${row.source} | Attr=${row.attr}`));
+        return { ...r, aiTraffic, citations: citationsFor, shopping: shoppingFor, sourcesByTool, contentStyle: styleCounts, contentStyleSource: styleSource, sentiment: sentimentRows, productAttributes: attrCounts };
       });
     } catch (e) { 
       console.log('❌ Error in AI Traffic/Citation calculation:', e.message);
