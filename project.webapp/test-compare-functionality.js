@@ -197,3 +197,4 @@ function testComparePages() {
 
 // Run the test
 testComparePages();
+

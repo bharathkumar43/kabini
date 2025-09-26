@@ -1107,7 +1107,31 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       }
     } catch (error: any) {
       console.error('URL analysis error:', error);
-      setUrlError(error.message || 'Failed to analyze URL. Please try again.');
+      
+      // Try to extract suggestions from the error response
+      let errorMessage = error.message || 'Failed to analyze URL. Please try again.';
+      let suggestions = [];
+      
+      try {
+        if (error.response && error.response.data) {
+          const errorData = error.response.data;
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+          if (errorData.suggestions && Array.isArray(errorData.suggestions)) {
+            suggestions = errorData.suggestions;
+          }
+        }
+      } catch (parseError) {
+        console.warn('Could not parse error response:', parseError);
+      }
+      
+      // Format error message with suggestions
+      if (suggestions.length > 0) {
+        errorMessage += '\n\nSuggestions:\n• ' + suggestions.join('\n• ');
+      }
+      
+      setUrlError(errorMessage);
     } finally {
       setIsUrlLoading(false);
     }
@@ -2026,7 +2050,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                 
                 {urlError && (
                   <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-base">
-                    {urlError}
+                    <div className="whitespace-pre-line">{urlError}</div>
                   </div>
                 )}
         </div>

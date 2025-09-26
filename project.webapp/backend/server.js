@@ -92,6 +92,8 @@ console.log('🔐 [Server] GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID ? 'C
 console.log('🔐 [Server] JWT_SECRET:', process.env.JWT_SECRET ? 'Configured' : 'Missing');
 console.log('🔐 [Server] DB_HOST:', process.env.DB_HOST || 'localhost');
 console.log('🔐 [Server] DB_NAME:', process.env.DB_NAME || 'kabini_ai');
+console.log('🔐 [Server] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'Configured' : 'Missing');
+console.log('🔐 [Server] GOOGLE_CSE_ID:', process.env.GOOGLE_CSE_ID ? 'Configured' : 'Missing');
 
 // Validate required environment variables
 if (!process.env.JWT_SECRET) {
@@ -625,59 +627,411 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// ===================== Store Integrations (Read-only, Phase 1) =====================
-// Save basic credentials in-memory for this session; for production replace with DB/secret store
-const storeConnections = new Map(); // key: userId -> { platform, credentials }
+// ===================== Shopify OAuth Integration (Phase 2) =====================
+// Per-user, multi-shop token storage (in-memory; replace with DB/secret manager)
+// Structure: Map<userKey, Map<shopDomain, { accessToken, scopes, installedAt }>>
+const shopifyTokens = new Map();
+// Ephemeral OAuth state: Map<state, { userKey, shop, credsId?, clientId?, clientSecret?, redirectUri? }>
+const shopifyOauthState = new Map();
+// Per-user Shopify app credentials (for BYO)
+// Structure: Map<userKey, Map<id, { id, name, apiKey, apiSecret, redirectUri, createdAt }>>
+const shopifyAppCredentials = new Map();
+// Per-user Storefront tokens: Map<userKey, Map<shop, { token, createdAt }>>
+const shopifyStorefrontTokens = new Map();
+function getUserKey(req) { return req?.user?.id || req?.user?.email || 'default'; }
 
-app.post('/api/store/connect', authenticateToken, async (req, res) => {
+// Start Shopify OAuth: redirect user to grant access
+app.get('/api/shopify/auth/start', async (req, res) => {
   try {
-    const { platform, credentials } = req.body || {};
-    if (!platform || !credentials) return res.status(400).json({ success: false, error: 'platform and credentials required' });
-    // Persist in-memory per user session (replace with encrypted storage later)
-    storeConnections.set(req.user.id || req.user.email || 'default', { platform, credentials, updatedAt: Date.now() });
-    return res.json({ success: true, message: 'Stored credentials (session scope)' });
+    const { shop, credsId, token } = req.query;
+    if (!shop || !/\.myshopify\.com$/i.test(String(shop))) {
+      return res.status(400).send('Missing or invalid shop domain');
+    }
+    // Derive user from JWT token passed as query (since redirects can't send headers)
+    let userKey = 'default';
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(String(token), process.env.JWT_SECRET);
+        userKey = decoded?.id || decoded?.email || decoded?.sub || 'default';
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+        return res.status(403).json({ error: 'Invalid token' });
+      }
+    } else {
+      return res.status(403).json({ error: 'No token provided' });
+    }
+    const lowerShop = String(shop).toLowerCase();
+    // Resolve app credentials (default env or BYO creds)
+    let clientId = process.env.SHOPIFY_API_KEY || '';
+    let clientSecret = process.env.SHOPIFY_API_SECRET || '';
+    let redirectUri = `${process.env.API_BASE_URL}/api/shopify/auth/callback`;
+    if (credsId) {
+      const u = shopifyAppCredentials.get(userKey);
+      const rec = u?.get(String(credsId));
+      if (!rec) return res.status(400).send('Invalid credsId');
+      clientId = rec.apiKey;
+      clientSecret = rec.apiSecret;
+      redirectUri = rec.redirectUri || redirectUri;
+    }
+    const state = Math.random().toString(36).slice(2);
+    shopifyOauthState.set(state, { userKey, shop: lowerShop, credsId: credsId ? String(credsId) : null, clientId, clientSecret, redirectUri });
+    const params = new URLSearchParams({
+      client_id: clientId,
+      scope: [
+        'read_products', 'read_product_listings', 'read_inventory',
+        'read_collection_listings', 'read_files', 'read_fulfillments',
+        'read_assigned_fulfillment_orders', 'read_locations', 'read_orders',
+        'read_price_rules', 'read_discounts', 'read_marketing_events',
+        'read_customers', 'read_gift_cards', 'read_metaobjects', 'read_third_party_fulfillment_orders'
+      ].join(','),
+      redirect_uri: redirectUri,
+      state
+    });
+    const redirectUrl = `https://${shop}/admin/oauth/authorize?${params.toString()}`;
+    res.redirect(redirectUrl);
+  } catch (e) {
+    res.status(500).send(e.message);
   }
 });
 
-app.post('/api/store/test', authenticateToken, async (req, res) => {
+// OAuth callback: exchange code for access token
+app.get('/api/shopify/auth/callback', async (req, res) => {
   try {
-    const { platform, credentials } = req.body || {};
-    if (!platform || !credentials) return res.status(400).json({ success: false, error: 'platform and credentials required' });
-    const result = await testStoreConnection(platform, credentials);
-    return res.json({ success: result.ok, result });
+    const { shop, code, state } = req.query;
+    if (!shop || !code || !state) return res.status(400).send('Missing shop, code or state');
+    const stateRec = shopifyOauthState.get(state);
+    if (!stateRec || String(stateRec.shop) !== String(shop).toLowerCase()) {
+      return res.status(400).send('Invalid or expired state');
+    }
+    const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: stateRec.clientId || process.env.SHOPIFY_API_KEY,
+        client_secret: stateRec.clientSecret || process.env.SHOPIFY_API_SECRET,
+        code
+      })
+    });
+    const tokenJson = await tokenRes.json();
+    if (!tokenRes.ok) {
+      return res.status(400).send(`Token error: ${tokenJson?.error || tokenRes.status}`);
+    }
+    const userKey = stateRec.userKey || 'default';
+    const shopKey = String(shop).toLowerCase();
+    if (!shopifyTokens.has(userKey)) shopifyTokens.set(userKey, new Map());
+    shopifyTokens.get(userKey).set(shopKey, {
+      accessToken: tokenJson.access_token,
+      scopes: tokenJson.scope,
+      installedAt: Date.now()
+    });
+    shopifyOauthState.delete(state);
+    // Return a small HTML page that notifies the opener and closes the window
+    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Shopify Connected</title></head>
+    <body>
+      <script>
+        try {
+          if (window.opener) {
+            window.opener.postMessage({ type: 'SHOPIFY_CONNECTED', shop: ${JSON.stringify(shopKey)} }, '*');
+          }
+        } catch (e) {}
+        window.close();
+        document.write('Shopify connected. You can close this tab.');
+      </script>
+    </body></html>`;
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Shopify Connect Error</title></head>
+    <body>
+      <script>
+        try {
+          if (window.opener) {
+            window.opener.postMessage({ type: 'SHOPIFY_CONNECT_ERROR', error: ${JSON.stringify(String(e.message || 'error'))} }, '*');
+          }
+        } catch (err) {}
+      </script>
+      <pre>${String(e.message || 'error')}</pre>
+    </body></html>`;
+    res.setHeader('Content-Type', 'text/html');
+    res.status(500).send(html);
   }
 });
 
-app.get('/api/store/products', authenticateToken, async (req, res) => {
+// Credentials Manager (BYO Shopify app)
+app.post('/api/shopify/credentials', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const { name, apiKey, apiSecret, redirectUri } = req.body || {};
+    if (!apiKey || !apiSecret) return res.status(400).json({ success: false, error: 'apiKey and apiSecret required' });
+    const id = Math.random().toString(36).slice(2);
+    if (!shopifyAppCredentials.has(userKey)) shopifyAppCredentials.set(userKey, new Map());
+    shopifyAppCredentials.get(userKey).set(id, { id, name: name || `Creds ${id}`, apiKey, apiSecret, redirectUri, createdAt: Date.now() });
+    res.json({ success: true, id });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/shopify/credentials', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const list = shopifyAppCredentials.get(userKey);
+    res.json({ success: true, items: list ? Array.from(list.values()).map(({ apiSecret, ...rest }) => rest) : [] });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.delete('/api/shopify/credentials/:id', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const id = String(req.params.id);
+    const list = shopifyAppCredentials.get(userKey);
+    if (list) list.delete(id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// List products via Admin GraphQL API
+app.get('/api/shopify/products', authenticateToken, async (req, res) => {
   try {
     const userKey = req.user.id || req.user.email || 'default';
-    const conn = storeConnections.get(userKey);
-    if (!conn) return res.status(400).json({ success: false, error: 'No saved store connection' });
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = Math.min(50, parseInt(req.query.limit || '10', 10));
-    const items = await listStoreProducts(conn.platform, conn.credentials, { page, limit });
-    return res.json({ success: true, items, page, limit });
+    const shopParam = String(req.query.shop || '').toLowerCase();
+    const userShops = shopifyTokens.get(userKey);
+    if (!userShops || userShops.size === 0) return res.status(400).json({ success: false, error: 'Not connected to Shopify' });
+    const resolvedShop = shopParam || (userShops.size === 1 ? Array.from(userShops.keys())[0] : '');
+    if (!resolvedShop) return res.status(400).json({ success: false, error: 'Multiple shops connected; specify ?shop=' });
+    const tokenRec = userShops.get(resolvedShop);
+    if (!tokenRec) return res.status(400).json({ success: false, error: 'Unknown shop for this user' });
+    const { accessToken } = tokenRec;
+    const after = req.query.after ? `, after: "${req.query.after}"` : '';
+    const query = {
+      query: `{
+        products(first: 20${after}) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            id title handle status featuredImage { url altText } variants(first: 1) { nodes { id sku price: priceV2 { amount currencyCode } availableForSale } }
+          }
+        }
+      }`
+    };
+    const r = await fetch(`https://${resolvedShop}/admin/api/2024-07/graphql.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken },
+      body: JSON.stringify(query)
+    });
+    const j = await r.json();
+    if (!r.ok || j.errors) return res.status(400).json({ success: false, error: j.errors || 'GraphQL error' });
+    res.json({ success: true, data: j.data.products });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
-app.get('/api/store/product-html', authenticateToken, async (req, res) => {
+// Fetch a single product by handle or ID
+app.get('/api/shopify/product', authenticateToken, async (req, res) => {
   try {
     const userKey = req.user.id || req.user.email || 'default';
-    const conn = storeConnections.get(userKey);
-    if (!conn) return res.status(400).json({ success: false, error: 'No saved store connection' });
-    const { idOrUrl } = req.query;
-    if (!idOrUrl) return res.status(400).json({ success: false, error: 'idOrUrl is required' });
-    const { url, html } = await fetchStoreProductHtml(conn.platform, conn.credentials, idOrUrl);
-    return res.json({ success: true, url, htmlLength: html.length, html });
+    const shopParam = String(req.query.shop || '').toLowerCase();
+    const userShops = shopifyTokens.get(userKey);
+    if (!userShops || userShops.size === 0) return res.status(400).json({ success: false, error: 'Not connected to Shopify' });
+    const resolvedShop = shopParam || (userShops.size === 1 ? Array.from(userShops.keys())[0] : '');
+    if (!resolvedShop) return res.status(400).json({ success: false, error: 'Multiple shops connected; specify ?shop=' });
+    const tokenRec = userShops.get(resolvedShop);
+    if (!tokenRec) return res.status(400).json({ success: false, error: 'Unknown shop for this user' });
+    const { accessToken } = tokenRec;
+    const { handle, id } = req.query;
+    if (!handle && !id) return res.status(400).json({ success: false, error: 'handle or id required' });
+    const filter = handle ? `handle: "${handle}"` : `id: "${id}"`;
+    const query = { query: `{
+      product(${filter}) {
+        id title handle description html bodyHtml vendor tags seo { title description } featuredImage { url altText }
+        variants(first: 50) { nodes { id title sku availableForSale price: priceV2 { amount currencyCode } compareAtPriceV2 { amount currencyCode } } }
+      }
+    }` };
+    const r = await fetch(`https://${resolvedShop}/admin/api/2024-07/graphql.json`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken }, body: JSON.stringify(query)
+    });
+    const j = await r.json();
+    if (!r.ok || j.errors) return res.status(400).json({ success: false, error: j.errors || 'GraphQL error' });
+    res.json({ success: true, data: j.data.product });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// List connected shops for current user
+app.get('/api/shopify/connections', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const userShops = shopifyTokens.get(userKey);
+    const list = userShops ? Array.from(userShops.keys()).map(shop => ({ shop })) : [];
+    res.json({ success: true, shops: list });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Disconnect a specific shop
+app.delete('/api/shopify/connection', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const shopParam = String(req.query.shop || '').toLowerCase();
+    if (!shopParam) return res.status(400).json({ success: false, error: 'shop is required' });
+    const userShops = shopifyTokens.get(userKey);
+    if (!userShops) return res.json({ success: true });
+    userShops.delete(shopParam);
+    if (userShops.size === 0) shopifyTokens.delete(userKey);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Public product fetch (no admin access)
+app.get('/api/shopify/public-product', async (req, res) => {
+  try {
+    let { url, shop, handle } = req.query || {};
+    url = String(url || ''); shop = String(shop || ''); handle = String(handle || '');
+    let base = '';
+    if (url) {
+      try { const u = new URL(String(url)); base = `${u.protocol}//${u.host}`; handle = handle || u.pathname.split('/').filter(Boolean).pop() || ''; } catch {}
+    } else if (shop && handle) {
+      base = shop.startsWith('http') ? shop : `https://${shop}`;
+    } else {
+      return res.status(400).json({ success: false, error: 'Provide url or shop+handle' });
+    }
+    if (!handle) return res.status(400).json({ success: false, error: 'Missing handle' });
+    const endpoints = [`${base.replace(/\/$/, '')}/products/${handle}.js`, `${base.replace(/\/$/, '')}/products/${handle}.json`];
+    let data = null;
+    for (const ep of endpoints) {
+      try {
+        const r = await fetch(ep, { headers: { 'Accept': 'application/json' } });
+        if (r.ok) { data = await r.json(); break; }
+      } catch {}
+    }
+    if (!data) return res.status(404).json({ success: false, error: 'Product not found' });
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Public product list (no admin access): parse sitemap_products_1.xml
+app.get('/api/shopify/public-list', async (req, res) => {
+  try {
+    const shop = String(req.query.shop || '').trim().toLowerCase();
+    if (!shop) return res.status(400).json({ success: false, error: 'shop is required' });
+    const base = shop.startsWith('http') ? shop : `https://${shop}`;
+    const urls = [
+      `${base.replace(/\/$/, '')}/sitemap_products_1.xml`,
+      `${base.replace(/\/$/, '')}/sitemap.xml`
+    ];
+    let xml = '';
+    for (const u of urls) {
+      try { const r = await fetch(u, { headers: { 'Accept': 'application/xml,text/xml,*/*' } }); if (r.ok) { xml = await r.text(); if (xml) break; } } catch {}
+    }
+    if (!xml) {
+      // Fallback: /products.json (public endpoint on many shops)
+      try {
+        const pj = await fetch(`${base.replace(/\/$/, '')}/products.json?limit=100`, { headers: { 'Accept': 'application/json' } });
+        if (pj.ok) {
+          const data = await pj.json();
+          const items = (data?.products || []).map((p) => {
+            const handle = p?.handle || '';
+            const url = `${base.replace(/\/$/, '')}/products/${handle}`;
+            const title = p?.title || handle.replace(/[-_]/g,' ');
+            return { url, handle, title };
+          });
+          if (items.length > 0) return res.json({ success: true, items: items.slice(0, 100) });
+        }
+      } catch {}
+      return res.status(404).json({ success: false, error: 'No product sitemap found' });
+    }
+    // Extract product URLs from <loc> elements that include /products/
+    const locMatches = Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/gi)).map(m => m[1]).filter(u => /\/products\//i.test(u));
+    const items = locMatches.map(u => {
+      try {
+        const url = new URL(u);
+        const parts = url.pathname.split('/').filter(Boolean);
+        const idx = parts.indexOf('products');
+        const handle = idx >= 0 && parts[idx + 1] ? parts[idx + 1] : '';
+        const title = decodeURIComponent(handle).replace(/[-_]/g, ' ');
+        return { url: u, handle, title };
+      } catch { return null; }
+    }).filter(Boolean).slice(0, 100);
+    res.json({ success: true, items });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Storefront token connect/test and product fetch
+app.post('/api/shopify/storefront/connect', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const { shop, token } = req.body || {};
+    if (!shop || !token) return res.status(400).json({ success: false, error: 'shop and token required' });
+    const s = String(shop).toLowerCase();
+    if (!shopifyStorefrontTokens.has(userKey)) shopifyStorefrontTokens.set(userKey, new Map());
+    shopifyStorefrontTokens.get(userKey).set(s, { token, createdAt: Date.now() });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.get('/api/shopify/storefront/test', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const shop = String(req.query.shop || '').toLowerCase();
+    const rec = shopifyStorefrontTokens.get(userKey)?.get(shop);
+    if (!rec) return res.status(400).json({ success: false, error: 'No token for this shop' });
+    const q = { query: `{ shop { name } }` };
+    const r = await fetch(`https://${shop}/api/2024-07/graphql.json`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': rec.token }, body: JSON.stringify(q) });
+    const j = await r.json();
+    res.json({ success: r.ok && !j.errors, data: j });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// List storefront-connected shops for current user
+app.get('/api/shopify/storefront/connections', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const map = shopifyStorefrontTokens.get(userKey);
+    const shops = map ? Array.from(map.keys()).map(shop => ({ shop })) : [];
+    res.json({ success: true, shops });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.get('/api/shopify/storefront/products', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const shop = String(req.query.shop || '').toLowerCase();
+    const after = req.query.after ? `, after: \"${req.query.after}\"` : '';
+    const rec = shopifyStorefrontTokens.get(userKey)?.get(shop);
+    if (!rec) return res.status(400).json({ success: false, error: 'No token for this shop' });
+    const q = { query: `{ products(first: 20${after}) { pageInfo { hasNextPage endCursor } nodes { id title handle featuredImage { url altText } } } }` };
+    const r = await fetch(`https://${shop}/api/2024-07/graphql.json`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': rec.token }, body: JSON.stringify(q) });
+    const j = await r.json();
+    if (!r.ok || j.errors) return res.status(400).json({ success: false, error: j.errors || 'GraphQL error' });
+    res.json({ success: true, data: j.data.products });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.get('/api/shopify/storefront/product', authenticateToken, async (req, res) => {
+  try {
+    const userKey = getUserKey(req);
+    const shop = String(req.query.shop || '').toLowerCase();
+    const handle = String(req.query.handle || '');
+    if (!handle) return res.status(400).json({ success: false, error: 'handle required' });
+    const rec = shopifyStorefrontTokens.get(userKey)?.get(shop);
+    if (!rec) return res.status(400).json({ success: false, error: 'No token for this shop' });
+    const q = { query: `query($handle: String!) { product(handle: $handle) { id title handle descriptionHtml featuredImage { url altText } variants(first: 50) { nodes { id title availableForSale price: price { amount currencyCode } } } } }`, variables: { handle } };
+    const r = await fetch(`https://${shop}/api/2024-07/graphql.json`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': rec.token }, body: JSON.stringify(q) });
+    const j = await r.json();
+    if (!r.ok || j.errors) return res.status(400).json({ success: false, error: j.errors || 'GraphQL error' });
+    res.json({ success: true, data: j.data.product });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ===================== E-commerce AI Visibility Endpoints =====================
@@ -1508,14 +1862,44 @@ app.post('/api/llm/generate-questions', authenticateToken, async (req, res) => {
     const prompt = `Generate exactly ${questionCount} questions based on the following blog content. Each question must be extremely relevant to the content—so relevant that it would receive a relevance score of 95 or higher out of 100, where 100 means the question is directly about the main topics, facts, or ideas in the blog content. Only generate questions that are clearly and strongly related to the blog content. Avoid questions that are only loosely related or require outside knowledge. Blog Content: ${content} List the ${questionCount} questions, each on a new line starting with "Q:".`;
 
     let result;
+    let usedProvider = provider;
+    let usedModel = model;
+    
     try {
       result = await llmService.callLLM(prompt, provider, model, true);
     } catch (e) {
       console.error('[Questions] Primary provider failed:', e?.message || e);
-      return res.status(503).json({
-        error: 'Question generation is temporarily unavailable. Please try a different provider or try again shortly.',
-        details: e?.message || String(e)
-      });
+      
+      // Try fallback providers
+      const fallbackProviders = [
+        { provider: 'openai', model: 'gpt-3.5-turbo' },
+        { provider: 'perplexity', model: 'llama-3.1-sonar-small-128k-online' },
+        { provider: 'claude', model: 'claude-3-haiku-20240307' }
+      ];
+      
+      let fallbackSuccess = false;
+      for (const fallback of fallbackProviders) {
+        try {
+          console.log(`[Questions] Trying fallback provider: ${fallback.provider}`);
+          if (llmService.isProviderConfigured(fallback.provider)) {
+            result = await llmService.callLLM(prompt, fallback.provider, fallback.model, true);
+            usedProvider = fallback.provider;
+            usedModel = fallback.model;
+            fallbackSuccess = true;
+            console.log(`[Questions] Fallback provider ${fallback.provider} succeeded`);
+            break;
+          }
+        } catch (fallbackError) {
+          console.error(`[Questions] Fallback provider ${fallback.provider} failed:`, fallbackError?.message || fallbackError);
+        }
+      }
+      
+      if (!fallbackSuccess) {
+        return res.status(503).json({
+          error: 'Question generation is temporarily unavailable. All providers failed. Please try again shortly.',
+          details: e?.message || String(e)
+        });
+      }
     }
     
     // Parse questions from the result
@@ -1528,8 +1912,8 @@ app.post('/api/llm/generate-questions', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       questions,
-      provider: result.provider,
-      model: result.model,
+      provider: usedProvider,
+      model: usedModel,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens
     });
@@ -2006,14 +2390,16 @@ Cover a range of angles:
 - Metrics & ROI-related questions
 Avoid repeating the same keyword in every question—use synonyms and variations to make it SEO-friendly.
 
-Generate only the questions in this exact format:
-1. [Question here]
-2. [Question here]
-3. [Question here]
-
-...and so on for 8-12 questions. Do not include answers, only questions.`;
+Generate the questions in this exact format:
+Q1: [Question here]
+Q2: [Question here]
+Q3: [Question here]
+...and so on for all questions.`;
 
       let result;
+      let usedProvider = provider;
+      let usedModel = model;
+      
       try {
         console.log('[FAQ Generation] Generating questions with prompt length:', questionsPrompt.length);
         result = await llmService.callLLM(questionsPrompt, provider, model, true);
@@ -2025,10 +2411,37 @@ Generate only the questions in this exact format:
         });
       } catch (e) {
         console.error('[Questions Generation] Primary provider failed:', e?.message || e);
-        return res.status(503).json({
-          error: 'Question generation is temporarily unavailable. Please try a different provider or try again shortly.',
-          details: e?.message || String(e)
-        });
+        
+        // Try fallback providers
+        const fallbackProviders = [
+          { provider: 'openai', model: 'gpt-3.5-turbo' },
+          { provider: 'perplexity', model: 'llama-3.1-sonar-small-128k-online' },
+          { provider: 'claude', model: 'claude-3-haiku-20240307' }
+        ];
+        
+        let fallbackSuccess = false;
+        for (const fallback of fallbackProviders) {
+          try {
+            console.log(`[FAQ Generation] Trying fallback provider: ${fallback.provider}`);
+            if (llmService.isProviderConfigured(fallback.provider)) {
+              result = await llmService.callLLM(questionsPrompt, fallback.provider, fallback.model, true);
+              usedProvider = fallback.provider;
+              usedModel = fallback.model;
+              fallbackSuccess = true;
+              console.log(`[FAQ Generation] Fallback provider ${fallback.provider} succeeded`);
+              break;
+            }
+          } catch (fallbackError) {
+            console.error(`[FAQ Generation] Fallback provider ${fallback.provider} failed:`, fallbackError?.message || fallbackError);
+          }
+        }
+        
+        if (!fallbackSuccess) {
+          return res.status(503).json({
+            error: 'Question generation is temporarily unavailable. All providers failed. Please try again shortly.',
+            details: e?.message || String(e)
+          });
+        }
       }
       
       // Parse questions from the result
@@ -2073,8 +2486,8 @@ Generate only the questions in this exact format:
       return res.json({
         success: true,
         questions: validQuestions,
-        provider: result.provider,
-        model: result.model,
+        provider: usedProvider,
+        model: usedModel,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens
       });
@@ -2089,6 +2502,10 @@ Generate only the questions in this exact format:
       const keywordsText = targetKeywords && targetKeywords.length > 0 
         ? `Focus on these specific keywords/topics: ${targetKeywords.join(', ')}. ` 
         : '';
+      
+      // Initialize variables for provider tracking
+      let usedProvider = provider;
+      let usedModel = model;
       
       // Use batch processing for large numbers of questions
       const batchSize = 6; // Process 6 questions at a time for better results
@@ -2131,9 +2548,11 @@ A: [Detailed answer here]
           try {
             const batchResult = await llmService.callLLM(batchPrompt, provider, model, true);
             
-            // Set result for the first batch (for return statement)
+            // Update provider tracking for the first batch (for return statement)
             if (i === 0) {
               result = batchResult;
+              usedProvider = provider;
+              usedModel = model;
             }
             
             if (batchResult && batchResult.text) {
@@ -2223,6 +2642,9 @@ A: [Detailed answer here]
 ...and so on for all questions.`;
 
         let result;
+        let usedProvider = provider;
+        let usedModel = model;
+        
         try {
           console.log('[FAQ Generation] Generating answers with prompt length:', answersPrompt.length);
           console.log('[FAQ Generation] Questions being answered:', selectedQuestions.map((q, i) => `${i + 1}. ${q.substring(0, 50)}...`));
@@ -2235,10 +2657,37 @@ A: [Detailed answer here]
           });
         } catch (e) {
           console.error('[Answers Generation] Primary provider failed:', e?.message || e);
-          return res.status(503).json({
-            error: 'Answer generation is temporarily unavailable. Please try a different provider or try again shortly.',
-            details: e?.message || String(e)
-          });
+          
+          // Try fallback providers
+          const fallbackProviders = [
+            { provider: 'openai', model: 'gpt-3.5-turbo' },
+            { provider: 'perplexity', model: 'llama-3.1-sonar-small-128k-online' },
+            { provider: 'claude', model: 'claude-3-haiku-20240307' }
+          ];
+          
+          let fallbackSuccess = false;
+          for (const fallback of fallbackProviders) {
+            try {
+              console.log(`[FAQ Generation] Trying fallback provider for answers: ${fallback.provider}`);
+              if (llmService.isProviderConfigured(fallback.provider)) {
+                result = await llmService.callLLM(answersPrompt, fallback.provider, fallback.model, true);
+                usedProvider = fallback.provider;
+                usedModel = fallback.model;
+                fallbackSuccess = true;
+                console.log(`[FAQ Generation] Fallback provider ${fallback.provider} succeeded for answers`);
+                break;
+              }
+            } catch (fallbackError) {
+              console.error(`[FAQ Generation] Fallback provider ${fallback.provider} failed for answers:`, fallbackError?.message || fallbackError);
+            }
+          }
+          
+          if (!fallbackSuccess) {
+            return res.status(503).json({
+              error: 'Answer generation is temporarily unavailable. All providers failed. Please try again shortly.',
+              details: e?.message || String(e)
+            });
+          }
         }
         
         // Parse FAQs from the result
@@ -2383,8 +2832,8 @@ A: [Your detailed answer here]`;
         return res.json({
           success: true,
           faqs: finalValidFaqs,
-          provider: result?.provider || 'unknown',
-          model: result?.model || 'unknown',
+          provider: usedProvider,
+          model: usedModel,
           inputTokens: result?.inputTokens || 0,
           outputTokens: result?.outputTokens || 0
         });
@@ -3002,8 +3451,18 @@ app.post('/api/extract-content', authenticateToken, async (req, res) => {
     if (!url) {
       return res.status(400).json({ error: 'Missing URL' });
     }
-    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } });
     if (!response.ok) {
+      // If blocked, try Jina reader fallback to at least get readable text
+      if (response.status === 403) {
+        const httpUrl = `http://${new URL(url).host}${new URL(url).pathname}${new URL(url).search || ''}`;
+        const jinaUrl = `https://r.jina.ai/${encodeURI(httpUrl)}`;
+        const r = await fetch(jinaUrl, { headers: { 'User-Agent': 'curl/8.0' } });
+        if (r.ok) {
+          const text = await r.text();
+          return res.json({ success: true, content: text, title: '', description: '' });
+        }
+      }
       return res.status(400).json({ error: 'Failed to fetch URL', status: response.status });
     }
     const html = await response.text();
@@ -5193,6 +5652,711 @@ app.post('/api/ai-visibility/analyze-competitor', async (req, res) => {
   }
 }); 
 
+// E-commerce Content Analysis: Off-site signals via Google Custom Search
+app.post('/api/ecommerce-content/offsite-signals', async (req, res) => {
+  try {
+    const { brandOrProduct, domain } = req.body || {};
+    if (!brandOrProduct || typeof brandOrProduct !== 'string') {
+      return res.status(400).json({ success: false, error: 'brandOrProduct is required' });
+    }
+
+    const q = brandOrProduct.trim();
+    const queries = [
+      `${q} reviews site:trustpilot.com`,
+      `${q} reviews site:google.com`,
+      `${q} reviews site:facebook.com`,
+      `${q} reddit`,
+      `${q} site:reddit.com`,
+      `${q} quora`,
+      `${q} youtube reviews`
+    ];
+
+    const resultsByQuery = await Promise.all(queries.map(async (query) => {
+      try {
+        const items = await aiVisibilityService.queryCustomSearchAPI(query);
+        return { query, items };
+      } catch (e) {
+        return { query, items: [] };
+      }
+    }));
+
+    const flatten = resultsByQuery.flatMap(r => (r.items || []).map(it => ({ sourceQuery: r.query, ...it })));
+
+    const counts = {
+      trustpilot: flatten.filter(i => /trustpilot\.com/i.test(i.link)).length,
+      google: flatten.filter(i => /google\./i.test(i.link)).length,
+      facebook: flatten.filter(i => /facebook\.com/i.test(i.link)).length,
+      reddit: flatten.filter(i => /reddit\.com/i.test(i.link)).length,
+      quora: flatten.filter(i => /quora\.com/i.test(i.link)).length,
+      youtube: flatten.filter(i => /youtube\.com|youtu\.be/i.test(i.link)).length
+    };
+
+    const totalMentions = Object.values(counts).reduce((a, b) => a + b, 0);
+
+    const posWords = /(best|great|love|excellent|amazing|recommend|trust|reliable|quality|value)/i;
+    const negWords = /(bad|poor|terrible|hate|awful|problem|issue|scam|fake|delay)/i;
+    let positives = 0, negatives = 0;
+    flatten.forEach(item => {
+      const s = (item.snippet || '') + ' ' + (item.name || '');
+      if (posWords.test(s)) positives++;
+      if (negWords.test(s)) negatives++;
+    });
+
+    res.json({ success: true, totals: { totalMentions, positives, negatives }, counts, topResults: flatten.slice(0, 20) });
+  } catch (error) {
+    console.error('[Ecom Offsite] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch off-site signals', details: error.message });
+  }
+});
+
+// E-commerce Content Analysis: Competitors via Google Custom Search
+app.post('/api/ecommerce-content/competitors', async (req, res) => {
+  try {
+    const { brandOrProduct, category, currentUrl } = req.body || {};
+    if (!brandOrProduct || typeof brandOrProduct !== 'string') {
+      return res.status(400).json({ success: false, error: 'brandOrProduct is required' });
+    }
+    let currentHost = '';
+    try { if (currentUrl) currentHost = new URL(currentUrl).hostname.replace(/^www\./, ''); } catch {}
+
+    const q = brandOrProduct.trim();
+    const queries = [
+      `${q} competitors`,
+      `alternatives to ${q}`,
+      category ? `best ${category} brands` : ''
+    ].filter(Boolean);
+
+    const results = (await Promise.all(queries.map(async (query) => {
+      try { return await aiVisibilityService.queryCustomSearchAPI(query); } catch { return []; }
+    }))).flat();
+
+    const seen = new Set();
+    const competitors = [];
+    for (const item of results) {
+      try {
+        const u = new URL(item.link);
+        const host = u.hostname.replace(/^www\./, '');
+        if (host && host !== currentHost && !seen.has(host)) {
+          seen.add(host);
+          competitors.push({ name: host, link: u.origin, snippet: item.snippet });
+        }
+        if (competitors.length >= 10) break;
+      } catch {}
+    }
+
+    res.json({ success: true, competitors });
+  } catch (error) {
+    console.error('[Ecom Competitors] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch competitors', details: error.message });
+  }
+});
+
+// E-commerce Content Analysis: Product-specific competitors (same product intent)
+app.post('/api/ecommerce-content/product-competitors', async (req, res) => {
+  try {
+    const { productQuery, currentUrl } = req.body || {};
+    if (!productQuery || typeof productQuery !== 'string') {
+      return res.status(400).json({ success: false, error: 'productQuery is required' });
+    }
+
+    // Build intent-focused queries to find product pages from marketplaces/brands
+    const patterns = [
+      `${productQuery} buy`,
+      `${productQuery} price`,
+      `${productQuery} site:amazon.in`,
+      `${productQuery} site:flipkart.com`,
+      `${productQuery} site:myntra.com`,
+      `${productQuery} site:ajio.com`,
+      `${productQuery} site:tatacliq.com`,
+      `${productQuery} site:nykaa.com`,
+      `${productQuery} site:decathlon.in`
+    ];
+
+    // Collect and merge results
+    const results = (await Promise.all(patterns.map(async (q) => {
+      try { return await aiVisibilityService.queryCustomSearchAPI(q); } catch { return []; }
+    }))).flat();
+
+    // Normalize and filter to likely product pages (keep marketplaces/brand PDPs)
+    const candidates = [];
+    const seenHosts = new Set();
+    let excludeHost = '';
+    try { if (currentUrl) excludeHost = new URL(currentUrl).hostname.replace(/^www\./,''); } catch {}
+    const ecommerceHostRegex = /(amazon\.[a-z]+|flipkart\.com|myntra\.com|ajio\.com|tatacliq\.com|meesho\.com|snapdeal\.com|bewakoof\.com|nykaa\.com|decathlon\.in|reliancedigital\.in|shopper[s]?stop\.com|firstcry\.com|limeroad\.com|zara\.com|hm\.com|uniqlo\.com|puma\.com|adidas\.\w+|nike\.\w+)/i;
+    for (const item of results) {
+      try {
+        const u = new URL(item.link);
+        const host = u.hostname.replace(/^www\./, '');
+        if (excludeHost && host === excludeHost) continue; // exclude current domain
+        // Heuristics: PDP URLs tend to have deeper paths and include product tokens, and host looks like ecommerce/brand
+        const path = u.pathname;
+        const isLikelyProduct = /(product|p\b|\/buy\b|\/dp\/|\/gp\/|\/pd\/)/i.test(path) || path.split('/').filter(Boolean).length >= 3;
+        const isEcommerceHost = ecommerceHostRegex.test(host) || /(shop|store|boutique|brand)/i.test(host);
+        const snippet = `${item.name || ''} ${item.snippet || ''}`;
+        const hasCommerceWords = /(buy|price|mrp|size|offer|add to cart|in stock)/i.test(snippet);
+        if (isLikelyProduct && isEcommerceHost && (hasCommerceWords || item.link)) {
+          if (!seenHosts.has(host)) {
+          seenHosts.add(host);
+          candidates.push({ name: host, link: item.link, snippet: item.snippet });
+          }
+        }
+        if (candidates.length >= 10) break;
+      } catch {}
+    }
+
+    return res.json({ success: true, competitors: candidates });
+  } catch (error) {
+    console.error('[Ecom Product Competitors] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch product competitors', details: error.message });
+  }
+});
+
+// E-commerce Content Analysis: Price comparison across marketplaces for a product query
+app.post('/api/ecommerce-content/price-compare', async (req, res) => {
+  try {
+    const { productQuery, currentUrl } = req.body || {};
+    console.log(`[Ecom Price Compare] Request received - productQuery: "${productQuery}", currentUrl: "${currentUrl}"`);
+    
+    if (!productQuery || typeof productQuery !== 'string') {
+      return res.status(400).json({ success: false, error: 'productQuery is required' });
+    }
+    
+    // Check Google API configuration
+    if (!process.env.GOOGLE_API_KEY || !process.env.GOOGLE_CSE_ID) {
+      console.error('[Ecom Price Compare] Google API credentials not configured');
+      console.error('[Ecom Price Compare] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'Present' : 'Missing');
+      console.error('[Ecom Price Compare] GOOGLE_CSE_ID:', process.env.GOOGLE_CSE_ID ? 'Present' : 'Missing');
+      
+      // Return a helpful response instead of an error
+      const mockOffers = [
+        {
+          site: 'Configuration Required',
+          url: '#',
+          price: null,
+          originalPrice: null,
+          discount: null,
+          currency: null,
+          title: 'Google Custom Search API not configured',
+          availability: 'To enable price comparison, please configure GOOGLE_API_KEY and GOOGLE_CSE_ID in your environment variables.',
+          delivery: null,
+          rating: null,
+          reviews: null
+        }
+      ];
+      
+      return res.json({ 
+        success: true, 
+        offers: mockOffers, 
+        count: 1, 
+        query: productQuery 
+      });
+    }
+
+  const normalizeHost = (h) => String(h || '').replace(/^www\./, '');
+  const majorHosts = [
+      // India
+      'amazon.in', 'flipkart.com', 'myntra.com', 'ajio.com', 'tatacliq.com', 'nykaa.com',
+      'meesho.com', 'snapdeal.com', 'bewakoof.com', 'decathlon.in', 'reliancedigital.in',
+      'firstcry.com', 'shopclues.com', 'croma.com', 'boat-lifestyle.com', 'paytmmall.com',
+      'bigbasket.com', 'grofers.com', 'blinkit.com', 'jiomart.com', 'shopsy.in', 'glowroad.com',
+      'indiamart.com', 'tradeindia.com', 'exportersindia.com', 'vmart.com', 'shoppersstop.com',
+      // Brand stores (IN/global)
+      'dell.com', 'hp.com', 'lenovo.com', 'asus.com', 'acer.com', 'msi.com', 'apple.com',
+      'vanheusenindia.com', 'hushpuppies.com', 'woodlandworldwide.com',
+      // US
+      'amazon.com', 'walmart.com', 'target.com', 'bestbuy.com', 'ebay.com', 'etsy.com',
+      'macys.com', 'costco.com', 'homedepot.com', 'lowes.com', 'bhphotovideo.com',
+      'newegg.com', 'overstock.com', 'wayfair.com', 'alibaba.com', 'aliexpress.com',
+      // UK
+      'amazon.co.uk', 'argos.co.uk', 'currys.co.uk', 'johnlewis.com', 'tesco.com',
+      // EU (selection)
+      'amazon.de', 'amazon.fr', 'amazon.it', 'amazon.es', 'otto.de', 'mediamarkt.de',
+      'bol.com', 'zalando.de', 'fnac.com',
+      // CA, AU
+      'amazon.ca', 'bestbuy.ca', 'walmart.ca', 'amazon.com.au', 'jbhifi.com.au'
+    ];
+
+    // Domains to exclude (news, comparison, review sites, non-shopping sites)
+    const excludeDomains = [
+      // News sites
+      'hindustantimes.com', 'stg-www.hindustantimes.com', 'timesofindia.indiatimes.com', 'ndtv.com', 'indianexpress.com', 'news18.com',
+      'economictimes.indiatimes.com', 'financialexpress.com', 'business-standard.com', 'livemint.com', 'moneycontrol.com',
+      // Price comparison/review sites
+      'pricebefore.com', 'pricehistory.in', 'pricedekho.com', 'smartprix.com', 'compareindia.in', 'mysmartprice.com',
+      'gadgets360.com', 'gizbot.com', 'techradar.com', 'cnet.com', 'gsmarena.com', 'phonearena.com', '91mobiles.com',
+      // Social media
+      'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com', 'pinterest.com', 'reddit.com', 'quora.com',
+      // Questionable/indirect sellers
+      'desertcart.com', 'antigua.desertcart.com', 'ubuy.com',
+      // Blogs/content sites
+      'wordpress.com', 'blogspot.com', 'medium.com', 'wixsite.com',
+      // Government/educational
+      'gov.in', 'edu', 'ac.in', 'nic.in'
+    ];
+
+    // Additional validation: check if domain pattern suggests non-e-commerce
+    const isNonEcommerceDomain = (host) => {
+      // News patterns
+      if (/(news|times|express|mint|economic|financial|business|media|press|today|live|update)/i.test(host)) return true;
+      // Review/comparison patterns
+      if (/(review|compare|price|smart|tech|gadget|mobile|phone|spec|rating)/i.test(host) && !majorHosts.some(h => host.endsWith(h))) return true;
+      // Blog patterns
+      if (/(blog|article|post|content|info|guide|tips)/i.test(host)) return true;
+      // Government/educational patterns
+      if (/(\.gov|\.edu|\.org|\.ac\.|\.nic\.)/i.test(host)) return true;
+      return false;
+    };
+
+    const hostDefaultCurrency = {
+      // India
+      'amazon.in': 'INR', 'flipkart.com': 'INR', 'myntra.com': 'INR', 'ajio.com': 'INR', 'tatacliq.com': 'INR', 'nykaa.com': 'INR',
+      'meesho.com': 'INR', 'snapdeal.com': 'INR', 'bewakoof.com': 'INR', 'decathlon.in': 'INR', 'reliancedigital.in': 'INR',
+      'firstcry.com': 'INR', 'shopclues.com': 'INR', 'croma.com': 'INR', 'boat-lifestyle.com': 'INR', 'paytmmall.com': 'INR',
+      'bigbasket.com': 'INR', 'grofers.com': 'INR', 'blinkit.com': 'INR', 'jiomart.com': 'INR', 'shopsy.in': 'INR', 'glowroad.com': 'INR',
+      'indiamart.com': 'INR', 'tradeindia.com': 'INR', 'exportersindia.com': 'INR', 'vmart.com': 'INR', 'shoppersstop.com': 'INR',
+      // US
+      'amazon.com': 'USD', 'walmart.com': 'USD', 'target.com': 'USD', 'bestbuy.com': 'USD', 'ebay.com': 'USD', 'etsy.com': 'USD',
+      'macys.com': 'USD', 'costco.com': 'USD', 'homedepot.com': 'USD', 'lowes.com': 'USD', 'bhphotovideo.com': 'USD',
+      'newegg.com': 'USD', 'overstock.com': 'USD', 'wayfair.com': 'USD', 'alibaba.com': 'USD', 'aliexpress.com': 'USD',
+      // UK
+      'amazon.co.uk': 'GBP', 'argos.co.uk': 'GBP', 'currys.co.uk': 'GBP', 'johnlewis.com': 'GBP', 'tesco.com': 'GBP',
+      // EU
+      'amazon.de': 'EUR', 'amazon.fr': 'EUR', 'amazon.it': 'EUR', 'amazon.es': 'EUR', 'otto.de': 'EUR', 'mediamarkt.de': 'EUR',
+      'bol.com': 'EUR', 'zalando.de': 'EUR', 'fnac.com': 'EUR',
+      // CA, AU
+      'amazon.ca': 'CAD', 'bestbuy.ca': 'CAD', 'walmart.ca': 'CAD', 'amazon.com.au': 'AUD', 'jbhifi.com.au': 'AUD'
+    };
+
+    // Normalize product query for better recall on model-based products (e.g., phones)
+    const normalizeProductQuery = (q) => {
+      let s = String(q || '').replace(/\s+/g, ' ').trim();
+      // strip parentheses and their contents
+      s = s.replace(/\([^)]*\)/g, ' ');
+      // remove storage/ram/color/marketing noise
+      s = s
+        .replace(/\b(\d+\s?GB|\d+\s?TB)\b/ig, ' ')
+        .replace(/\b(\d+\s?GB\s?RAM)\b/ig, ' ')
+        .replace(/\b(128|256|512|1024)\s?GB\b/ig, ' ')
+        .replace(/\b(Black|Blue|Green|White|Red|Violet|Lavender|Graphite|Titanium|Cream|Silver|Gray|Grey|Gold|Yellow|Pink|Purple|Beige|Navy|Burgundy|Orange|Lime)\b/ig, ' ')
+        .replace(/\b(Online|Buy|Price|Best Price|Offer[s]?|Deal[s]?|Discount)\b/ig, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      return s;
+    };
+
+    const baseQuery = normalizeProductQuery(productQuery);
+    const variantNo5G = baseQuery.replace(/\b5\s?G\b/ig, '').trim();
+    const queryVariants = Array.from(new Set([productQuery, baseQuery, variantNo5G].filter(Boolean)));
+
+    // Build intent-focused queries prioritizing price pages
+    const intentTemplates = ['price', 'buy online', 'best price', 'specs'];
+    const patterns = [];
+    for (const v of queryVariants) {
+      for (const t of intentTemplates) patterns.push(`${v} ${t}`);
+      for (const h of majorHosts) patterns.push(`${v} site:${h}`);
+    }
+
+    console.log(`[Ecom Price Compare] Generated ${patterns.length} search patterns for "${productQuery}"`);
+    console.log(`[Ecom Price Compare] Query variants:`, queryVariants);
+    console.log(`[Ecom Price Compare] First 5 patterns:`, patterns.slice(0, 5));
+    
+    const results = (await Promise.all(patterns.map(async (q, index) => {
+      try { 
+        const searchResults = await aiVisibilityService.queryCustomSearchAPI(q);
+        console.log(`[Ecom Price Compare] Query ${index + 1}/${patterns.length}: "${q}" -> ${searchResults.length} results`);
+        return searchResults;
+      } catch (error) { 
+        console.log(`[Ecom Price Compare] Query ${index + 1}/${patterns.length}: "${q}" -> ERROR: ${error.message}`);
+        return []; 
+      }
+    }))).flat();
+
+    // Select one candidate per host (prefer likely product pages)
+    const seen = new Set();
+    const excludeHost = (() => { try { return currentUrl ? normalizeHost(new URL(currentUrl).hostname) : ''; } catch { return ''; }})();
+    const candidates = [];
+    console.log(`[Ecom Price Compare] Processing ${results.length} search results for "${productQuery}"`);
+    for (const r of results) {
+      try {
+        const u = new URL(r.link);
+        const host = normalizeHost(u.hostname);
+        if (excludeHost && host === excludeHost) continue;
+        if (seen.has(host)) continue;
+        // Skip non-ecommerce domains (news, comparison sites, etc.)
+        if (excludeDomains.some(domain => host.includes(domain))) {
+          console.log(`  🚫 Excluded blacklisted: ${host}`);
+          continue;
+        }
+        // Additional pattern-based validation
+        if (isNonEcommerceDomain(host)) {
+          console.log(`  🚫 Excluded by pattern: ${host}`);
+          continue;
+        }
+        const path = u.pathname;
+        // Detect common product-detail URL patterns across marketplaces
+        const isLikelyProduct = /(product|\/p\/|\/dp\/|\/gp\/|\/pd\/|\/buy|\/item|\/sku|price|deal)/i.test(path) || path.split('/').filter(Boolean).length >= 2;
+        const looksEcom = majorHosts.some(h => host.endsWith(h));
+        // Only allow if it's a recognized major e-commerce host OR has very strong e-commerce indicators
+        const hasStrongEcomHint = looksEcom || /shop|store|cart|checkout|buy.*online|add.*cart|purchase/i.test(u.hostname + path + (r.snippet || ''));
+        if (!hasStrongEcomHint) {
+          console.log(`  ❌ Not strong e-commerce: ${host}`);
+          continue;
+        }
+        if (isLikelyProduct) {
+          seen.add(host);
+          candidates.push({ host, url: r.link, title: r.name || '', snippet: r.snippet || '' });
+          console.log(`  ✅ Added candidate: ${host}`);
+        } else {
+          console.log(`  ❌ Rejected ${host}: not likely product (${path})`);
+        }
+        if (candidates.length >= 15) break;
+      } catch {}
+    }
+    console.log(`[Ecom Price Compare] Found ${candidates.length} candidates:`, candidates.map(c => c.host));
+
+    // Helper to extract price from HTML using JSON-LD first
+    const extractPriceFromHtml = (html) => {
+      try {
+        const { JSDOM } = require('jsdom');
+        const dom = new JSDOM(String(html || ''));
+        const doc = dom.window.document;
+        const payload = { price: null, currency: null, title: null, availability: null, originalPrice: null, discount: null, delivery: null, rating: null, reviews: null };
+
+        // Extract title from multiple sources (prioritize product-specific)
+        const titleSources = [
+          () => doc.querySelector('h1.pdp-name, h1.product-title, .pdp-product-name')?.textContent,
+          () => doc.querySelector('h1')?.textContent,
+          () => doc.querySelector('meta[property="og:title"]')?.content,
+          () => doc.querySelector('meta[name="title"]')?.content,
+          () => doc.querySelector('title')?.textContent
+        ];
+        
+        let bestTitle = null;
+        for (const getTitle of titleSources) {
+          const title = getTitle();
+          if (title && title.trim().length > 5) {
+            // Clean up title - remove common e-commerce suffixes
+            bestTitle = title.trim()
+              .replace(/\s*\|\s*(Flipkart|Amazon|Myntra|Ajio|Buy Online).*$/i, '')
+              .replace(/\s*- Buy.*Online.*$/i, '')
+              .replace(/\s*- Price.*$/i, '')
+              .slice(0, 200);
+            break;
+          }
+        }
+        payload.title = bestTitle;
+
+        const scripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
+        for (const s of scripts) {
+          try {
+            const json = JSON.parse(s.textContent || 'null');
+            const items = Array.isArray(json) ? json : [json];
+            for (const it of items) {
+              const visit = (obj) => {
+                if (!obj || typeof obj !== 'object') return;
+                const type = obj['@type'];
+                const types = Array.isArray(type) ? type : [type];
+                if (types.includes('Product')) {
+                  const offers = Array.isArray(obj.offers) ? obj.offers : (obj.offers ? [obj.offers] : []);
+                  for (const off of offers) {
+                    const p = Number(String(off.price || off.priceSpecification?.price || '').replace(/[^\d.]/g, ''));
+                    const highPrice = Number(String(off.highPrice || '').replace(/[^\d.]/g, ''));
+                    // Validate price is realistic (between 100 and 500000)
+                    if (p && p >= 100 && p <= 500000) {
+                      payload.price = p;
+                      payload.originalPrice = (highPrice > p && highPrice <= 500000) ? highPrice : null;
+                      payload.discount = highPrice > p ? Math.round(((highPrice - p) / highPrice) * 100) : null;
+                      payload.currency = off.priceCurrency || obj.priceCurrency || payload.currency || null;
+                      payload.availability = off.availability || payload.availability || null;
+                      console.log(`    📊 JSON-LD price: ${p}, original: ${highPrice}, discount: ${payload.discount}%`);
+                      return;
+                    }
+                  }
+                  // Extract rating info
+                  if (obj.aggregateRating) {
+                    payload.rating = Number(obj.aggregateRating.ratingValue || 0);
+                    payload.reviews = Number(obj.aggregateRating.reviewCount || obj.aggregateRating.ratingCount || 0);
+                  }
+                }
+                Object.values(obj).forEach(visit);
+              };
+              visit(it);
+            }
+          } catch {}
+          if (payload.price) break;
+        }
+
+        if (!payload.price) {
+          // Amazon-specific price selectors
+          if (doc.querySelector('.a-price-current, .a-price, .a-offscreen')) {
+            const priceSelectors = [
+              '.a-price-current .a-offscreen', // Current price (most common)
+              '.a-price .a-offscreen',         // Alternative price format
+              '.a-price-current',              // Price container
+              '.a-price-range .a-offscreen',   // Price range
+              '#price_inside_buybox',          // Buybox price
+              '.a-price-whole'                 // Whole number part
+            ];
+            
+            for (const selector of priceSelectors) {
+              const priceEl = doc.querySelector(selector);
+              if (priceEl) {
+                const priceText = priceEl.textContent || priceEl.innerText || '';
+                const p = Number(priceText.replace(/[^\d.]/g, ''));
+                if (p && p >= 100 && p <= 500000) {
+                  payload.price = p;
+                  console.log(`    🎯 Amazon price found via ${selector}: ${p}`);
+                  break;
+                }
+              }
+            }
+          }
+          
+          // Common meta tags (fallback)
+          if (!payload.price) {
+          const metaPrice = doc.querySelector('meta[property="product:price:amount"], meta[property="og:price:amount"], meta[itemprop="price"], meta[name="price"]');
+          const content = metaPrice?.getAttribute('content') || '';
+          const p = Number(content.replace(/[^\d.]/g, ''));
+            if (p && p >= 100 && p <= 500000) payload.price = p;
+          }
+        }
+
+        if (!payload.price) {
+          // Fallback regex for common currencies - look for realistic price ranges
+          const text = doc.body?.textContent || '';
+          const mInr = text.match(/(?:₹|Rs\.?\s?)([\d,]+(?:\.\d{1,2})?)/g);
+          const mUsd = text.match(/(?:US\$|\$)\s?([\d,]+(?:\.\d{1,2})?)/g);
+          const mEur = text.match(/(?:€)\s?([\d,.]+(?:\.\d{1,2})?)/g);
+          const mGbp = text.match(/(?:£)\s?([\d,]+(?:\.\d{1,2})?)/g);
+          
+          // Filter for realistic prices (between 100 and 50000 for most products)
+          const filterPrice = (matches, currency) => {
+            if (!matches) return null;
+            const prices = matches.map(m => {
+              const num = Number(m.match(/[\d,]+(?:\.\d{1,2})?/)[0].replace(/[,]/g, ''));
+              return { price: num, match: m };
+            }).filter(p => p.price >= 100 && p.price <= 500000); // Reasonable price range
+            return prices.length > 0 ? prices.sort((a, b) => a.price - b.price)[0] : null; // Return cheapest realistic price
+          };
+          
+          const inrPrice = filterPrice(mInr, 'INR');
+          const usdPrice = filterPrice(mUsd, 'USD');
+          const eurPrice = filterPrice(mEur, 'EUR');
+          const gbpPrice = filterPrice(mGbp, 'GBP');
+          
+          if (inrPrice) { payload.price = inrPrice.price; payload.currency = payload.currency || 'INR'; }
+          else if (usdPrice) { payload.price = usdPrice.price; payload.currency = payload.currency || 'USD'; }
+          else if (eurPrice) { payload.price = eurPrice.price; payload.currency = payload.currency || 'EUR'; }
+          else if (gbpPrice) { payload.price = gbpPrice.price; payload.currency = payload.currency || 'GBP'; }
+        }
+
+        // Extract delivery/shipping info from text
+        if (!payload.delivery) {
+          const text = doc.body?.textContent || '';
+          const deliveryMatch = text.match(/(free delivery|free shipping|delivery.*?₹?\d+|shipping.*?₹?\d+|delivery by.*?\d+)/i);
+          if (deliveryMatch) payload.delivery = deliveryMatch[1].trim();
+        }
+
+        // Amazon-specific original price extraction
+        if (!payload.originalPrice && payload.price) {
+          const originalPriceSelectors = [
+            '.a-price.a-text-price .a-offscreen',    // Strikethrough price
+            '.a-price-was .a-offscreen',             // "Was" price
+            '.a-text-strike .a-offscreen',           // Strike through
+            '.a-price-base .a-offscreen'             // Base price
+          ];
+          
+          for (const selector of originalPriceSelectors) {
+            const origEl = doc.querySelector(selector);
+            if (origEl) {
+              const origText = origEl.textContent || origEl.innerText || '';
+              const origPrice = Number(origText.replace(/[^\d.]/g, ''));
+              if (origPrice && origPrice > payload.price && origPrice <= 500000) {
+                payload.originalPrice = origPrice;
+                payload.discount = Math.round(((origPrice - payload.price) / origPrice) * 100);
+                console.log(`    💸 Amazon original price found: ${origPrice}, discount: ${payload.discount}%`);
+                break;
+              }
+            }
+          }
+        }
+
+        // Extract discount percentage from text if not found in JSON-LD
+        if (!payload.discount) {
+          const text = doc.body?.textContent || '';
+          const discountMatch = text.match(/(\d+)%\s*off/i);
+          if (discountMatch) payload.discount = Number(discountMatch[1]);
+        }
+
+        if (!payload.currency) {
+          const metaCurrency = doc.querySelector('meta[itemprop="priceCurrency"], meta[property="product:price:currency"], meta[property="og:price:currency"]');
+          payload.currency = metaCurrency?.getAttribute('content') || (/(₹|INR)/i.test(doc.documentElement.outerHTML) ? 'INR' : null);
+        }
+
+        return payload;
+      } catch (e) {
+        return { price: null, currency: null, title: null, availability: null, originalPrice: null, discount: null, delivery: null, rating: null, reviews: null };
+      }
+    };
+
+    const axios = require('axios');
+    const offers = [];
+    // Process more candidates to get more e-commerce stores
+    for (const c of candidates.slice(0, 12)) {
+      try {
+        // Try fast fetch first
+        let html = '';
+        try {
+          const r = await axios.get(c.url, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+          html = String(r.data || '');
+        } catch {}
+
+        if (!html) {
+          // Rendered fetch as fallback
+          try {
+            const { extractFullPageHtml } = require('./fullPageExtractor');
+            const rendered = await extractFullPageHtml(c.url);
+            if (rendered?.success && rendered.html) html = rendered.html;
+          } catch {}
+        }
+
+        if (!html) continue;
+        const parsed = extractPriceFromHtml(html);
+        console.log(`  💰 ${c.host}: extracted price=${parsed.price}, originalPrice=${parsed.originalPrice}, currency=${parsed.currency}, title="${parsed.title?.slice(0, 50)}..."`);
+        console.log(`  🔍 ${c.host}: discount=${parsed.discount}%, availability=${parsed.availability}`);
+        
+        // Product matching validation - ensure it's the same product
+        if (parsed.price && parsed.title) {
+          const originalTitle = productQuery.toLowerCase();
+          const extractedTitle = parsed.title.toLowerCase();
+          
+          // Extract key product identifiers (brand, model, key features)
+          const getBrand = (title) => {
+            const brands = [
+              // Wearables & mobile
+              'boat','noise','fire-boltt','amazfit','samsung','apple','fitbit','garmin','fossil','titan','fastrack','oneplus','xiaomi','redmi','realme','oppo','vivo',
+              // Laptops & PCs
+              'dell','hp','lenovo','asus','acer','msi','intel','amd','microsoft','razer',
+              // Fashion/footwear
+              'van heusen','allen solly','louis philippe','us polo','u.s. polo','levis','puma','adidas','nike','woodland','hush puppies','red tape','bata'
+            ];
+            return brands.find(brand => title.includes(brand)) || '';
+          };
+          
+          const getModel = (title) => {
+            // Look for specific model names/numbers
+            const modelMatch = (
+              title.match(/\b(lunar\s*vista|watch\s*\d+|series\s*\d+|gt\s*\d+|active\s*\d+)\b/i)
+              || title.match(/\b(vostro\s*\d+|inspiron\s*\d+|ideapad\s*\d+|thinkpad\s*[txpsl]?\d+|macbook\s*(air|pro)?\s*\d{4}|surface\s*\w+\s*\d+)\b/i)
+              || title.match(/\b([a-z]{2,}\s*\d{2,5}[a-z0-9-]*)\b/i)
+            );
+            return modelMatch ? modelMatch[0].toLowerCase().replace(/\s+/g, ' ') : '';
+          };
+          
+          const originalBrand = getBrand(originalTitle);
+          const extractedBrand = getBrand(extractedTitle);
+          const originalModel = getModel(originalTitle);
+          const extractedModel = getModel(extractedTitle);
+          
+          // Matching: if both brands present, require close match; otherwise don't block on brand
+          const brandMatch = (
+            (originalBrand && extractedBrand && (
+              originalBrand === extractedBrand ||
+              originalBrand.includes(extractedBrand) ||
+              extractedBrand.includes(originalBrand)
+            )) || (!originalBrand || !extractedBrand)
+          );
+          const modelMatch = !originalModel || !extractedModel || originalModel.includes(extractedModel) || extractedModel.includes(originalModel);
+          
+          if (!brandMatch) {
+            console.log(`  🚫 ${c.host}: Brand mismatch - original: "${originalBrand}", extracted: "${extractedBrand}"`);
+            continue;
+          }
+          
+          if (originalModel && extractedModel && !modelMatch) {
+            console.log(`  🚫 ${c.host}: Model mismatch - original: "${originalModel}", extracted: "${extractedModel}"`);
+            continue;
+          }
+          
+          console.log(`  ✅ ${c.host}: Product match confirmed - brand: "${extractedBrand}", model: "${extractedModel}"`);
+        }
+        
+        if (parsed.price) {
+          offers.push({
+            site: c.host,
+            url: c.url,
+            price: parsed.price,
+            originalPrice: parsed.originalPrice,
+            discount: parsed.discount,
+            currency: parsed.currency || hostDefaultCurrency[c.host] || null,
+            title: parsed.title || c.title || null,
+            availability: parsed.availability || null,
+            delivery: parsed.delivery || null,
+            rating: parsed.rating || null,
+            reviews: parsed.reviews || null
+          });
+        }
+      } catch {}
+    }
+
+    // Sort by ascending price when available
+    offers.sort((a, b) => (a.price || Infinity) - (b.price || Infinity));
+    console.log(`[Ecom Price Compare] Final offers for "${productQuery}":`, offers.length, 'offers');
+    offers.forEach((o, i) => console.log(`  ${i+1}. ${o.site}: ${o.currency} ${o.price}`));
+    res.json({ success: true, offers, count: offers.length, query: productQuery });
+  } catch (error) {
+    console.error('[Ecom Price Compare] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch price comparisons', details: error.message });
+  }
+});
+
+// E-commerce Content Analysis: SERP top results via Google Custom Search
+app.post('/api/ecommerce-content/serp-top', async (req, res) => {
+  try {
+    const { query, num } = req.body || {};
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ success: false, error: 'query is required' });
+    }
+    const results = await aiVisibilityService.queryCustomSearchAPI(query);
+    res.json({ success: true, results: (results || []).slice(0, Math.max(1, Math.min(Number(num) || 10, 10))) });
+  } catch (error) {
+    console.error('[Ecom SERP Top] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch SERP results', details: error.message });
+  }
+});
+
+// E-commerce Content Analysis: Fetch batch HTML for competitor coverage parsing
+app.post('/api/ecommerce-content/fetch-batch', async (req, res) => {
+  try {
+    const { urls } = req.body || {};
+    if (!Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({ success: false, error: 'urls[] is required' });
+    }
+    const axios = require('axios');
+    const results = await Promise.all(urls.slice(0, 5).map(async (u) => {
+      try {
+        const r = await axios.get(u, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const html = String(r.data || '');
+        const { JSDOM } = require('jsdom');
+        const dom = new JSDOM(html);
+        const doc = dom.window.document;
+        const text = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim();
+        const wordCount = text.split(/\s+/).filter(Boolean).length;
+        const h1 = Array.from(doc.querySelectorAll('h1')).map(h=>h.textContent?.trim()||'').filter(Boolean);
+        const h2 = Array.from(doc.querySelectorAll('h2')).map(h=>h.textContent?.trim()||'').filter(Boolean);
+        const h3 = Array.from(doc.querySelectorAll('h3')).map(h=>h.textContent?.trim()||'').filter(Boolean);
+        const hasTable = /<table[\s\S]*?<\/table>/i.test(html);
+        return { url: u, success: true, wordCount, h1, h2, h3, hasTable };
+      } catch (e) {
+        return { url: u, success: false, error: e.message };
+      }
+    }));
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('[Ecom Fetch Batch] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch competitor pages', details: error.message });
+  }
+});
 // Full page extraction endpoint
 app.post('/api/extract/fullpage', authenticateToken, async (req, res) => {
   const { url } = req.body;
@@ -5205,7 +6369,69 @@ app.post('/api/extract/fullpage', authenticateToken, async (req, res) => {
     res.json({ success: true, html });
   } catch (error) {
     console.error('Full page extraction error:', error);
+    // If upstream blocked us (often shows as 403 in the message), return 200 with minimal payload
+    if ((error?.message || '').includes('403')) {
+      return res.json({ success: true, html: `<html><body><p>Content temporarily unavailable due to site restrictions. Please copy-paste content manually.</p></body></html>` });
+    }
     res.status(500).json({ error: 'Failed to extract full page', details: error.message });
+  }
+});
+
+// Smart extractor: tries direct fetch with rotating UAs, then JS-rendered fallback, then Jina reader
+app.post('/api/extract/smart', authenticateToken, async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing or invalid url' });
+    }
+
+    const userAgents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+    ];
+
+    let html = '';
+    let lastStatus = 0;
+    for (const ua of userAgents) {
+      try {
+        const r = await fetch(url, { headers: { 'User-Agent': ua, 'Accept': 'text/html,application/xhtml+xml' }, timeout: 25000 });
+        lastStatus = r.status;
+        if (r.ok) { html = await r.text(); break; }
+      } catch (e) { /* continue */ }
+    }
+
+    // JS-rendered fallback if HTML minimal or blocked
+    if (!html || html.length < 2000 || /<body>\s*<\/body>/i.test(html) || lastStatus === 403) {
+      try {
+        const { extractFullPageHtml } = require('./fullPageExtractor');
+        const rendered = await extractFullPageHtml(url);
+        if (rendered && rendered.length > html.length) html = rendered;
+      } catch {}
+    }
+
+    // Final fallback: Jina reader
+    if (!html) {
+      try {
+        const u = new URL(url);
+        const httpUrl = `http://${u.host}${u.pathname}${u.search || ''}`;
+        const jina = await fetch(`https://r.jina.ai/${encodeURI(httpUrl)}`, { headers: { 'User-Agent': 'curl/8.0' }, timeout: 20000 });
+        if (jina.ok) {
+          const text = await jina.text();
+          html = `<html><body><pre>${text.replace(/[&<>]/g, c => c==='&'?'&amp;':c==='<'?'&lt;':'&gt;')}</pre></body></html>`;
+        }
+      } catch {}
+    }
+
+    if (!html) {
+      return res.status(502).json({ success: false, error: 'Failed to fetch page content from all strategies' });
+    }
+
+    return res.json({ success: true, html });
+  } catch (error) {
+    console.error('[Smart Extractor] Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -5475,22 +6701,83 @@ app.post('/api/structural-content/crawl', authenticateToken, async (req, res) =>
     try {
       console.log('[Structural Content Crawler] Fetching full page HTML...');
       
-      const response = await fetch(url, { 
-        headers: { 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
-        },
-        timeout: 30000
-      });
+      // Try multiple user agents and headers to bypass anti-bot protection
+      const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0'
+      ];
+      
+      let response = null;
+      let lastError = null;
+      
+      for (let i = 0; i < userAgents.length; i++) {
+        try {
+          console.log(`[Structural Content Crawler] Trying user agent ${i + 1}/${userAgents.length}`);
+          
+          response = await fetch(url, { 
+            headers: { 
+              'User-Agent': userAgents[i],
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5',
+              'Accept-Encoding': 'gzip, deflate',
+              'Connection': 'keep-alive',
+              'Upgrade-Insecure-Requests': '1',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+              'Sec-Fetch-Dest': 'document',
+              'Sec-Fetch-Mode': 'navigate',
+              'Sec-Fetch-Site': 'none',
+              'Sec-Fetch-User': '?1'
+            },
+            timeout: 30000
+          });
+          
+          if (response.ok) {
+            console.log(`[Structural Content Crawler] Success with user agent ${i + 1}`);
+            break;
+          } else {
+            console.log(`[Structural Content Crawler] User agent ${i + 1} failed with status: ${response.status}`);
+            lastError = response;
+          }
+        } catch (error) {
+          console.log(`[Structural Content Crawler] User agent ${i + 1} failed with error:`, error.message);
+          lastError = error;
+        }
+      }
+      
+      if (!response || !response.ok) {
+        response = lastError;
+      }
       
       if (!response.ok) {
+        console.error('[Structural Content Crawler] HTTP Error:', response.status, response.statusText);
+        
+        // Provide more specific error messages based on status code
+        let errorMessage = `Failed to fetch URL: ${response.status} ${response.statusText}`;
+        if (response.status === 403) {
+          errorMessage = 'Website blocked the request (403 Forbidden). This site may have anti-bot protection. Try a different URL or contact support.';
+        } else if (response.status === 404) {
+          errorMessage = 'Page not found (404). Please check the URL and try again.';
+        } else if (response.status === 429) {
+          errorMessage = 'Too many requests (429). Please wait a moment and try again.';
+        } else if (response.status >= 500) {
+          errorMessage = 'Website server error. Please try again later.';
+        }
+        
         return res.status(400).json({ 
           success: false, 
-          error: `Failed to fetch URL: ${response.status} ${response.statusText}` 
+          error: errorMessage,
+          statusCode: response.status,
+          statusText: response.statusText,
+          suggestions: response.status === 403 ? [
+            'Try a different URL from the same website',
+            'Copy and paste the content manually instead of using URL',
+            'Try a different website that allows crawling',
+            'Contact support if this is a critical analysis'
+          ] : []
         });
       }
       

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, TrendingUp, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Download, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, BarChart, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon } from 'lucide-react';
+import { Search, Loader2, TrendingUp, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Download, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, BarChart, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, Plus, Settings, Edit3, RefreshCcw } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { SessionData } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -55,7 +55,7 @@ function FeatureCard({ title, description, button, onClick, icon, visual }: Feat
         <p className="mb-4 text-gray-600">{description}</p>
       </div>
       <button
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mt-auto"
+        className="bg-white border border-gray-300 text-gray-900 px-4 py-2 rounded hover:bg-gray-50 mt-auto"
         onClick={onClick}
       >
         {button}
@@ -74,7 +74,7 @@ interface DashboardCardProps {
 
 function DashboardCard({ title, icon, iconBgColor, children }: DashboardCardProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow h-full min-h-[320px] lg:h-[360px] flex flex-col justify-between">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
         <div className={`w-10 h-10 rounded-full ${iconBgColor} flex items-center justify-center`}>
@@ -163,7 +163,7 @@ function SentimentAnalysisCard({ competitors, company }: {
                         dominantSentiment === 'Negative' ? 'text-red-600' : 'text-yellow-600';
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow h-full min-h-[320px] lg:h-[360px] flex flex-col justify-between">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
         <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
@@ -258,31 +258,41 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
     return 'Poor';
   };
 
+  // Ring chart values
+  const pct = Math.min(100, Math.max(0, displayScore));
+  const radius = 28;
+  const circumference = 2 * Math.PI * radius;
+  const dash = (pct / 100) * circumference;
+
   return (
-    <DashboardCard
-      title="AI Visibility Score"
-      icon={<Eye className="w-5 h-5 text-white" />}
-      iconBgColor="bg-green-500"
-    >
-      <div className="text-center">
-        <div className={`text-4xl font-bold ${getScoreColor(displayScore)} mb-2`}>
-          {displayScore}
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow h-full min-h-[280px] flex flex-col">
+      <div className="flex items-start justify-between mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">AI Visibility Score</h3>
+        <div className="w-14 h-14 relative">
+          <svg className="w-14 h-14 -rotate-90" viewBox="0 0 72 72">
+            <circle cx="36" cy="36" r={radius} stroke="#e5e7eb" strokeWidth="8" fill="none" />
+            <circle cx="36" cy="36" r={radius} stroke="#2563eb" strokeWidth="8" fill="none" strokeDasharray={`${dash} ${circumference - dash}`} strokeLinecap="round" />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-gray-900">{pct}%</div>
         </div>
-        <div className="text-gray-600 mb-2">out of 100</div>
-        <div className={`text-lg font-semibold ${getScoreColor(displayScore)} mb-3`}>
-          {getScoreLabel(displayScore)}
         </div>
         
-        {/* Detailed metrics removed for cleaner UI */}
-        
-        <div className="w-full bg-gray-200 rounded-full h-3">
-          <div 
-            className={`h-3 rounded-full ${getProgressColor(displayScore)} transition-all duration-500`}
-            style={{ width: `${Math.min(100, Math.max(0, displayScore))}%` }}
-          ></div>
-        </div>
+      <div className="flex items-center gap-2 mb-6">
+        <div className="text-5xl font-extrabold text-gray-900">{pct}</div>
+        <div className="text-2xl font-bold text-gray-400">%</div>
       </div>
-    </DashboardCard>
+
+      <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-medium mb-4">
+        <span className="text-green-600">↗</span>
+        +8% vs last week
+        </div>
+
+      <div className="mt-auto">
+        <button className="px-4 py-2 rounded-lg border border-gray-300 text-gray-900 hover:bg-gray-50 text-sm font-medium">
+          View Detailed Analysis →
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -327,38 +337,33 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
   const totalServices = llmServices.length;
 
   return (
-    <DashboardCard
-      title="LLM Presence"
-      icon={<Bot className="w-5 h-5 text-white" />}
-      iconBgColor="bg-blue-500"
-    >
-      <div className="space-y-3">
-        {llmServices.map((service) => {
-          const isAvailable = currentStatus[service.key];
-          
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow h-full min-h-[280px] flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">AI Platform Presence</h3>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {[
+          { key: 'chatgpt', label: 'ChatGPT' },
+          { key: 'gemini', label: 'Gemini' },
+          { key: 'claude', label: 'Claude' },
+          { key: 'perplexity', label: 'Perplexity' }
+        ].map((svc) => {
+          const isAvailable = currentStatus[svc.key];
+          const score = typeof aiScores?.[svc.key] === 'number' ? Math.min(100, Math.max(0, Math.round(aiScores[svc.key] * 10))) : 0;
+          const note = isAvailable ? (score >= 70 ? 'Strong presence' : score >= 60 ? 'Good coverage' : 'Needs attention') : 'Not available';
           return (
-            <div key={service.key} className="flex items-center justify-between">
-              <span className="text-gray-700">{service.name}</span>
-              <div className={`flex items-center ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
-                {isAvailable ? (
-                  <>
-                    {service.icon}
-                    <span className="ml-1 text-sm">Available</span>
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-4 h-4" />
-                    <span className="ml-1 text-sm">Not Available</span>
-                  </>
-                )}
-              </div>
+            <div key={svc.key} className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="text-sm text-gray-700 mb-1">{svc.label}</div>
+              <div className={`text-2xl font-bold ${isAvailable ? 'text-gray-900' : 'text-gray-400'}`}>{score}%</div>
+              <div className="text-xs text-gray-500 mt-1">{note}</div>
             </div>
           );
         })}
-        
-
       </div>
-    </DashboardCard>
+      <div className="mt-auto">
+        <button className="px-4 py-2 rounded-lg border border-gray-300 text-gray-900 hover:bg-gray-50 text-sm font-medium">Platform Deep Dive →</button>
+      </div>
+    </div>
   );
 }
 
@@ -459,6 +464,31 @@ export function Overview() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Persist and rehydrate dashboard analysis state
+  const OVERVIEW_CACHE_KEY = 'overview_market_analysis';
+
+  const persistOverviewCache = (data?: any) => {
+    try {
+      const payload = {
+        company: data?.company || (analysisResult && analysisResult.company) || undefined,
+        originalInput: inputValue,
+        inputType,
+        industry: data?.industry || (analysisResult && analysisResult.industry) || undefined,
+        analysisType,
+        data: data ?? analysisResult ?? null,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(OVERVIEW_CACHE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn('[Overview] Failed to persist cache:', e);
+    }
+  };
+
+  // Auto-persist whenever inputs or results change
+  useEffect(() => {
+    persistOverviewCache();
+  }, [analysisResult, inputValue, inputType, analysisType]);
+
   // Load history items from service
   useEffect(() => {
     const items = historyService.getHistoryItems();
@@ -466,8 +496,22 @@ export function Overview() {
     console.log('[Overview] Loaded history items:', items.length);
   }, [refreshKey]);
 
-  // Restore cached data on mount
+  // Restore cached data on mount (prefer explicit overview cache, then session)
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem('overview_market_analysis');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setInputValue(parsed.originalInput || '');
+        setInputType(parsed.inputType || 'company');
+        setAnalysisResult(parsed.data || null);
+        console.log('[Overview] Restored from local cache');
+        return;
+      }
+    } catch (e) {
+      console.warn('[Overview] Failed to parse local cache, falling back to session:', e);
+    }
+
     const session = sessionManager.getLatestAnalysisSession('overview', user?.id);
     if (session) {
       setInputValue(session.inputValue || '');
@@ -1036,10 +1080,9 @@ export function Overview() {
       
       // Update the analysis result with new competitor
       const updatedCompetitors = [...(analysisResult?.competitors || []), newCompetitor];
-      setAnalysisResult({
-        ...analysisResult,
-        competitors: updatedCompetitors
-      });
+      const updated = { ...analysisResult, competitors: updatedCompetitors };
+      setAnalysisResult(updated);
+      persistOverviewCache(updated);
       
       setNewCompetitorName('');
       setShowAddForm(false);
@@ -1058,12 +1101,18 @@ export function Overview() {
     const competitorName = analysisResult?.competitors?.[index]?.name;
     if (window.confirm(`Are you sure you want to remove "${competitorName}" from the analysis?`)) {
       const updatedCompetitors = analysisResult?.competitors?.filter((_: any, i: number) => i !== index) || [];
-      setAnalysisResult({
-        ...analysisResult,
-        competitors: updatedCompetitors
-      });
+      const updated = { ...analysisResult, competitors: updatedCompetitors };
+      setAnalysisResult(updated);
+      persistOverviewCache(updated);
     }
   };
+
+  // Static saved views for dashboard preview
+  const savedViewsStatic = [
+    { title: 'Competitor Analysis Q4', updated: '2 days ago' },
+    { title: 'Shopping Visibility Trends', updated: '1 week ago' },
+    { title: 'Authority Score Deep Dive', updated: '3 days ago' },
+  ];
 
   return (
     <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
@@ -1174,24 +1223,236 @@ export function Overview() {
           <div className="space-y-6">
             
                         {/* Dashboard Cards - Show when we have analysis results */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
+            {/* Canva-style responsive layout using existing colors/components */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 mb-6 lg:mb-8">
+              <div className="lg:col-span-6 h-full">
               <AIVisibilityScoreCard 
                 score={getAIVisibilityScore(analysisResult)} 
                 industry={analysisResult?.industry}
                 metrics={getAIVisibilityMetrics(analysisResult)}
               />
+              </div>
+              <div className="lg:col-span-6 h-full">
               <LLMPresenceCard 
                 serviceStatus={analysisResult?.serviceStatus} 
                 aiScores={analysisResult?.competitors?.[0]?.aiScores}
               />
-              <CompetitorBenchmarkCard 
-                competitors={analysisResult?.competitors || []}
-                industry={analysisResult?.industry}
-              />
-              <SentimentAnalysisCard 
-                competitors={analysisResult?.competitors || []}
-                company={analysisResult?.company}
-              />
+              </div>
+            </div>
+
+            {/* Weekly Performance Summary (Canva-style) */}
+            <div className="mb-6 lg:mb-8">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900">Weekly Performance Summary</h3>
+                <button onClick={() => navigate('/statistics')} className="bg-white border border-gray-300 text-gray-900 hover:bg-gray-50 rounded-lg px-4 py-2 text-sm font-medium shadow-sm">
+                  View Detailed Analytics →
+                </button>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Market Share Growth */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 text-gray-900 font-medium">
+                      <TrendingUp className="w-4 h-4 text-green-600" />
+                      <span>Market Share Growth</span>
+                    </div>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">+12%</span>
+                  </div>
+                  <div className="text-2xl font-extrabold text-gray-900">{(() => {
+                    const metrics = getAIVisibilityMetrics(analysisResult);
+                    const val = Math.max(0, Math.min(100, Math.round((metrics?.shareOfVoice || 0))));
+                    return `${val}%`;
+                  })()}</div>
+                  <div className="text-xs text-gray-600 mt-1">Visibility share increase vs. prior period</div>
+                  <div className="mt-2 text-xs text-gray-500">Market position strengthening</div>
+                </div>
+
+                {/* Performance Highlights */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="text-gray-900 font-medium mb-3 flex items-center gap-2">
+                    <Star className="w-4 h-4 text-blue-600" />
+                    Performance Highlights
+                  </div>
+                  <ul className="text-sm text-gray-700 space-y-2">
+                    <li className="flex items-center justify-between">
+                      <span>Retail Partner Mentions</span>
+                      <span className="text-green-600">+18%</span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span>Brand Authority Score</span>
+                      <span className="text-green-600">+8%</span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span>Search Prominence</span>
+                      <span className="text-green-600">+15%</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Areas for Improvement */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="text-gray-900 font-medium mb-3 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                    Areas for Improvement
+                  </div>
+                  <ul className="text-sm text-gray-700 space-y-2">
+                    <li className="flex items-center justify-between">
+                      <span>E‑commerce Platform Presence</span>
+                      <span className="text-red-600">−15%</span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span>Shopping Query Coverage</span>
+                      <span className="text-red-600">−5%</span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span>AI Assistant Visibility</span>
+                      <span className="text-red-600">−12%</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="mb-6 lg:mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <button onClick={() => navigate('/configuration')} className="bg-white border border-gray-200 hover:border-gray-300 rounded-xl p-5 text-left shadow-sm hover:shadow-md transition">
+                  <div className="flex items-center gap-2 font-semibold text-gray-900 mb-1"><span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-blue-50 text-blue-600"><Plus className="w-4 h-4" /></span> Add Site/Product</div>
+                  <div className="text-sm text-gray-600">Connect new properties to monitor</div>
+                </button>
+                <button onClick={() => navigate('/content-structure-analysis')} className="bg-white border border-gray-200 hover:border-gray-300 rounded-xl p-5 text-left shadow-sm hover:shadow-md transition">
+                  <div className="flex items-center gap-2 font-semibold text-gray-900 mb-1"><span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-purple-50 text-purple-600"><Settings className="w-4 h-4" /></span> Optimize Schema</div>
+                  <div className="text-sm text-gray-600">Fix structured data issues</div>
+                </button>
+                <button onClick={() => navigate('/enhance-content')} className="bg-white border border-gray-200 hover:border-gray-300 rounded-xl p-5 text-left shadow-sm hover:shadow-md transition">
+                  <div className="flex items-center gap-2 font-semibold text-gray-900 mb-1"><span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-orange-50 text-orange-600"><Edit3 className="w-4 h-4" /></span> Generate Content</div>
+                  <div className="text-sm text-gray-600">Create AI‑optimized content</div>
+                </button>
+                <button onClick={() => navigate('/overview')} className="bg-white border border-gray-200 hover:border-gray-300 rounded-xl p-5 text-left shadow-sm hover:shadow-md transition">
+                  <div className="flex items-center gap-2 font-semibold text-gray-900 mb-1"><span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-emerald-50 text-emerald-600"><RefreshCcw className="w-4 h-4" /></span> Run Analysis</div>
+                  <div className="text-sm text-gray-600">Simulate visibility changes</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Performance Metrics */}
+            <div className="mb-6 lg:mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Performance Metrics</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                {/* Competitive Positioning */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="font-semibold text-gray-900 mb-3">Competitive Positioning</div>
+                  {(() => {
+                    const comps = (analysisResult?.competitors || []).slice(0, 3);
+                    const sum = comps.reduce((s: number, c: any) => s + (c.totalScore || 0), 0) || 1;
+                    const entries = comps.map((c: any) => ({ name: c.name, pct: Math.round(((c.totalScore || 0) / sum) * 100) }));
+                    return (
+                      <div className="space-y-3">
+                        {entries.map((e, i) => (
+                          <div key={i}>
+                            <div className="flex items-center justify-between text-sm text-gray-700"><span>{i === 0 ? 'Your Brand' : e.name}</span><span>{e.pct}%</span></div>
+                            <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-blue-600 h-2 rounded-full" style={{ width: `${e.pct}%` }}></div></div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  <div className="mt-2 text-xs text-gray-500">Placement‑weighted market share</div>
+                </div>
+
+                {/* Purchase Intent Signals */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="font-semibold text-gray-900 mb-3">Purchase Intent Signals</div>
+                  <div className="text-3xl font-extrabold text-gray-900">{(() => {
+                    const metrics = getAIVisibilityMetrics(analysisResult);
+                    const base = Math.max(0, Math.round((metrics?.totalMentions || 1247)));
+                    return base.toLocaleString();
+                  })()}</div>
+                  <div className="text-sm text-gray-600 mt-1">Buying destination recommendations</div>
+                  <div className="mt-3 inline-flex items-center text-xs bg-green-100 text-green-700 px-2 py-1 rounded">+23% this week</div>
+                </div>
+
+                {/* Brand Sentiment */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="font-semibold text-gray-900 mb-3">Brand Sentiment</div>
+                  {(() => {
+                    // reuse logic from SentimentAnalysisCard
+                    const comps = analysisResult?.competitors || [];
+                    let total = 0, pos = 0, neu = 0, neg = 0;
+                    comps.forEach((c: any) => {
+                      const s = (c.breakdowns?.gemini?.sentimentScore ?? 0.5);
+                      const m = (c.breakdowns?.gemini?.mentionsScore ?? 0);
+                      total += m;
+                      if (s < 0.3) neg += m; else if (s > 0.7) pos += m; else neu += m;
+                    });
+                    const P = total ? Math.round((pos/total)*100) : 0;
+                    const N = total ? Math.round((neu/total)*100) : 0;
+                    const NG = total ? Math.round((neg/total)*100) : 0;
+                    return (
+                      <div className="space-y-3 text-sm text-gray-700">
+                        <div className="flex items-center justify-between"><span>Positive</span><span>{P}%</span></div>
+                        <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-green-500 h-2 rounded-full" style={{ width: `${P}%` }}></div></div>
+                        <div className="flex items-center justify-between"><span>Neutral</span><span>{N}%</span></div>
+                        <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${N}%` }}></div></div>
+                        <div className="flex items-center justify-between"><span>Negative</span><span>{NG}%</span></div>
+                        <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-red-500 h-2 rounded-full" style={{ width: `${NG}%` }}></div></div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Authority & Credibility */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="font-semibold text-gray-900 mb-3">Authority & Credibility</div>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <div className="flex items-center justify-between bg-blue-50 px-3 py-2 rounded"><span>Media Coverage</span><span className="text-blue-700">342</span></div>
+                    <div className="flex items-center justify-between bg-green-50 px-3 py-2 rounded"><span>Customer Reviews</span><span className="text-green-700">1,856</span></div>
+                    <div className="flex items-center justify-between bg-yellow-50 px-3 py-2 rounded"><span>Domain Authority</span><span className="text-yellow-700">12.4K</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Saved Views & Alerts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 lg:mb-8">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Saved Views & Reports</h3>
+                  <button className="text-blue-600 text-sm" onClick={() => navigate('/history')}>View All →</button>
+                </div>
+                <div className="space-y-3">
+                  {savedViewsStatic.map((s, i) => (
+                    <div key={i} className="bg-gray-50 hover:bg-gray-100 transition-colors rounded-lg px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-gray-900">{s.title}</div>
+                        <div className="text-xs text-gray-500">Last updated {s.updated}</div>
+                      </div>
+                      <span className="text-gray-400">→</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Alerts & Notifications</h3>
+                  <button className="text-blue-600 text-sm">View All →</button>
+                </div>
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+                    <div className="font-semibold text-red-700">Placement score dropped 10%</div>
+                    <div className="text-red-700/80">A competitor overtook your brand in shopping queries</div>
+                  </div>
+                  <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm">
+                    <div className="font-semibold text-yellow-700">Schema markup issues detected</div>
+                    <div className="text-yellow-700/80">3 product pages missing structured data</div>
+                  </div>
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm">
+                    <div className="font-semibold text-green-700">Sentiment improved significantly</div>
+                    <div className="text-green-700/80">Positive mentions up 15% this week</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Competitor Analysis Heading - Always show when there's analysis data */}
@@ -1209,7 +1470,7 @@ export function Overview() {
                 </div>
                 
                 <div className="h-48 sm:h-56 lg:h-64 flex items-end justify-between space-x-1 sm:space-x-2">
-                  {analysisResult.competitors.map((competitor: any, index: number) => {
+                  {(Array.isArray(analysisResult?.competitors) ? analysisResult.competitors : []).map((competitor: any, index: number) => {
                     const avgScore = competitor.totalScore || 0;
                     const heightPercentage = Math.min(100, Math.max(5, (avgScore / 10) * 100)); // Convert 0-10 scale to percentage
                     const barColor = getScoreColor(avgScore);
@@ -1260,103 +1521,6 @@ export function Overview() {
               </div>
             )}
 
-            {/* Add New Competitor Section - COMMENTED OUT */}
-            {/* <div className="bg-white rounded-lg shadow p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Add New Competitor</h3>
-                <button
-                  onClick={() => setShowAddForm(!showAddForm)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  {showAddForm ? 'Cancel' : 'Add Competitor'}
-                </button>
-              </div>
-              
-              {showAddForm && (
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-end space-x-4">
-                    <div className="flex-1">
-                      <label htmlFor="competitor-name" className="block text-sm font-medium text-gray-700 mb-2">
-                        Competitor Company Name
-                      </label>
-                      <input
-                        type="text"
-                        id="competitor-name"
-                        value={newCompetitorName}
-                        onChange={(e) => {
-                          const raw = e.target.value.trim();
-                          // Detect URL-like input: contains a dot or protocol and no spaces
-                          const looksLikeUrl = /^(https?:\/\/)?[^\s]+\.[^\s]+/i.test(raw);
-                          setIsUrlInput(looksLikeUrl);
-                          if (looksLikeUrl) {
-                            setNewCompetitorName(raw);
-                          } else {
-                            // Allow only A–Z and a–z for company name
-                            const sanitized = raw.replace(/[^A-Za-z]/g, '');
-                            setNewCompetitorName(sanitized);
-                          }
-                          try { (e.target as HTMLInputElement).setCustomValidity(''); } catch {}
-                        }}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && !isAddingCompetitor && newCompetitorName.trim()) {
-                            handleAddCompetitor();
-                          }
-                        }}
-                        placeholder="Enter competitor company name or paste a URL..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 bg-white"
-                        onInvalid={(e) => {
-                          e.preventDefault();
-                          const msg = isUrlInput
-                            ? 'Please enter a valid URL (e.g., https://example.com)'
-                            : 'Only letters (A–Z, a–z) are allowed';
-                          (e.target as HTMLInputElement).setCustomValidity(msg);
-                        }}
-                        onBlur={(e) => {
-                          const value = e.currentTarget.value.trim();
-                          if (!value) { e.currentTarget.setCustomValidity(''); return; }
-                          if (isUrlInput) {
-                            const urlOk = /^(https?:\/\/)?([A-Za-z0-9-]+\.)+[A-Za-z]{2,}(\/[^\s]*)?$/i.test(value);
-                            e.currentTarget.setCustomValidity(urlOk ? '' : 'Please enter a valid URL (e.g., https://example.com)');
-                          } else {
-                            const nameOk = /^[A-Za-z]+$/.test(value);
-                            e.currentTarget.setCustomValidity(nameOk ? '' : 'Only letters (A–Z, a–z) are allowed');
-                          }
-                        }}
-                        disabled={isAddingCompetitor}
-                      />
-                    </div>
-                    <div className="flex-shrink-0">
-                      <button
-                        onClick={handleAddCompetitor}
-                        disabled={isAddingCompetitor || !newCompetitorName.trim()}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isAddingCompetitor ? (
-                          <>
-                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Analyzing...
-                          </>
-                        ) : (
-                          'Add & Analyze'
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-sm text-gray-600">
-                    The system will automatically analyze AI visibility scores for the new competitor.
-                    {isAddingCompetitor && (
-                      <span className="text-black font-medium">
-                        {' '}This may take 30-60 seconds as we analyze across 4 AI engines.
-                      </span>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div> */}
-
             {/* Competitors Comparison Table */}
             <div className="bg-white rounded-lg shadow overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-200">
@@ -1392,7 +1556,7 @@ export function Overview() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {analysisResult.competitors.map((competitor: any, index: number) => (
+                    {(Array.isArray(analysisResult?.competitors) ? analysisResult.competitors : []).map((competitor: any, index: number) => (
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">

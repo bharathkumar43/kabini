@@ -178,13 +178,13 @@ function IntegrationsTab() {
         </div>
       ))}
 
-      {/* Store Integration Panel */}
+      {/* Shopify Integration (multi-option) */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Database className="w-5 h-5 text-black" />
-          <h3 className="text-lg font-bold text-black">Store Integration (Read-only)</h3>
+          <h3 className="text-lg font-bold text-black">Shopify Integration</h3>
         </div>
-        <StoreIntegrationPanel />
+        <ShopifyConnectPanel />
       </div>
     </div>
   );
@@ -424,97 +424,185 @@ function AccountTab() {
 }
 
 // Store Integration Panel (existing component)
-export function StoreIntegrationPanel() {
-  const [platform, setPlatform] = useState<'shopify' | 'woocommerce' | 'magento' | ''>('');
-  const [shopify, setShopify] = useState({ shop: '', accessToken: '' });
-  const [woo, setWoo] = useState({ baseUrl: '', consumerKey: '', consumerSecret: '' });
-  const [magento, setMagento] = useState({ baseUrl: '', token: '' });
-  const [result, setResult] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+export function ShopifyConnectPanel() {
+  const [mode, setMode] = useState<'oauth' | 'public' | 'storefront' | 'byo'>('oauth');
+  const [shopDomain, setShopDomain] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  // BYO creds
+  const [creds, setCreds] = useState({ name: '', apiKey: '', apiSecret: '', redirectUri: '' });
+  const [credsList, setCredsList] = useState<any[]>([]);
+  const [credsId, setCredsId] = useState('');
+  // Storefront
+  const [sfToken, setSfToken] = useState('');
+  const [sfSaving, setSfSaving] = useState(false);
+  const [sfSavedMsg, setSfSavedMsg] = useState<string | null>(null);
+  const [connections, setConnections] = useState<any[]>([]);
 
-  const creds = platform === 'shopify' ? shopify : platform === 'woocommerce' ? woo : platform === 'magento' ? magento : null;
-
-  const test = async () => {
-    if (!platform || !creds) return;
-    setLoading(true); setResult(null);
+  const reload = async () => {
     try {
-      const res: any = await apiService.storeTest({ platform, credentials: creds });
-      setResult(res?.success ? `Connected ✓ (sample: ${res?.result?.sample ?? 0})` : `Failed ✗ ${res?.result?.error || ''}`);
-    } catch (e: any) {
-      setResult(`Failed ✗ ${e.message}`);
-    } finally { setLoading(false); }
+      const c = await apiService.listShopifyConnections();
+      setConnections(c?.shops || []);
+      const cl = await apiService.listShopifyCreds().catch(() => ({ items: [] }));
+      setCredsList(cl?.items || []);
+    } catch {}
   };
-  const save = async () => {
-    if (!platform || !creds) return;
-    setLoading(true); setResult(null);
+
+  React.useEffect(() => { reload(); }, []);
+
+  const toDomain = (raw: string) => {
+    let s = (raw || '').trim().toLowerCase();
+    // strip protocol and path
+    s = s.replace(/^https?:\/\//, '').replace(/\/.*/, '');
+    // fix accidental 'shopify.com.myshopify.com'
+    s = s.replace('shopify.com.myshopify.com', 'myshopify.com');
+    // convert 'sub.shopify.com' -> 'sub.myshopify.com'
+    if (s.endsWith('.shopify.com') && !s.endsWith('.myshopify.com')) {
+      s = s.replace(/\.shopify\.com$/, '.myshopify.com');
+    }
+    // append if only subdomain provided
+    if (!s.endsWith('.myshopify.com')) {
+      if (!s.includes('.')) s = `${s}.myshopify.com`;
+    }
+    return s;
+  };
+
+  const startConnectOAuth = () => {
+    if (!shopDomain) return;
+    setConnecting(true);
+    const domain = toDomain(shopDomain.trim());
+    const base = credsId ? apiService.getShopifyAuthStartUrlWithCreds(domain, credsId) : apiService.getShopifyAuthStartUrl(domain);
+    const accessToken = localStorage.getItem('accessToken') || '';
+    if (!accessToken) { setConnecting(false); return; }
+    const url = `${base}${base.includes('?') ? '&' : '?'}token=${encodeURIComponent(accessToken)}`;
+    // Open OAuth in a popup so the main app stays in place
+    const w = 640, h = 720;
+    const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
+    const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
+    const popup = window.open(url, 'shopify_oauth', `width=${w},height=${h},left=${left},top=${top}`);
+    const handler = (ev: MessageEvent) => {
+      if (!ev?.data || typeof ev.data !== 'object') return;
+      if (ev.data.type === 'SHOPIFY_CONNECTED') {
+        // Reload connections list
+        reload();
+        window.removeEventListener('message', handler);
+        try { popup?.close(); } catch {}
+        setConnecting(false);
+      } else if (ev.data.type === 'SHOPIFY_CONNECT_ERROR') {
+        window.removeEventListener('message', handler);
+        try { popup?.close(); } catch {}
+        setConnecting(false);
+      }
+    };
+    window.addEventListener('message', handler);
+  };
+
+  const saveCreds = async () => {
+    if (!creds.apiKey || !creds.apiSecret) return;
+    await apiService.createShopifyCreds(creds);
+    setCreds({ name: '', apiKey: '', apiSecret: '', redirectUri: '' });
+    await reload();
+  };
+
+  const connectStorefront = async () => {
+    if (!shopDomain || !sfToken) return;
+    setSfSaving(true); setSfSavedMsg(null);
     try {
-      const res: any = await apiService.storeConnect({ platform, credentials: creds });
-      setResult(res?.success ? 'Saved ✓' : `Failed ✗ ${res?.error || ''}`);
+      await apiService.connectStorefront(toDomain(shopDomain.trim()), sfToken.trim());
+      setSfToken('');
+      setSfSavedMsg('Storefront token saved. You can now load products in E‑commerce Content Analysis → Pick from Shopify → Storefront (token).');
     } catch (e: any) {
-      setResult(`Failed ✗ ${e.message}`);
-    } finally { setLoading(false); }
+      setSfSavedMsg(`Failed to save token: ${e?.message || 'unknown error'}`);
+    } finally { setSfSaving(false); }
+  };
+
+  const disconnect = async (shop: string) => {
+    await apiService.disconnectShopify(shop);
+    await reload();
   };
 
   return (
-    <div className="space-y-4">
-            <div>
-        <label className="block text-sm font-bold text-black mb-2">Platform</label>
-        <select value={platform} onChange={e => setPlatform(e.target.value as any)} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black">
-          <option value="">Select platform</option>
-          <option value="shopify">Shopify</option>
-          <option value="woocommerce">WooCommerce</option>
-          <option value="magento">Magento</option>
-              </select>
-            </div>
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <label className="text-sm font-bold text-black">Mode</label>
+        <select value={mode} onChange={e => setMode(e.target.value as any)} className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black">
+          <option value="oauth">OAuth (Admin API)</option>
+          <option value="public">Public (no auth)</option>
+          <option value="storefront">Storefront (token)</option>
+          <option value="byo">Bring Your Own App (OAuth)</option>
+        </select>
+      </div>
 
-      {platform === 'shopify' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-            <label className="block text-sm font-bold text-black mb-2">Shop Domain (myshop.myshopify.com or https://...)</label>
-            <input value={shopify.shop} onChange={e => setShopify({ ...shopify, shop: e.target.value })} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
-            </div>
+      {/* OAuth / BYO */}
+      {(mode === 'oauth' || mode === 'byo') && (
+        <div className="space-y-3">
           <div>
-            <label className="block text-sm font-bold text-black mb-2">Admin API Access Token</label>
-            <input value={shopify.accessToken} onChange={e => setShopify({ ...shopify, accessToken: e.target.value })} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+            <label className="block text-sm font-bold text-black mb-2">Shop Domain</label>
+            <input value={shopDomain} onChange={e => setShopDomain(e.target.value)} placeholder="your-shop.myshopify.com" className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
           </div>
-        </div>
-      )}
-
-      {platform === 'woocommerce' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-bold text-black mb-2">Site URL (https://example.com)</label>
-            <input value={woo.baseUrl} onChange={e => setWoo({ ...woo, baseUrl: e.target.value })} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
-            </div>
-          <div>
-            <label className="block text-sm font-bold text-black mb-2">Consumer Key</label>
-            <input value={woo.consumerKey} onChange={e => setWoo({ ...woo, consumerKey: e.target.value })} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+          {mode === 'byo' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input value={creds.name} onChange={e => setCreds({ ...creds, name: e.target.value })} placeholder="Credentials name" className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+                <input value={creds.redirectUri} onChange={e => setCreds({ ...creds, redirectUri: e.target.value })} placeholder="Redirect URI (optional)" className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+                <input value={creds.apiKey} onChange={e => setCreds({ ...creds, apiKey: e.target.value })} placeholder="API Key" className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+                <input value={creds.apiSecret} onChange={e => setCreds({ ...creds, apiSecret: e.target.value })} placeholder="API Secret" className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
               </div>
-          <div>
-            <label className="block text-sm font-bold text-black mb-2">Consumer Secret</label>
-            <input value={woo.consumerSecret} onChange={e => setWoo({ ...woo, consumerSecret: e.target.value })} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+              <div className="flex gap-2">
+                <button onClick={saveCreds} className="px-4 py-2 rounded-lg bg-gray-800 text-white">Save Credentials</button>
+                <select value={credsId} onChange={e => setCredsId(e.target.value)} className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black">
+                  <option value="">Select saved credentials</option>
+                  {credsList.map((c) => (<option key={c.id} value={c.id}>{c.name} ({c.id.slice(0,6)})</option>))}
+                </select>
+              </div>
             </div>
+          )}
+          <div className="flex gap-3">
+            <button onClick={startConnectOAuth} disabled={!shopDomain || connecting} className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">{connecting ? 'Redirecting...' : 'Connect Shopify'}</button>
           </div>
-      )}
-
-      {platform === 'magento' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-            <label className="block text-sm font-bold text-black mb-2">Base URL (https://example.com)</label>
-            <input value={magento.baseUrl} onChange={e => setMagento({ ...magento, baseUrl: e.target.value })} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
-                </div>
-          <div>
-            <label className="block text-sm font-bold text-black mb-2">Integration Token (Bearer)</label>
-            <input value={magento.token} onChange={e => setMagento({ ...magento, token: e.target.value })} className="w-full bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
-            </div>
-          </div>
-      )}
-
-      <div className="flex gap-3">
-        <button onClick={test} disabled={!platform || !creds || loading} className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">{loading ? 'Testing...' : 'Test Connection'}</button>
-        <button onClick={save} disabled={!platform || !creds || loading} className="px-4 py-2 rounded-lg bg-gray-800 text-white disabled:opacity-50">Save</button>
+          <p className="text-xs text-gray-600">You will be redirected to Shopify to approve read scopes.</p>
         </div>
-      {result && <div className="text-sm text-black mt-2">{result}</div>}
+      )}
+
+      {/* Public */}
+      {mode === 'public' && (
+        <div className="space-y-2 text-sm text-gray-700">
+          <p>Public mode doesn’t require admin access. Use a product URL or shop+handle in analysis to fetch public JSON.</p>
+          <p>Example: https://your-shop.myshopify.com/products/handle</p>
+        </div>
+      )}
+
+      {/* Storefront */}
+      {mode === 'storefront' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input value={shopDomain} onChange={e => setShopDomain(e.target.value)} placeholder="your-shop.myshopify.com" className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+            <input value={sfToken} onChange={e => setSfToken(e.target.value)} placeholder="Storefront access token" className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black" />
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={connectStorefront} disabled={sfSaving || !shopDomain || !sfToken} className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">{sfSaving ? 'Saving…' : 'Save Storefront Token'}</button>
+            {sfSavedMsg && (
+              <span className={`text-sm ${/Failed/i.test(sfSavedMsg) ? 'text-red-600' : 'text-green-700'}`}>{sfSavedMsg}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Connected Shops */}
+      <div className="border-t border-gray-200 pt-4">
+        <div className="font-semibold text-black mb-2">Connected Shops (Admin OAuth)</div>
+        {connections.length === 0 ? (
+          <div className="text-sm text-gray-600">No shops connected yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {connections.map((s, i) => (
+              <div key={i} className="flex items-center justify-between text-sm">
+                <span className="text-black">{s.shop}</span>
+                <button onClick={() => disconnect(s.shop)} className="px-2 py-1 rounded bg-red-50 text-red-700">Disconnect</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

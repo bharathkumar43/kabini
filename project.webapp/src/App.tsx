@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, BarChart3, FileText, History as HistoryIcon, DollarSign, Zap, Menu, X, Target, Globe, Plus, Loader2, RefreshCw, LogOut, Eye, Settings, ShoppingCart } from 'lucide-react';
+import { User, BarChart3, FileText, History as HistoryIcon, DollarSign, Zap, Menu, X, Target, Globe, Plus, Loader2, RefreshCw, LogOut, Eye, Settings } from 'lucide-react';
 import { ContentInput } from './components/ContentInput';
 import { historyService } from './services/historyService';
 import { Statistics } from './components/Statistics';
@@ -27,7 +27,8 @@ const hashContent = (content: string): string => {
 };
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Overview } from './components/Overview.tsx';
-import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
+// import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
+import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
 import EmailVerification from './components/EmailVerification';
 
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
@@ -38,7 +39,8 @@ import SignUp from './components/SignUp';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import { Configuration } from './components/Configuration';
-import { EcommerceAIVisibility } from './components/EcommerceAIVisibility';
+// import { EcommerceAIVisibility } from './components/EcommerceAIVisibility';
+import EcommerceContentAnalysis from './components/EcommerceContentAnalysis';
 import NotificationTest from './components/ui/NotificationTest';
 import { FAQContentAnalyzer } from './components/FAQContentAnalyzer';
 
@@ -55,7 +57,7 @@ const NAV_ITEMS = [
       { label: 'Content Enhancement', icon: <FileText />, path: '/enhance-content' },
   // { label: 'Content Analysis', icon: <BarChart3 />, path: '/content-analysis' },
   { label: 'Structure Analysis', icon: <Target />, path: '/content-structure-analysis' },
-    { label: 'E-commerce AI', icon: <ShoppingCart />, path: '/ecommerce-ai-visibility' },
+  { label: 'Ecom Content Analysis', icon: <BarChart3 />, path: '/ecommerce-content-analysis' },
     { label: 'Settings', icon: <Settings />, path: '/configuration' },
   // { label: 'Smart Competitor Analysis', icon: <BarChart3 />, path: '/smart-competitor-analysis' },
   { label: 'History', icon: <HistoryIcon />, path: '/history' },
@@ -373,7 +375,7 @@ function AppContent() {
           <div className="main-content-container">
             <Routes>
               <Route path="/overview" element={<Overview />} />
-              <Route path="/ai-visibility-analysis" element={<CompetitorBenchmarking competitorDomains={competitorDomains} />} />
+              <Route path="/ai-visibility-analysis" element={<SmartCompetitorAnalysis />} />
               <Route path="/qa-generation" element={<QAGenerationPage />} />
               <Route path="/enhance-content" element={<QAGenerationPage />} />
               {/* Content Analysis disabled */}
@@ -381,7 +383,8 @@ function AppContent() {
       
               {/* <Route path="/smart-competitor-analysis" element={<SmartCompetitorAnalysis />} /> */}
               <Route path="/content-structure-analysis" element={<ContentStructureAnalysisRoute />} />
-              <Route path="/ecommerce-ai-visibility" element={<EcommerceAIVisibility storeId="default" />} />
+              <Route path="/ecommerce-content-analysis" element={<EcommerceContentAnalysis />} />
+              {/* E-commerce AI removed */}
               <Route path="/configuration" element={<Configuration 
                 questionProvider={"gemini"}
                 questionModel={"gemini-1.5-flash"}

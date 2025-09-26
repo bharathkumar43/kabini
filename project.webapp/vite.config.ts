@@ -28,7 +28,7 @@ export default defineConfig({
           ui: ['lucide-react'],
           // Keep large components separate
           components: [
-            './src/components/AIVisibilityAnalysis.tsx',
+            './src/components/AIVisibilityTable.tsx',
             './src/components/ContentStructureAnalysis.tsx',
             './src/components/Overview.tsx',
             './src/components/Statistics.tsx'
