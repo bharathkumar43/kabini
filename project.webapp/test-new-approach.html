@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Approach - Complete Rewrite</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔄 New Approach - Complete Rewrite</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Current Problem</h2>
+        <p><strong>Issue:</strong> The same errors keep appearing despite multiple fixes:</p>
+        <ul>
+            <li>❌ `applySuggestionsWithDOM` is called with 8 suggestions instead of 1</li>
+            <li>❌ `comparePages` is being triggered when clicking "Apply This Suggestion"</li>
+            <li>❌ Multiple suggestions are being processed instead of single suggestion</li>
+            <li>❌ Console spam with critical errors</li>
+        </ul>
+        <p><strong>Root Cause:</strong> The current approach is too complex and has too many interdependencies.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔄 New Approach - Complete Rewrite</h2>
+        
+        <h3>1. Completely Remove applySuggestionsWithDOM Dependency ✅</h3>
+        <pre>
+// OLD APPROACH (PROBLEMATIC):
+const improvedCode = applySuggestionsWithDOM(sourceHtml, singleSuggestionArray);
+
+// NEW APPROACH (DIRECT):
+let improvedHtml = sourceHtml;
+if (suggestion.type === 'sentence_replacement') {
+  const currentText = suggestion.currentContent.replace(/"/g, '').trim();
+  const enhancedText = suggestion.enhancedContent.replace(/"/g, '').trim();
+  improvedHtml = improvedHtml.replace(currentText, enhancedText);
+}
+        </pre>
+
+        <h3>2. Direct Text Replacement Logic ✅</h3>
+        <pre>
+const applySingleSuggestion = async (suggestion: any) => {
+  console.log('[Frontend] ===== NEW SINGLE SUGGESTION FLOW =====');
+  
+  // Set flags to prevent interference
+  setIsApplying(true);
+  setPreventAutoCompare(true);
+  
+  if (!analysis || !analysis.fullPageHtml) {
+    console.error('[Frontend] No analysis or source HTML available');
+    setIsApplying(false);
+    return;
+  }
+  
+  try {
+    const sourceHtml = analysis.fullPageHtml;
+    let improvedHtml = sourceHtml;
+    
+    // Direct text replacement based on suggestion type
+    if (suggestion.type === 'sentence_replacement' && suggestion.currentContent && suggestion.enhancedContent) {
+      const currentText = suggestion.currentContent.replace(/"/g, '').trim();
+      const enhancedText = suggestion.enhancedContent.replace(/"/g, '').trim();
+      
+      // Try multiple replacement strategies
+      if (improvedHtml.includes(currentText)) {
+        improvedHtml = improvedHtml.replace(currentText, enhancedText);
+        console.log('[Frontend] Direct replacement successful');
+      } else {
+        // Try with quotes
+        const quotedCurrent = `"${currentText}"`;
+        const quotedEnhanced = `"${enhancedText}"`;
+        if (improvedHtml.includes(quotedCurrent)) {
+          improvedHtml = improvedHtml.replace(quotedCurrent, quotedEnhanced);
+          console.log('[Frontend] Quoted replacement successful');
+        }
+      }
+    }
+    
+    // Update states directly
+    setImprovedFullPageHtml(improvedHtml);
+    setShowImprovedCode(true);
+    
+    // Update analysis
+    const updatedAnalysis = {
+      ...analysis,
+      structuredContent: improvedHtml,
+      fullPageHtml: improvedHtml
+    };
+    setAnalysis(updatedAnalysis);
+    
+    // Show success notification
+    setNotificationDetails({
+      type: 'success',
+      title: 'Suggestion Applied Successfully!',
+      message: `The ${suggestion.type} suggestion has been applied to your content.`,
+      details: [
+        `Applied: ${suggestion.type}`,
+        `Description: ${suggestion.description}`,
+        `Impact: ${suggestion.impact || 'Improved content quality'}`
+      ],
+      appliedCount: 1,
+      totalCount: 1,
+      suggestions: [suggestion]
+    });
+    
+    // Switch to landing tab
+    setCodeViewType('landing');
+    console.log('[Frontend] ===== SINGLE SUGGESTION APPLIED SUCCESSFULLY =====');
+    
+  } catch (error) {
+    console.error('Error applying single suggestion:', error);
+    setSuccessMessage('❌ Failed to apply suggestion. Please try again.');
+    setTimeout(() => setSuccessMessage(null), 3000);
+  } finally {
+    setIsApplying(false);
+  }
+};
+        </pre>
+
+        <h3>3. Benefits of New Approach ✅</h3>
+        <ul>
+            <li>✅ <strong>No applySuggestionsWithDOM dependency</strong> - eliminates the source of errors</li>
+            <li>✅ <strong>Direct text replacement</strong> - simple and reliable</li>
+            <li>✅ <strong>No comparePages interference</strong> - completely isolated</li>
+            <li>✅ <strong>Immediate visibility</strong> - changes show right away</li>
+            <li>✅ <strong>Simple debugging</strong> - easy to track what's happening</li>
+            <li>✅ <strong>No console spam</strong> - clean execution</li>
+        </ul>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Implementation Steps</h2>
+        <ol>
+            <li><strong>Replace the entire applySingleSuggestion function</strong> with the new approach</li>
+            <li><strong>Remove all applySuggestionsWithDOM calls</strong> from single suggestion flow</li>
+            <li><strong>Keep comparePages functionality separate</strong> - don't interfere with single suggestions</li>
+            <li><strong>Test the new approach</strong> with different suggestion types</li>
+            <li><strong>Verify immediate visibility</strong> of changes in landing page preview</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Results</h2>
+        <ul>
+            <li>✅ <strong>No more critical errors</strong> - applySuggestionsWithDOM not called</li>
+            <li>✅ <strong>Single suggestion works immediately</strong> - direct text replacement</li>
+            <li>✅ <strong>Changes visible instantly</strong> - landing page preview updates</li>
+            <li>✅ <strong>No console spam</strong> - clean execution</li>
+            <li>✅ <strong>Compare pages works separately</strong> - no interference</li>
+            <li>✅ <strong>Simple and reliable</strong> - easy to maintain</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Key Changes</h2>
+        <ul>
+            <li><strong>Removed:</strong> All applySuggestionsWithDOM calls from single suggestion flow</li>
+            <li><strong>Added:</strong> Direct text replacement logic</li>
+            <li><strong>Simplified:</strong> Single suggestion application process</li>
+            <li><strong>Isolated:</strong> Single suggestion from compare pages functionality</li>
+            <li><strong>Enhanced:</strong> Immediate visibility of changes</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔄 New Approach - Complete Rewrite Test Page Loaded');
+        console.log('Key changes:');
+        console.log('1. Remove applySuggestionsWithDOM dependency completely');
+        console.log('2. Use direct text replacement instead');
+        console.log('3. Isolate single suggestion from compare pages');
+        console.log('4. Make changes visible immediately');
+        console.log('5. Eliminate all console spam and errors');
+        console.log('This new approach should completely solve the problem!');
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix comparePages Auto Call Issue</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix comparePages Auto Call Issue</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Root Cause Identified</h2>
+        <p><strong>Problem:</strong> `comparePages` is being called automatically after `applySingleSuggestion` completes, overriding the single suggestion with all 8 suggestions.</p>
+        <p><strong>Evidence:</strong> Console logs show `comparePages` being called from line 1104 immediately after single suggestion application.</p>
+        <p><strong>Root Cause:</strong> Event propagation or automatic state change triggering `comparePages`.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Fixes Applied</h2>
+        <h3>1. Added preventAutoCompare Flag:</h3>
+        <pre>
+const [preventAutoCompare, setPreventAutoCompare] = useState(false);
+
+const comparePages = (event?: React.MouseEvent) => {
+  // CRITICAL: Prevent automatic calls to comparePages after single suggestion application
+  if (preventAutoCompare) {
+    console.log('[Frontend] ===== COMPARE PAGES BLOCKED - AUTO COMPARE PREVENTED =====');
+    setPreventAutoCompare(false); // Reset the flag
+    return;
+  }
+  // ... rest of function ...
+};
+        </pre>
+
+        <h3>2. Set Flag During Single Suggestion Application:</h3>
+        <pre>
+const applySingleSuggestion = async (suggestion: any) => {
+  // CRITICAL: Set isApplying to true to prevent useEffect from running
+  setIsApplying(true);
+  
+  // CRITICAL: Set flag to prevent automatic comparePages calls
+  setPreventAutoCompare(true);
+  
+  // ... rest of function ...
+};
+        </pre>
+
+        <h3>3. Enhanced Debugging:</h3>
+        <pre>
+// CRITICAL: Add debugging to see why comparePages is being called
+console.log('[Frontend] ===== COMPARE PAGES DEBUG INFO =====');
+console.log('[Frontend] Call stack:', new Error().stack);
+console.log('[Frontend] Is this an automatic call?', !event);
+console.log('[Frontend] Prevent auto compare flag:', preventAutoCompare);
+        </pre>
+
+        <h3>4. Updated Button Click Handler:</h3>
+        <pre>
+<button
+  onClick={(e) => comparePages(e)}
+  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2"
+>
+  <Eye className="w-4 h-4" />
+  Compare Pages
+</button>
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Check console for debug messages</li>
+            <li>Verify that comparePages is NOT called automatically</li>
+            <li>Manually click "Compare Pages" button</li>
+            <li>Verify that compare pages works correctly</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        <h3>✅ After Clicking "Apply This Suggestion":</h3>
+        <pre>
+[Frontend] ===== BUTTON CLICKED =====
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Apply Suggestions] Applied sentence_replacement successfully
+[Frontend] Setting improvedFullPageHtml with single suggestion result
+[Frontend] Suggestion Applied Successfully!
+        </pre>
+
+        <h3>✅ After Manually Clicking "Compare Pages":</h3>
+        <pre>
+[Frontend] ===== COMPARE PAGES CALLED =====
+[Frontend] ===== COMPARE PAGES DEBUG INFO =====
+[Frontend] Call stack: Error at comparePages...
+[Frontend] Is this an automatic call?: false
+[Frontend] Prevent auto compare flag: false
+[Compare Pages] Using existing improved HTML, skipping applySuggestionsWithDOM call
+        </pre>
+
+        <h3>❌ Should NOT See (Automatic Call):</h3>
+        <pre>
+[Frontend] ===== COMPARE PAGES CALLED =====
+[Frontend] ===== COMPARE PAGES DEBUG INFO =====
+[Frontend] Is this an automatic call?: true
+[Frontend] Prevent auto compare flag: true
+[Frontend] ===== COMPARE PAGES BLOCKED - AUTO COMPARE PREVENTED =====
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Results</h2>
+        <ul>
+            <li>✅ Single suggestion is applied correctly without being overridden</li>
+            <li>✅ comparePages is NOT called automatically after single suggestion</li>
+            <li>✅ Manual click on "Compare Pages" button works correctly</li>
+            <li>✅ No console spam from multiple suggestions</li>
+            <li>✅ Improved content shows only the single applied suggestion</li>
+            <li>✅ Compare pages shows the correct differences</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Fix comparePages Auto Call Issue Test Page Loaded');
+        console.log('Fixes applied:');
+        console.log('1. Added preventAutoCompare flag to block automatic calls');
+        console.log('2. Set flag during single suggestion application');
+        console.log('3. Enhanced debugging to identify call source');
+        console.log('4. Updated button click handler to pass event parameter');
+        console.log('5. This should prevent comparePages from overriding single suggestions');
+    </script>
+</body>
+</html>
+

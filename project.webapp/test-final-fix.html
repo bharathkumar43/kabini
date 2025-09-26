@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Final Fix for Single Suggestion Application</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Final Fix for Single Suggestion Application</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Root Cause Identified</h2>
+        <p><strong>Problem:</strong> The "Compare Pages" button is being triggered when clicking "Apply This Suggestion".</p>
+        <p><strong>Evidence:</strong> Call stack shows `comparePages` being called from line 2660 when clicking "Apply This Suggestion".</p>
+        <p><strong>Root Cause:</strong> Event propagation or wrapper element causing both buttons to be triggered.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Final Fixes Applied</h2>
+        
+        <h3>1. Enhanced Compare Pages Button Protection ✅</h3>
+        <pre>
+<button
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[Frontend] ===== COMPARE PAGES BUTTON CLICKED =====');
+    console.log('[Frontend] isApplying:', isApplying);
+    console.log('[Frontend] preventAutoCompare:', preventAutoCompare);
+    
+    // CRITICAL: Don't run comparePages if we're applying a single suggestion
+    if (isApplying || preventAutoCompare) {
+      console.log('[Frontend] ===== COMPARE PAGES BUTTON BLOCKED - APPLYING SINGLE SUGGESTION =====');
+      return;
+    }
+    
+    comparePages(e);
+  }}
+  disabled={isApplying || preventAutoCompare}
+  className={`px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors ${
+    isApplying || preventAutoCompare 
+      ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+      : 'bg-blue-600 text-white hover:bg-blue-700'
+  }`}
+>
+  Compare Pages
+</button>
+        </pre>
+
+        <h3>2. Enhanced comparePages Function Protection ✅</h3>
+        <pre>
+// CRITICAL: Don't run comparePages if we're in the middle of applying a single suggestion
+if (isApplying) {
+  console.log('[Frontend] ===== COMPARE PAGES SKIPPED - APPLYING SINGLE SUGGESTION =====');
+  return;
+}
+
+// CRITICAL: Additional check - if we just applied a single suggestion, don't run comparePages
+if (preventAutoCompare) {
+  console.log('[Frontend] ===== COMPARE PAGES BLOCKED - PREVENT AUTO COMPARE FLAG IS TRUE =====');
+  return;
+}
+        </pre>
+
+        <h3>3. Increased Timeout Delay ✅</h3>
+        <pre>
+// CRITICAL: Reset the flag after a delay to allow manual comparePages calls
+setTimeout(() => {
+  setPreventAutoCompare(false);
+  console.log('[Frontend] ===== PREVENT AUTO COMPARE FLAG RESET =====');
+}, 3000); // 3 second delay (increased from 2 seconds)
+        </pre>
+
+        <h3>4. Enhanced Event Handling ✅</h3>
+        <pre>
+// CRITICAL: Prevent double clicks
+if (event) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+// CRITICAL: Debounce rapid successive calls
+const now = Date.now();
+if (now - lastComparePagesCall < 1000) { // 1 second debounce
+  console.log('[Frontend] ===== COMPARE PAGES DEBOUNCED - TOO SOON =====');
+  return;
+}
+setLastComparePagesCall(now);
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Check console for debug messages</li>
+            <li>Verify that Compare Pages button is disabled and grayed out</li>
+            <li>Wait 3 seconds, then manually click "Compare Pages" button</li>
+            <li>Verify that compare pages works correctly</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        
+        <h3>✅ After Clicking "Apply This Suggestion":</h3>
+        <pre>
+[Frontend] ===== BUTTON CLICKED =====
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Apply Suggestions] Applied sentence_replacement successfully
+[Frontend] Setting improvedFullPageHtml with single suggestion result
+[Frontend] Suggestion Applied Successfully!
+[Frontend] ===== PREVENT AUTO COMPARE FLAG RESET =====
+        </pre>
+
+        <h3>✅ If Compare Pages Button is Clicked (should be blocked):</h3>
+        <pre>
+[Frontend] ===== COMPARE PAGES BUTTON CLICKED =====
+[Frontend] isApplying: true
+[Frontend] preventAutoCompare: true
+[Frontend] ===== COMPARE PAGES BUTTON BLOCKED - APPLYING SINGLE SUGGESTION =====
+        </pre>
+
+        <h3>✅ After Manual Click on "Compare Pages" (after 3 seconds):</h3>
+        <pre>
+[Frontend] ===== COMPARE PAGES BUTTON CLICKED =====
+[Frontend] isApplying: false
+[Frontend] preventAutoCompare: false
+[Frontend] ===== COMPARE PAGES CALLED =====
+[Compare Pages] Using existing improved HTML, skipping applySuggestionsWithDOM call
+        </pre>
+
+        <h3>❌ Should NOT See:</h3>
+        <pre>
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+[Apply Suggestions] Number of suggestions: 8
+[Apply Suggestions] CRITICAL ERROR: This function is being called from useEffect or comparePages!
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Results</h2>
+        <ul>
+            <li>✅ Single suggestion is applied correctly without being overridden</li>
+            <li>✅ Compare Pages button is disabled and grayed out during single suggestion application</li>
+            <li>✅ comparePages is NOT called automatically after single suggestion</li>
+            <li>✅ Manual click on "Compare Pages" button works correctly after 3 seconds</li>
+            <li>✅ No console spam from multiple suggestions</li>
+            <li>✅ Improved content shows only the single applied suggestion</li>
+            <li>✅ Compare pages shows the correct differences</li>
+            <li>✅ Button state changes provide visual feedback to user</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Key Changes Made</h2>
+        <ul>
+            <li><strong>Button Protection:</strong> Compare Pages button is disabled during single suggestion application</li>
+            <li><strong>Visual Feedback:</strong> Button changes color and cursor when disabled</li>
+            <li><strong>Enhanced Checks:</strong> Multiple layers of protection in comparePages function</li>
+            <li><strong>Increased Timeout:</strong> 3-second delay before allowing manual Compare Pages clicks</li>
+            <li><strong>Event Handling:</strong> preventDefault and stopPropagation on button clicks</li>
+            <li><strong>Debouncing:</strong> Prevents rapid successive calls</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Final Fix for Single Suggestion Application Test Page Loaded');
+        console.log('Key fixes applied:');
+        console.log('1. Compare Pages button is disabled during single suggestion application');
+        console.log('2. Visual feedback with grayed out button');
+        console.log('3. Enhanced protection in comparePages function');
+        console.log('4. Increased timeout delay to 3 seconds');
+        console.log('5. Multiple layers of event handling protection');
+        console.log('This should completely resolve the single suggestion application issue!');
+    </script>
+</body>
+</html>
+

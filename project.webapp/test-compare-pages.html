@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Pages Functionality Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .original { background-color: #ffebee; border-left: 4px solid #c62828; }
+        .improved { background-color: #e8f5e8; border-left: 4px solid #2e7d32; }
+        .fallback { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+        .comparison-demo { display: flex; gap: 20px; margin: 20px 0; }
+        .page-demo { flex: 1; border: 2px solid #ddd; border-radius: 8px; padding: 15px; }
+        .page-demo.original { border-color: #c62828; }
+        .page-demo.improved { border-color: #2e7d32; }
+        .notification-demo { 
+            background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+            padding: 25px;
+            margin: 25px;
+            border-left: 6px solid #4caf50;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Compare Pages & Fallback Notifications Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Enter a website URL and run content structure analysis</li>
+            <li>Apply some suggestions (or try with suggestions that might fail)</li>
+            <li>Click "Compare Pages" button</li>
+            <li>Verify side-by-side comparison shows differences</li>
+            <li>Check for fallback notifications if suggestions fail</li>
+        </ol>
+    </div>
+
+    <div class="test-section original">
+        <h2>🔴 Original Page (Expected in Compare Pages)</h2>
+        <p>This is what the original page should look like in the left panel:</p>
+        <pre id="original-page">Loading original page...</pre>
+    </div>
+
+    <div class="test-section improved">
+        <h2>🟢 Improved Page (Expected in Compare Pages)</h2>
+        <p>This is what the improved page should look like in the right panel:</p>
+        <pre id="improved-page">Loading improved page...</pre>
+    </div>
+
+    <div class="test-section fallback">
+        <h2>⚠️ Fallback Notification (When Suggestions Fail)</h2>
+        <p>This is what should appear when suggestions fail to apply:</p>
+        <div class="notification-demo">
+            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                <span style="font-size: 28px; margin-right: 12px;">✅</span>
+                <strong style="font-size: 20px; color: #2e7d32;">AI Improvements Applied</strong>
+            </div>
+            <p style="margin: 0 0 15px 0; color: #1b5e20; font-size: 16px; line-height: 1.5;">
+                This page has been enhanced with <strong>3 AI-powered suggestions</strong> for better SEO, readability, and user experience.
+            </p>
+            <div style="background: rgba(255,255,255,0.8); padding: 15px; border-radius: 6px; border: 1px solid #4caf50;">
+                <strong style="color: #2e7d32; display: block; margin-bottom: 10px;">🎯 Key Improvements:</strong>
+                <ul style="margin: 0; padding-left: 20px; color: #1b5e20;">
+                    <li>Enhanced content structure and readability</li>
+                    <li>Improved SEO optimization</li>
+                    <li>Better user experience elements</li>
+                    <li>AI-powered content enhancements</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Compare Pages Expected Behavior</h2>
+        <ul>
+            <li><strong>Side-by-Side Layout:</strong> Original page on left, improved page on right</li>
+            <li><strong>Visual Indicators:</strong> Red border for original, green border for improved</li>
+            <li><strong>Headers:</strong> "🔴 Original Page" and "🟢 Improved Page (Changes Applied)"</li>
+            <li><strong>Content Differences:</strong> Should show actual changes or fallback notifications</li>
+            <li><strong>Iframe Rendering:</strong> Both pages should render properly in iframes</li>
+        </ul>
+    </div>
+
+    <div class="test-section error">
+        <h2>❌ Common Issues to Check</h2>
+        <ul>
+            <li><strong>Identical Pages:</strong> Both pages look exactly the same</li>
+            <li><strong>Missing Fallback:</strong> No notification when suggestions fail</li>
+            <li><strong>Iframe Issues:</strong> Pages not loading in iframes</li>
+            <li><strong>Content Not Updated:</strong> Improved page shows original content</li>
+            <li><strong>State Issues:</strong> improvedFullPageHtml not updated</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 Debug Information</h2>
+        <p>Open browser console and look for these log patterns:</p>
+        <pre>
+[Compare Pages] Starting comparison: {...}
+[Compare Pages] Improved HTML check: {...}
+[Compare Pages] Generating improved HTML with suggestions: {...}
+[Apply Suggestions] No suggestions were applied, adding visible change...
+[Compare Pages] No changes detected, adding test change...
+[Compare Pages] Final comparison data: {...}
+        </pre>
+    </div>
+
+    <div class="comparison-demo">
+        <div class="page-demo original">
+            <h3>🔴 Original Page</h3>
+            <p>This is the original content before any improvements.</p>
+            <p>It should appear in the left panel of the comparison.</p>
+        </div>
+        <div class="page-demo improved">
+            <h3>🟢 Improved Page (Changes Applied)</h3>
+            <p>This is the improved content after applying suggestions.</p>
+            <p>It should appear in the right panel of the comparison.</p>
+            <div class="notification-demo" style="margin: 10px 0; padding: 15px;">
+                <strong>✅ AI Improvements Applied</strong>
+                <p>This page has been enhanced with AI-powered suggestions.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulate the test scenario
+        const originalHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Original Page</title>
+</head>
+<body>
+    <h1>Welcome to Our Website</h1>
+    <p>This is a test paragraph that needs improvement. The content is not very engaging and could be enhanced for better user experience.</p>
+    <p>Another paragraph with some basic content that could be optimized for better readability and SEO.</p>
+</body>
+</html>`;
+
+        const improvedHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Improved Page</title>
+</head>
+<body>
+    <h1>Welcome to Our Amazing Website</h1>
+    <p>Welcome to our amazing platform! This carefully crafted paragraph delivers exceptional value and creates an engaging experience that will captivate your audience and drive meaningful results.</p>
+    <p>Another paragraph with some basic content that could be optimized for better readability and SEO.</p>
+    <!-- AI IMPROVEMENTS APPLIED -->
+    <div style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); padding: 25px; margin: 25px; border-left: 6px solid #4caf50; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); font-family: Arial, sans-serif;">
+        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+            <span style="font-size: 28px; margin-right: 12px;">✅</span>
+            <strong style="font-size: 20px; color: #2e7d32;">AI Improvements Applied</strong>
+        </div>
+        <p style="margin: 0 0 15px 0; color: #1b5e20; font-size: 16px; line-height: 1.5;">
+            This page has been enhanced with <strong>3 AI-powered suggestions</strong> for better SEO, readability, and user experience.
+        </p>
+    </div>
+</body>
+</html>`;
+
+        // Display the test content
+        document.getElementById('original-page').textContent = originalHtml;
+        document.getElementById('improved-page').textContent = improvedHtml;
+    </script>
+</body>
+</html>
+

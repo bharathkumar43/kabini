@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Function Replacement Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔄 Function Replacement Test</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Current Issue</h2>
+        <p>The function replacement script didn't work completely. The old function is still there with all the problematic code.</p>
+        <p><strong>Problem:</strong> The script found the function start but didn't replace the entire function body.</p>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Solution</h2>
+        <p>Let me manually replace the function by finding the exact text and replacing it step by step.</p>
+        
+        <h3>Step 1: Find the exact function boundaries</h3>
+        <pre>
+// Current function starts at line 1583
+const applySingleSuggestion = async (suggestion: any) => {
+  console.log('[Frontend] ===== NEW SINGLE SUGGESTION FLOW =====');
+  // ... old code still there ...
+}
+
+// Function ends before line 1956 (previewEnhancedContent)
+        </pre>
+
+        <h3>Step 2: Replace the entire function body</h3>
+        <p>I need to replace everything from the opening brace to the closing brace and semicolon.</p>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Manual Replacement Steps</h2>
+        <ol>
+            <li>Find the exact start of the function body (after the opening brace)</li>
+            <li>Find the exact end of the function (closing brace and semicolon)</li>
+            <li>Replace the entire function body with the new implementation</li>
+            <li>Verify the replacement was successful</li>
+        </ol>
+    </div>
+
+    <script>
+        console.log('🔄 Function Replacement Test Page Loaded');
+        console.log('The function replacement script partially worked but needs manual completion.');
+        console.log('I will now manually replace the function step by step.');
+    </script>
+</body>
+</html>
+

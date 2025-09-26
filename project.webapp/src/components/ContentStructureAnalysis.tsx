@@ -72,6 +72,7 @@ import { apiService } from '../services/apiService';
 import { authService } from '../services/authService';
 import { historyService } from '../services/historyService';
 import type { ContentStructureAnalysis, StructureSuggestion } from '../services/contentStructureService';
+import SchemaGenerator from './SchemaGenerator';
 import { applySuggestionsWithDOM, scoreLLMUnderstandability } from '../utils/analysis';
 import { StructureAnalysisHistoryItem } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -157,6 +158,13 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
   const [isPublishing, setIsPublishing] = useState(false);
   const [showQualityDetails, setShowQualityDetails] = useState<boolean>(false);
   const [showGeoDetails, setShowGeoDetails] = useState<boolean>(false);
+
+  // Simple async queue to serialize rapid actions so they apply cumulatively
+  const applyChainRef = useRef<Promise<void>>(Promise.resolve());
+  const runQueued = (task: () => Promise<void>) => {
+    applyChainRef.current = applyChainRef.current.then(task).catch(() => { /* swallow to keep chain alive */ });
+    return applyChainRef.current;
+  };
 
   // Dynamic notification component
   const DynamicNotification = () => {
@@ -261,7 +269,8 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
   // const [wfItemId, setWfItemId] = useState<string>('');
   // const [isConnectingWebflow, setIsConnectingWebflow] = useState<boolean>(false);
 
-
+  // Holds the most recent improved HTML synchronously to avoid state timing races
+  const improvedHtmlRef = useRef<string>('');
 
   // Function to save analysis to history
   const saveToHistory = (analysisResult: ContentStructureAnalysis, contentToAnalyze: string, urlToAnalyze?: string) => {
@@ -540,7 +549,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     if (analysis) return; // Don't restore if we already have analysis
     
     try {
-      const persisted = localStorage.getItem('structure_last_persisted');
+      const persisted = localStorage.getItem(getStructureLastPersistedKey());
       if (persisted) {
         const parsed = JSON.parse(persisted);
         if (parsed.analysis && parsed.savedAt) {
@@ -578,14 +587,14 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
             // No notification shown - analysis restored silently
           } else {
             // Clear old persisted data
-            localStorage.removeItem('structure_last_persisted');
+            localStorage.removeItem(getStructureLastPersistedKey());
           }
         }
       }
     } catch (error) {
       console.error('[Content Analysis] Error restoring persisted analysis:', error);
       // Clear corrupted data
-      localStorage.removeItem('structure_last_persisted');
+      localStorage.removeItem(getStructureLastPersistedKey());
     }
   }, []); // Only run once on mount
 
@@ -1098,14 +1107,38 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       }
     } catch (error: any) {
       console.error('URL analysis error:', error);
-      setUrlError(error.message || 'Failed to analyze URL. Please try again.');
+      
+      // Try to extract suggestions from the error response
+      let errorMessage = error.message || 'Failed to analyze URL. Please try again.';
+      let suggestions = [];
+      
+      try {
+        if (error.response && error.response.data) {
+          const errorData = error.response.data;
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+          if (errorData.suggestions && Array.isArray(errorData.suggestions)) {
+            suggestions = errorData.suggestions;
+          }
+        }
+      } catch (parseError) {
+        console.warn('Could not parse error response:', parseError);
+      }
+      
+      // Format error message with suggestions
+      if (suggestions.length > 0) {
+        errorMessage += '\n\nSuggestions:\n• ' + suggestions.join('\n• ');
+      }
+      
+      setUrlError(errorMessage);
     } finally {
       setIsUrlLoading(false);
     }
   };
 
   // In applySuggestions and improved code generation, use the DOM-based function
-  const applySuggestions = async () => {
+  const applySuggestions = async () => runQueued(async () => {
     if (!analysis) return;
     setIsApplying(true);
     
@@ -1121,7 +1154,10 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     
     try {
       let improved;
-      const sourceHtml = analysis.fullPageHtml || fullPageHtml || content;
+      // Prefer previously improved HTML to make changes cumulative
+      const sourceHtml = (improvedFullPageHtml && improvedFullPageHtml.trim().length > 0)
+        ? improvedFullPageHtml
+        : (analysis.fullPageHtml || fullPageHtml || content);
       
       if (!sourceHtml) {
         alert('No content available to improve.');
@@ -1159,14 +1195,14 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       // Update the appropriate state based on content type
       if (analysis.fullPageHtml || fullPageHtml) {
         setImprovedFullPageHtml(improved);
+        improvedHtmlRef.current = improved;
         setShowImprovedCode(true);
         setCodeViewType('improved');
         
         // Update the analysis object with the new structured content
         const updatedAnalysis = {
           ...analysis,
-          structuredContent: improved, // Use full HTML - LandingPreviewFrame will handle cleaning
-          fullPageHtml: improved
+          structuredContent: improved // Keep original fullPageHtml unchanged for compare view
         };
         setAnalysis(updatedAnalysis);
       } else {
@@ -1181,7 +1217,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     } finally {
       setIsApplying(false);
     }
-  };
+  });
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -1230,8 +1266,10 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       improvedHtmlPreview: improvedFullPageHtml?.substring(0, 200) + '...'
     });
     
-    // Always use the current improved HTML if available, otherwise generate it
-    let improvedHtml = improvedFullPageHtml && improvedFullPageHtml.trim().length > 0 ? improvedFullPageHtml : '';
+    // Prefer the latest improved HTML from ref to avoid setState race on rapid clicks
+    let improvedHtml = improvedHtmlRef.current && improvedHtmlRef.current.trim().length > 0
+      ? improvedHtmlRef.current
+      : (improvedFullPageHtml && improvedFullPageHtml.trim().length > 0 ? improvedFullPageHtml : '');
     
     console.log('[Compare Pages] Improved HTML check:', {
       hasImprovedHtml: !!improvedHtml,
@@ -1240,66 +1278,13 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       isWhitespaceSame: improvedHtml.replace(/\s+/g, '') === originalHtml.replace(/\s+/g, '')
     });
     
-    // If we don't have improved HTML or it's the same as original, generate it
-    if (!improvedHtml || improvedHtml === originalHtml || improvedHtml.replace(/\s+/g, '') === originalHtml.replace(/\s+/g, '')) {
+    // If we don't have improved HTML, keep original on the right until a change is applied
+    if (!improvedHtml) {
       try {
-        console.log('[Compare Pages] Generating improved HTML with suggestions...');
-        console.log('[Compare Pages] Suggestions to apply:', analysis.suggestions.map(s => ({
-          type: s.type,
-          hasExactReplacement: !!s.exactReplacement,
-          currentContent: s.currentContent?.substring(0, 100) + '...',
-          enhancedContent: s.enhancedContent?.substring(0, 100) + '...'
-        })));
-        
-        const generated = applySuggestionsWithDOM(originalHtml, analysis.suggestions, { highlight: true });
-        console.log('[Compare Pages] Generated HTML result:', {
-          generatedLength: generated?.length || 0,
-          originalLength: originalHtml.length,
-          htmlChanged: generated !== originalHtml,
-          generatedPreview: generated?.substring(0, 200) + '...'
-        });
-        
-        // Force a test change if no changes were made
-        if (generated === originalHtml) {
-          console.log('[Compare Pages] No changes detected, adding test change...');
-          const testChange = originalHtml.replace('<body>', `<body>
-<!-- AI IMPROVEMENTS APPLIED -->
-<div style="
-  background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
-  padding: 25px;
-  margin: 25px;
-  border-left: 6px solid #4caf50;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  font-family: Arial, sans-serif;
-  position: relative;
-  z-index: 1000;
-">
-  <div style="display: flex; align-items: center; margin-bottom: 15px;">
-    <span style="font-size: 28px; margin-right: 12px;">✅</span>
-    <strong style="font-size: 20px; color: #2e7d32;">AI Improvements Applied</strong>
-  </div>
-  <p style="margin: 0 0 15px 0; color: #1b5e20; font-size: 16px; line-height: 1.5;">
-    This page has been enhanced with <strong>${analysis.suggestions.length} AI-powered suggestions</strong> for better SEO, readability, and user experience.
-  </p>
-  <div style="background: rgba(255,255,255,0.8); padding: 15px; border-radius: 6px; border: 1px solid #4caf50;">
-    <strong style="color: #2e7d32; display: block; margin-bottom: 10px;">🎯 Key Improvements:</strong>
-    <ul style="margin: 0; padding-left: 20px; color: #1b5e20;">
-      <li>Enhanced content structure and readability</li>
-      <li>Improved SEO optimization</li>
-      <li>Better user experience elements</li>
-      <li>AI-powered content enhancements</li>
-    </ul>
-  </div>
-</div>`);
-          improvedHtml = testChange;
-          setImprovedFullPageHtml(testChange);
-        } else {
-          improvedHtml = generated || originalHtml;
-          setImprovedFullPageHtml(generated);
-        }
+        console.log('[Compare Pages] No improved HTML yet; keeping original until a change is applied');
+        improvedHtml = originalHtml;
       } catch (e) {
-        console.error('[Compare Pages] Error generating improved HTML:', e);
+        console.error('[Compare Pages] Error preparing comparison:', e);
         improvedHtml = originalHtml;
       }
     }
@@ -1462,7 +1447,10 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       setSuccessMessage('🔄 Applying suggestions and generating improved code...');
       
       // Use fullPageHtml from analysis if available, otherwise use the extracted fullPageHtml
-      const sourceHtml = analysis.fullPageHtml || fullPageHtml;
+      // Prefer previously improved HTML so multiple single suggestions stack
+      const sourceHtml = (improvedFullPageHtml && improvedFullPageHtml.trim().length > 0)
+        ? improvedFullPageHtml
+        : (analysis.fullPageHtml || fullPageHtml);
       if (!sourceHtml) {
         setSuccessMessage('❌ No HTML content available to improve.');
         return;
@@ -1474,7 +1462,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
         suggestions: analysis.suggestions.map(s => ({ type: s.type, hasExactReplacement: !!s.exactReplacement }))
       });
       
-      // Apply suggestions to the code
+      // Apply suggestions to the code (Apply All)
       const improvedCode = applySuggestionsWithDOM(sourceHtml, analysis.suggestions);
       
       console.log('[Content Analysis] Improved code generated:', {
@@ -1482,8 +1470,9 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
         hasChanges: improvedCode !== sourceHtml
       });
       
-      // Update the improved code state
+      // Update the improved code state so compare view uses it
       setImprovedFullPageHtml(improvedCode);
+      improvedHtmlRef.current = improvedCode;
       setShowImprovedCode(true);
       
       console.log('[Frontend] State updated after applying suggestion:', {
@@ -1493,18 +1482,17 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
         improvedCodePreview: improvedCode.substring(0, 200) + '...'
       });
       
-      // Update the analysis object with the new structured content
+      // Update the analysis object with the new structured content (do not overwrite original fullPageHtml)
       const updatedAnalysis = {
         ...analysis,
-        structuredContent: improvedCode, // Use full HTML - LandingPreviewFrame will handle cleaning
-        fullPageHtml: improvedCode
+        structuredContent: improvedCode
       };
       setAnalysis(updatedAnalysis);
       
       console.log('[Frontend] Analysis object updated:', {
         analysisUpdated: true,
         structuredContentLength: updatedAnalysis.structuredContent.length,
-        fullPageHtmlLength: updatedAnalysis.fullPageHtml.length
+        fullPageHtmlLength: (analysis.fullPageHtml || '').length
       });
       
       // Copy to clipboard
@@ -1537,7 +1525,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     }
   };
 
-  const applySingleSuggestion = async (suggestion: any) => {
+  const applySingleSuggestion = async (suggestion: any) => runQueued(async () => {
     if (!analysis) return;
     
     // Show progress notification
@@ -1553,7 +1541,9 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     try {
       
       // Use fullPageHtml from analysis if available, otherwise use the extracted fullPageHtml
-      const sourceHtml = analysis.fullPageHtml || fullPageHtml;
+      const sourceHtml = (improvedFullPageHtml && improvedFullPageHtml.trim().length > 0)
+        ? improvedFullPageHtml
+        : (analysis.fullPageHtml || fullPageHtml);
       if (!sourceHtml) {
         setSuccessMessage('❌ No HTML content available to improve.');
         return;
@@ -1652,14 +1642,14 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       
       // Update the improved code state
       setImprovedFullPageHtml(improvedCode);
+      improvedHtmlRef.current = improvedCode;
       setShowImprovedCode(true);
       
-      // Update the analysis object with the new structured content
+      // Update the analysis object with the new structured content (do not change original)
       if (analysis) {
         const updatedAnalysis = {
           ...analysis,
-          structuredContent: improvedCode, // Use full HTML - LandingPreviewFrame will handle cleaning
-          fullPageHtml: improvedCode
+          structuredContent: improvedCode
         };
         console.log('[Content Analysis] Updating analysis with improved content:', {
           improvedCodeLength: improvedCode.length,
@@ -1693,7 +1683,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       setSuccessMessage('❌ Failed to apply suggestion. Please try again.');
       setTimeout(() => setSuccessMessage(null), 3000);
     }
-  };
+  });
 
   const previewEnhancedContent = (suggestion: any) => {
     console.log('[Preview] Suggestion data:', {
@@ -1939,19 +1929,11 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
-  // Generate improved code when needed
+  // Disable auto-generating improved HTML with all suggestions to avoid overriding
+  // single-suggestion results and causing multiple-application issues.
   useEffect(() => {
-    if (codeViewType === 'improved' && fullPageHtml && analysis && analysis.suggestions.length > 0) {
-      setIsImprovingCode(true);
-      try {
-        const improved = applySuggestionsWithDOM(fullPageHtml, analysis.suggestions, { highlight: true });
-        setImprovedFullPageHtml(improved);
-      } catch {
-        setImprovedFullPageHtml('Failed to generate improved code.');
-      } finally {
-        setIsImprovingCode(false);
-      }
-    }
+    // Intentionally no-op. Improved HTML is produced explicitly by
+    // applySingleSuggestion or Apply All actions.
   }, [codeViewType, fullPageHtml, analysis]);
 
   if (isAnalyzing && !analysis) {
@@ -2001,7 +1983,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     });
     
     // Clear persisted analysis to prevent conflicts with new analysis
-    localStorage.removeItem('structure_last_persisted');
+    localStorage.removeItem(getStructureLastPersistedKey());
     
     console.log('[Content Analysis] New analysis initiated - state cleared');
   };
@@ -2068,7 +2050,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                 
                 {urlError && (
                   <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-base">
-                    {urlError}
+                    <div className="whitespace-pre-line">{urlError}</div>
                   </div>
                 )}
         </div>
@@ -2553,36 +2535,9 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
             {activeTab === 'schema' && (
               <div>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 gap-4">
-                  <h3 className="text-lg font-semibold text-black mb-0">Structured Data Markup</h3>
-
-
-            {/* Analytics Tab removed per request */}
+                  <h3 className="text-lg font-semibold text-black mb-0">Schema Generator</h3>
                 </div>
-                  <div className="space-y-6">
-                    {analysis?.structuredData?.articleSchema && (
-                      <div>
-                        <h4 className="font-semibold text-black mb-2">Article Schema</h4>
-                        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
-                          <pre className="text-xs lg:text-sm text-black font-mono break-words whitespace-pre-wrap">
-                            {JSON.stringify(analysis.structuredData.articleSchema, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                    {analysis?.structuredData?.faqSchema && (
-                      <div>
-                        <h4 className="font-semibold text-black mb-2">FAQ Schema</h4>
-                        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
-                          <pre className="text-xs lg:text-sm text-black font-mono break-words whitespace-pre-wrap">
-                            {JSON.stringify(analysis.structuredData.faqSchema, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                    {(!analysis?.structuredData?.articleSchema && !analysis?.structuredData?.faqSchema) && (
-                      <div className="text-sm text-gray-600">No structured data captured for the last analysis.</div>
-                    )}
-                  </div>
+                <SchemaGenerator />
               </div>
             )}
 

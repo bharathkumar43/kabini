@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Improved Code Tab Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .step { margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>📋 Improved Code Tab Fix Test</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Previous Issue (Fixed)</h2>
+        <p><strong>Problem:</strong> When copying code from the "Improved Code" tab, users were getting the original code instead of the improved code with applied suggestions.</p>
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>✅ Suggestions applied successfully</li>
+            <li>✅ Changes visible in landing page preview</li>
+            <li>✅ Changes visible in compare pages</li>
+            <li>❌ "Improved Code" tab was missing (removed per request)</li>
+            <li>❌ No way to access improved code for copying</li>
+            <li>❌ Users couldn't get the improved HTML code</li>
+        </ul>
+        <p><strong>Root Cause:</strong> The "Improved Code" tab button was removed from the UI, but the logic for displaying improved code was still there. Users had no way to access the improved code.</p>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Fix Applied</h2>
+        
+        <h3>1. Added "Improved Code" Tab Button ✅</h3>
+        <pre>
+// BEFORE (Missing):
+{/* Removed Improved tab per request */}
+
+// AFTER (Fixed):
+&lt;button
+  className={`px-2 lg:px-3 py-1 rounded-lg text-xs lg:text-sm font-semibold border transition-colors duration-150 ${codeViewType === 'improved' ? 'bg-black text-white border-black' : 'bg-gray-200 text-black border-gray-300 hover:bg-gray-300'}`}
+  onClick={() => setCodeViewType('improved')}
+&gt;Improved Code&lt;/button&gt;
+        </pre>
+
+        <h3>2. Added Copy & Download Buttons for Improved Code ✅</h3>
+        <pre>
+{codeViewType === 'improved' && (
+  &lt;div className="flex gap-2"&gt;
+    &lt;button
+      onClick={() => copyToClipboard(improvedFullPageHtml)}
+      className="bg-gray-100 text-black px-2 lg:px-4 py-1 lg:py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1 lg:gap-2 text-xs lg:text-sm"
+    &gt;
+      &lt;Copy className="w-3 h-3 lg:w-4 lg:h-4" /&gt;
+      &lt;span className="hidden sm:inline"&gt;Copy Improved Code&lt;/span&gt;
+    &lt;/button&gt;
+    &lt;button
+      onClick={() => downloadContent(improvedFullPageHtml, 'improved-page.html')}
+      className="bg-gray-600 text-white px-2 lg:px-4 py-1 lg:py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1 lg:gap-2 text-xs lg:text-sm"
+    &gt;
+      &lt;Download className="w-3 h-3 lg:w-4 lg:h-4" /&gt;
+      &lt;span className="hidden sm:inline"&gt;Download&lt;/span&gt;
+    &lt;/button&gt;
+  &lt;/div&gt;
+)}
+        </pre>
+
+        <h3>3. Added Debug Logging ✅</h3>
+        <pre>
+console.log('[Improved Code Tab] Displaying code:', {
+  hasImprovedFullPageHtml: !!improvedFullPageHtml,
+  improvedFullPageHtmlLength: improvedFullPageHtml?.length || 0,
+  improvedFullPageHtmlPreview: improvedFullPageHtml?.substring(0, 200) + '...',
+  fallbackMessage: !improvedFullPageHtml ? 'No improved code available yet. Click "Copy & Run" to generate improved code.' : 'Code available'
+});
+        </pre>
+    </div>
+
+    <div class="test-section info">
+        <h2>🎯 How It Works Now</h2>
+        
+        <div class="step">
+            <h3>Step 1: Apply Suggestions</h3>
+            <ul>
+                <li>Click "Apply This Suggestion" on any suggestion</li>
+                <li>Changes are applied to `improvedFullPageHtml`</li>
+                <li>Changes are visible in landing page preview</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Access Improved Code</h3>
+            <ul>
+                <li>Click the "Improved Code" tab button</li>
+                <li>View the improved HTML code with all applied changes</li>
+                <li>See debug logs showing the improved content</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Copy or Download</h3>
+            <ul>
+                <li>Click "Copy Improved Code" to copy to clipboard</li>
+                <li>Click "Download" to download as HTML file</li>
+                <li>Get the actual improved code with all suggestions applied</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Expected Results</h2>
+        <ul>
+            <li>✅ <strong>"Improved Code" tab visible</strong> - Tab button appears in the UI</li>
+            <li>✅ <strong>Improved code displayed</strong> - Shows HTML with applied suggestions</li>
+            <li>✅ <strong>Copy functionality works</strong> - Copies the improved code to clipboard</li>
+            <li>✅ <strong>Download functionality works</strong> - Downloads improved code as HTML file</li>
+            <li>✅ <strong>Debug logs show content</strong> - Console shows improved content details</li>
+            <li>✅ <strong>Code contains changes</strong> - Copied code includes all applied suggestions</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li><strong>Apply a suggestion</strong> - Click "Apply This Suggestion" on any suggestion</li>
+            <li><strong>Verify changes in landing page</strong> - Check that changes are visible</li>
+            <li><strong>Click "Improved Code" tab</strong> - Should see the tab button and improved code</li>
+            <li><strong>Check console logs</strong> - Should see debug information about the improved content</li>
+            <li><strong>Copy the improved code</strong> - Click "Copy Improved Code" button</li>
+            <li><strong>Paste and verify</strong> - Paste the code and verify it contains the changes</li>
+            <li><strong>Download the code</strong> - Click "Download" to save as HTML file</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🔍 Key Changes Made</h2>
+        <ul>
+            <li><strong>Added "Improved Code" Tab Button:</strong> Users can now access the improved code</li>
+            <li><strong>Added Copy Functionality:</strong> Copy improved code to clipboard</li>
+            <li><strong>Added Download Functionality:</strong> Download improved code as HTML file</li>
+            <li><strong>Added Debug Logging:</strong> Track what content is being displayed</li>
+            <li><strong>Fixed UI Access:</strong> Users can now access the improved code they created</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>📊 Debug Logs to Watch For</h2>
+        <pre>
+[Improved Code Tab] Displaying code: {
+  hasImprovedFullPageHtml: true,
+  improvedFullPageHtmlLength: 445099,
+  improvedFullPageHtmlPreview: '&lt;!DOCTYPE html&gt; &lt;html class="avada-html-layout-wid...',
+  fallbackMessage: 'Code available'
+}
+        </pre>
+        <p><strong>Key indicators:</strong></p>
+        <ul>
+            <li><code>hasImprovedFullPageHtml: true</code> - Improved content is available</li>
+            <li><code>improvedFullPageHtmlLength</code> - Shows the length of improved content</li>
+            <li><code>improvedFullPageHtmlPreview</code> - Shows a preview of the improved HTML</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('📋 Improved Code Tab Fix Applied');
+        console.log('Key fixes:');
+        console.log('1. Added "Improved Code" tab button to UI');
+        console.log('2. Added copy functionality for improved code');
+        console.log('3. Added download functionality for improved code');
+        console.log('4. Added debug logging to track content display');
+        console.log('5. Fixed UI access to improved code');
+        console.log('Users can now access and copy the improved code!');
+    </script>
+</body>
+</html>
+

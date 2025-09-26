@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Suggestion Application Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Single Suggestion Application Fix Test</h1>
+    
+    <div class="test-section success">
+        <h2>✅ Issues Fixed</h2>
+        <ul>
+            <li><strong>Instruction Text Removed:</strong> Fixed "Split into 2 paragraphs" instruction text in enhancedContent</li>
+            <li><strong>Proper Content:</strong> enhancedContent now contains actual enhanced content, not instructions</li>
+            <li><strong>Single Suggestion Only:</strong> Only the selected suggestion is applied, not all suggestions</li>
+            <li><strong>Debug Logging:</strong> Added warnings for instruction text in suggestions</li>
+        </ul>
+    </div>
+
+    <div class="test-section error">
+        <h2>❌ Previous Issues</h2>
+        <ul>
+            <li><strong>Wrong Text Replacement:</strong> Text was being replaced with "Split into 2 paragraphs" instruction</li>
+            <li><strong>Multiple Suggestions:</strong> Applying one suggestion was also applying other suggestions</li>
+            <li><strong>Instruction Text:</strong> enhancedContent contained instruction text instead of actual content</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Backend Fixes Applied</h2>
+        <h3>Paragraph Suggestion Fix:</h3>
+        <pre>
+// BEFORE (WRONG):
+enhancedContent: `Split into 2 paragraphs: "${firstHalf.substring(0, 80)}..." and "${secondHalf.substring(0, 80)}..."`
+
+// AFTER (CORRECT):
+enhancedContent: `${firstHalf}\n\n${secondHalf}`
+        </pre>
+
+        <h3>Heading Suggestion Fix:</h3>
+        <pre>
+// BEFORE (WRONG):
+enhancedContent: `Add H1: "${suggestedTitle}"`
+
+// AFTER (CORRECT):
+enhancedContent: `<h1>${suggestedTitle}</h1>`
+        </pre>
+
+        <h3>Meta Description Fix:</h3>
+        <pre>
+// BEFORE (WRONG):
+enhancedContent: `Add meta description: "${suggestedDescription}"`
+
+// AFTER (CORRECT):
+enhancedContent: `<meta name="description" content="${suggestedDescription}">`
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Apply a single sentence replacement suggestion</li>
+            <li>Verify that only the selected suggestion is applied</li>
+            <li>Check that the text is replaced with actual content, not instruction text</li>
+            <li>Verify that other suggestions are not applied</li>
+            <li>Check console for any warnings about instruction text</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Behavior</h2>
+        <h3>When Applying Single Suggestion:</h3>
+        <ul>
+            <li>✅ Only the selected suggestion is applied</li>
+            <li>✅ Text is replaced with actual enhanced content</li>
+            <li>✅ No instruction text like "Split into 2 paragraphs" appears</li>
+            <li>✅ Other suggestions remain unchanged</li>
+            <li>✅ Console shows only one suggestion being processed</li>
+        </ul>
+
+        <h3>Console Logs to Look For:</h3>
+        <pre>
+[Apply Suggestions] Starting to apply suggestions: {
+  suggestionsCount: 1,  // Should be 1, not multiple
+  suggestions: [
+    {
+      type: "sentence_replacement",
+      enhancedContentPreview: "Actual enhanced content..."  // Not instruction text
+    }
+  ]
+}
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>⚠️ What Should NOT Happen</h2>
+        <ul>
+            <li>❌ Text replaced with "Split into 2 paragraphs" instruction</li>
+            <li>❌ Multiple suggestions being applied when selecting one</li>
+            <li>❌ Instruction text in enhancedContent field</li>
+            <li>❌ Console warnings about instruction text</li>
+            <li>❌ Wrong content being modified</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 Debug Information</h2>
+        <p>If you still see issues, check the console for:</p>
+        <ul>
+            <li><strong>WARNING messages:</strong> About instruction text in suggestions</li>
+            <li><strong>Suggestion count:</strong> Should be 1 when applying single suggestion</li>
+            <li><strong>Enhanced content:</strong> Should contain actual content, not instructions</li>
+            <li><strong>Applied count:</strong> Should match the number of suggestions being applied</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🎯 Single Suggestion Application Fix Test Page Loaded');
+        console.log('Key fixes:');
+        console.log('1. Removed instruction text from enhancedContent');
+        console.log('2. Fixed paragraph suggestion to contain actual content');
+        console.log('3. Fixed heading and meta description suggestions');
+        console.log('4. Added debug warnings for instruction text');
+        console.log('5. Ensured only selected suggestion is applied');
+    </script>
+</body>
+</html>
+

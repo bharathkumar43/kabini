@@ -1,5 +1,3 @@
-// Entire SmartCompetitorAnalysis component is commented out to disable the feature.
-/*
 // Added: Frontend validation for domain field and user-friendly error messages for 400/403 errors from backend.
 // See handleAnalyze for details.
 import React, { useState, useEffect } from 'react';
@@ -234,4 +232,3 @@ const SmartCompetitorAnalysis: React.FC = () => {
 };
 
 export default SmartCompetitorAnalysis;
-*/ 

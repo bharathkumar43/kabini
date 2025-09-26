@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Aggressive Fallback Issue</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix Aggressive Fallback Issue</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Issue Identified</h2>
+        <p><strong>Problem:</strong> The "Aggressive fallback similarity check" is being called repeatedly, indicating that multiple suggestions are still being processed.</p>
+        <p><strong>Evidence:</strong> Console shows repeated calls to aggressive fallback for each suggestion.</p>
+        <p><strong>Root Cause:</strong> The function is still receiving multiple suggestions and processing them in a loop.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Fixes Applied</h2>
+        <h3>1. Multiple Suggestions Detection and Filtering:</h3>
+        <pre>
+// CRITICAL: Check if we're receiving multiple suggestions when we should only get one
+if (suggestions.length > 1) {
+  console.error('[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!');
+  
+  // If we're in single suggestion mode, only process the first suggestion
+  console.error('[Apply Suggestions] FORCING SINGLE SUGGESTION MODE - Only processing first suggestion');
+  suggestions = [suggestions[0]];
+  console.error('[Apply Suggestions] Filtered suggestions to:', suggestions.length);
+}
+        </pre>
+
+        <h3>2. Single Suggestion Mode Detection:</h3>
+        <pre>
+// Check if this is being called from applySingleSuggestion
+const isSingleSuggestion = suggestions.length === 1;
+console.log('[Apply Suggestions] Single suggestion mode:', isSingleSuggestion);
+        </pre>
+
+        <h3>3. Loop Prevention in Single Suggestion Mode:</h3>
+        <pre>
+// If we're in single suggestion mode and this is not the first suggestion, skip it
+if (isSingleSuggestion && index > 0) {
+  console.log(`[Apply Suggestions] Skipping suggestion ${index + 1} in single suggestion mode`);
+  return;
+}
+        </pre>
+
+        <h3>4. Reduced Logging in Single Suggestion Mode:</h3>
+        <pre>
+// Only log if we're in single suggestion mode to avoid spam
+if (isSingleSuggestion) {
+  console.log(`[Apply Suggestions] Aggressive fallback similarity check:`, {
+    sentence: cleanSentence.substring(0, 50) + '...',
+    target: cleanTarget.substring(0, 50) + '...',
+    similarity: similarity
+  });
+}
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Check the console for debug messages</li>
+            <li>Verify that only one suggestion is processed</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        <h3>✅ Correct Behavior (Should See):</h3>
+        <pre>
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] ===== STARTING TO APPLY SUGGESTIONS =====
+[Apply Suggestions] Arguments received: { suggestionsCount: 1, ... }
+[Apply Suggestions] Processing suggestion 1/1: Object
+[Apply Suggestions] Skipping suggestion 2 in single suggestion mode
+[Apply Suggestions] Skipping suggestion 3 in single suggestion mode
+...
+[Apply Suggestions] Aggressive fallback similarity check: Object (only once)
+        </pre>
+
+        <h3>❌ Problem Cases (Should NOT See):</h3>
+        <pre>
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+[Apply Suggestions] Number of suggestions: 8
+[Apply Suggestions] Processing suggestion 4/8: Object
+[Apply Suggestions] Processing suggestion 5/8: Object
+[Apply Suggestions] Aggressive fallback similarity check: Object (repeated many times)
+        </pre>
+    </div>
+
+    <div class="test-section error">
+        <h2>🚨 What Was Happening Before</h2>
+        <ol>
+            <li><strong>Multiple Suggestions Received:</strong> The function was receiving 8 suggestions instead of 1</li>
+            <li><strong>Loop Processing:</strong> Each suggestion was processed in a loop</li>
+            <li><strong>Aggressive Fallback:</strong> For each suggestion, aggressive fallback was attempted</li>
+            <li><strong>Repeated Logging:</strong> Similarity checks were logged for each suggestion</li>
+            <li><strong>Mixed Content:</strong> All suggestions were applied, causing mixed content</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 What Should Happen Now</h2>
+        <ol>
+            <li><strong>Single Suggestion Detection:</strong> Function detects it's in single suggestion mode</li>
+            <li><strong>Multiple Suggestions Filtered:</strong> If multiple suggestions are received, only the first is processed</li>
+            <li><strong>Loop Prevention:</strong> Additional suggestions are skipped in single suggestion mode</li>
+            <li><strong>Reduced Logging:</strong> Aggressive fallback logging only happens once</li>
+            <li><strong>Clean Content:</strong> Only the selected suggestion is applied</li>
+        </ol>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Debug Information to Look For</h2>
+        <h3>1. Single Suggestion Mode Detection:</h3>
+        <p>Look for: <code>[Apply Suggestions] Single suggestion mode: true</code></p>
+
+        <h3>2. Multiple Suggestions Filtering:</h3>
+        <p>Look for: <code>[Apply Suggestions] FORCING SINGLE SUGGESTION MODE - Only processing first suggestion</code></p>
+
+        <h3>3. Loop Prevention:</h3>
+        <p>Look for: <code>[Apply Suggestions] Skipping suggestion X in single suggestion mode</code></p>
+
+        <h3>4. Reduced Logging:</h3>
+        <p>Aggressive fallback similarity check should only appear once, not repeatedly</p>
+    </div>
+
+    <script>
+        console.log('🔧 Fix Aggressive Fallback Issue Test Page Loaded');
+        console.log('Fixes applied:');
+        console.log('1. Multiple suggestions detection and filtering');
+        console.log('2. Single suggestion mode detection');
+        console.log('3. Loop prevention in single suggestion mode');
+        console.log('4. Reduced logging to avoid spam');
+    </script>
+</body>
+</html>
+

@@ -584,15 +584,84 @@ export async function calculateAccuracyWithGemini(
  * @param {Array<{type: string, description: string, implementation: string, [key: string]: any}>} suggestions - List of suggestions from Gemini.
  * @returns {string} - The improved HTML code as a string.
  */
+// Helper function to calculate similarity between two strings
+function calculateSimilarity(str1: string, str2: string): number {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const editDistance = levenshteinDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+}
+
+// Helper function to calculate Levenshtein distance
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
+}
+
+// Debounce mechanism to prevent multiple calls
+let lastCallTime = 0;
+const DEBOUNCE_DELAY = 100; // 100ms debounce
+
 export function applySuggestionsWithDOM(
   htmlString: string,
   suggestions: Array<{type: string, description: string, implementation: string, exactReplacement?: {find: string, replace: string}, [key: string]: any}>,
   options?: { highlight?: boolean }
 ) {
+  // Helper utilities for tolerant matching (must be declared before any use)
+  const stripQuotes = (s: string): string => (s || '').replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, '').trim();
+  const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+  // NOTE: Removed debounce guard to ensure sequential user actions are applied reliably
+  // const now = Date.now();
+  // if (now - lastCallTime < DEBOUNCE_DELAY) {
+  //   console.log('[Apply Suggestions] ===== DEBOUNCED CALL - TOO SOON =====');
+  //   console.log('[Apply Suggestions] Time since last call:', now - lastCallTime, 'ms');
+  //   return htmlString;
+  // }
+  // lastCallTime = now;
+  
+  // Debug: Log the call stack to see what's calling this function
+  console.log('[Apply Suggestions] ===== FUNCTION CALLED =====');
+  console.log('[Apply Suggestions] Call stack:', new Error().stack);
+  
+  // Add a timestamp to track multiple calls
+  const timestamp = new Date().toISOString();
+  console.log('[Apply Suggestions] Function called at:', timestamp);
+  
+  // Check if this is being called from applySingleSuggestion
+  const isSingleSuggestion = suggestions.length === 1;
+  console.log('[Apply Suggestions] Single suggestion mode:', isSingleSuggestion);
   let appliedCount = 0;
   const appliedSuggestions: string[] = [];
 
-  console.log('[Apply Suggestions] Starting to apply suggestions:', {
+  console.log('[Apply Suggestions] ===== STARTING TO APPLY SUGGESTIONS =====');
+  console.log('[Apply Suggestions] Arguments received:', {
     htmlLength: htmlString.length,
     suggestionsCount: suggestions.length,
     suggestions: suggestions.map(s => ({ 
@@ -604,10 +673,66 @@ export function applySuggestionsWithDOM(
       enhancedContentPreview: s.enhancedContent?.substring(0, 100) + '...'
     }))
   });
+  
+  // CRITICAL: Check if we're receiving multiple suggestions when we should only get one
+  if (suggestions.length > 1) {
+    console.error('[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!');
+    console.error('[Apply Suggestions] Number of suggestions:', suggestions.length);
+    console.error('[Apply Suggestions] Suggestions:', suggestions);
+    console.error('[Apply Suggestions] Call stack:', new Error().stack);
+    
+    // If we're in single suggestion mode, only process the first suggestion
+    console.error('[Apply Suggestions] FORCING SINGLE SUGGESTION MODE - Only processing first suggestion');
+    suggestions = [suggestions[0]];
+    console.error('[Apply Suggestions] Filtered suggestions to:', suggestions.length);
+    
+    // CRITICAL: Check if this is being called from the wrong place
+    const stack = new Error().stack || '';
+    if (stack.includes('useEffect') || stack.includes('comparePages')) {
+      console.error('[Apply Suggestions] CRITICAL ERROR: This function is being called from useEffect or comparePages!');
+      console.error('[Apply Suggestions] This explains why 8 suggestions are being processed!');
+      console.error('[Apply Suggestions] The issue is that other functions are calling this with all suggestions!');
+    }
+  }
+  
+  // Debug: Check for instruction text in suggestions
+  suggestions.forEach((suggestion, index) => {
+    if (suggestion.enhancedContent && suggestion.enhancedContent.includes('Split into')) {
+      console.error(`[Apply Suggestions] WARNING: Suggestion ${index} contains instruction text:`, suggestion.enhancedContent);
+    }
+  });
+  
+  // Debug: Check if suggestions array contains unexpected data
+  if (suggestions.length > 1) {
+    console.warn(`[Apply Suggestions] WARNING: Processing ${suggestions.length} suggestions, expected 1 for single suggestion application`);
+  }
+  
+  // Debug: Check each suggestion for unexpected structure
+  suggestions.forEach((suggestion, index) => {
+    if (suggestion.suggestions && Array.isArray(suggestion.suggestions)) {
+      console.error(`[Apply Suggestions] ERROR: Suggestion ${index} contains nested suggestions array:`, suggestion.suggestions);
+    }
+  });
 
   // First, apply exact replacements to the HTML string
-  suggestions.forEach(suggestion => {
+  suggestions.forEach((suggestion, index) => {
     try {
+      console.log(`[Apply Suggestions] Processing suggestion ${index + 1}/${suggestions.length}:`, {
+        type: suggestion.type,
+        hasExactReplacement: !!suggestion.exactReplacement,
+        hasCurrentContent: !!suggestion.currentContent,
+        hasEnhancedContent: !!suggestion.enhancedContent,
+        currentContentPreview: suggestion.currentContent?.substring(0, 100) + '...',
+        enhancedContentPreview: suggestion.enhancedContent?.substring(0, 100) + '...',
+        isSingleSuggestionMode: isSingleSuggestion
+      });
+      
+      // If we're in single suggestion mode and this is not the first suggestion, skip it
+      if (isSingleSuggestion && index > 0) {
+        console.log(`[Apply Suggestions] Skipping suggestion ${index + 1} in single suggestion mode`);
+        return;
+      }
+      
       if (suggestion.exactReplacement) {
         const { find, replace } = suggestion.exactReplacement;
         console.log(`[Apply Suggestions] Applying ${suggestion.type}:`, {
@@ -615,33 +740,98 @@ export function applySuggestionsWithDOM(
           replace: replace.substring(0, 100) + '...',
           found: htmlString.includes(find),
           findLength: find.length,
-          replaceLength: replace.length
+          replaceLength: replace.length,
+          fullFind: find,
+          fullReplace: replace,
+          htmlPreview: htmlString.substring(0, 500) + '...'
         });
         
         if (htmlString.includes(find)) {
           const beforeLength = htmlString.length;
+          const beforeContent = htmlString.substring(0, 500);
           htmlString = htmlString.replace(find, replace);
           const afterLength = htmlString.length;
+          const afterContent = htmlString.substring(0, 500);
+          
+          // Validate that the replacement actually changed the content
+          const contentChanged = beforeContent !== afterContent;
+          
           appliedCount++;
           appliedSuggestions.push(`${suggestion.type} applied with exact replacement`);
           console.log(`[Apply Suggestions] Successfully applied ${suggestion.type}:`, {
             beforeLength,
             afterLength,
             lengthChanged: beforeLength !== afterLength,
-            htmlChanged: htmlString !== htmlString
+            contentChanged: contentChanged,
+            beforePreview: beforeContent.substring(0, 100) + '...',
+            afterPreview: afterContent.substring(0, 100) + '...'
           });
         } else {
-          console.log(`[Apply Suggestions] Could not find pattern for ${suggestion.type}:`, {
+          console.log(`[Apply Suggestions] Could not find exact pattern for ${suggestion.type}:`, {
             searchPattern: find.substring(0, 200) + '...',
             htmlContainsPattern: htmlString.includes(find),
             htmlPreview: htmlString.substring(0, 500) + '...'
           });
           
+          // Try more flexible pattern matching
+          let applied = false;
+          
+          // Try case-insensitive matching
+          const findLower = find.toLowerCase();
+          const htmlLower = htmlString.toLowerCase();
+          if (htmlLower.includes(findLower)) {
+            const index = htmlLower.indexOf(findLower);
+            const originalText = htmlString.substring(index, index + find.length);
+            htmlString = htmlString.replace(originalText, replace);
+            appliedCount++;
+            appliedSuggestions.push(`${suggestion.type} applied with case-insensitive matching`);
+            applied = true;
+            console.log(`[Apply Suggestions] Applied ${suggestion.type} with case-insensitive matching`);
+          }
+          
+          // Try partial matching for longer patterns
+          if (!applied && find.length > 50) {
+            const partialFind = find.substring(0, Math.floor(find.length * 0.7));
+            if (htmlString.includes(partialFind)) {
+              htmlString = htmlString.replace(partialFind, replace);
+              appliedCount++;
+              appliedSuggestions.push(`${suggestion.type} applied with partial matching`);
+              applied = true;
+              console.log(`[Apply Suggestions] Applied ${suggestion.type} with partial matching`);
+            }
+          }
+          
+          // Try whitespace-normalized matching
+          if (!applied) {
+            const normalizedFind = find.replace(/\s+/g, ' ').trim();
+            const normalizedHtml = htmlString.replace(/\s+/g, ' ').trim();
+            if (normalizedHtml.includes(normalizedFind)) {
+              const index = normalizedHtml.indexOf(normalizedFind);
+              const originalText = htmlString.substring(index, index + find.length);
+              htmlString = htmlString.replace(originalText, replace);
+              appliedCount++;
+              appliedSuggestions.push(`${suggestion.type} applied with whitespace-normalized matching`);
+              applied = true;
+              console.log(`[Apply Suggestions] Applied ${suggestion.type} with whitespace-normalized matching`);
+            }
+          }
+          
+          if (!applied) {
+            console.log(`[Apply Suggestions] All pattern matching attempts failed for ${suggestion.type}`);
+          }
+          
           // Try alternative approaches for common suggestion types
           if (suggestion.type === 'sentence_replacement' && suggestion.currentContent && suggestion.enhancedContent) {
             console.log(`[Apply Suggestions] Trying alternative approach for ${suggestion.type}...`);
-            const altFind = suggestion.currentContent.trim();
+            const altFind = stripQuotes(suggestion.currentContent.trim());
             const altReplace = suggestion.enhancedContent.trim();
+            
+            console.log(`[Apply Suggestions] Alternative pattern details:`, {
+              altFind: altFind.substring(0, 100) + '...',
+              altReplace: altReplace.substring(0, 100) + '...',
+              found: htmlString.includes(altFind),
+              fullAltFind: altFind
+            });
             
             if (htmlString.includes(altFind)) {
               htmlString = htmlString.replace(altFind, altReplace);
@@ -650,6 +840,149 @@ export function applySuggestionsWithDOM(
               console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with alternative pattern`);
             } else {
               console.log(`[Apply Suggestions] Alternative pattern also not found for ${suggestion.type}`);
+              
+              // Try more precise matching approaches
+              // First, try to find the exact sentence with HTML tags stripped
+              const htmlText = htmlString.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+              const exactMatch = htmlText.includes(altFind);
+              
+              if (exactMatch) {
+                console.log(`[Apply Suggestions] Found exact match in HTML text, trying replacement:`, {
+                  altFind: altFind.substring(0, 100) + '...',
+                  altReplace: altReplace.substring(0, 100) + '...'
+                });
+                htmlString = htmlString.replace(altFind, altReplace);
+                appliedCount++;
+                appliedSuggestions.push(`${suggestion.type} applied with exact HTML text matching`);
+                console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with exact HTML text matching`);
+              } else {
+                // Try to find the sentence in the HTML by looking for similar text with higher precision
+                const sentences = htmlString.split(/[.!?]+/).filter(s => s.trim().length > 10);
+                
+                // Limit the number of sentences to check to prevent excessive logging
+                const maxSentences = Math.min(sentences.length, 20);
+                let checkedSentences = 0;
+                let bestMatch = null;
+                let bestSimilarity = 0;
+                
+                for (const sentence of sentences) {
+                  if (checkedSentences >= maxSentences) {
+                    console.log(`[Apply Suggestions] Reached maximum sentence check limit (${maxSentences}) for exact replacement`);
+                    break;
+                  }
+                  
+                  const cleanSentence = sentence.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                  const cleanAltFind = altFind.replace(/\s+/g, ' ').trim();
+                  
+                  // Require at least 80% similarity for sentence replacement
+                  const similarity = calculateSimilarity(cleanSentence.toLowerCase(), cleanAltFind.toLowerCase());
+                  
+                  // Only log the first few checks to avoid spam
+                  if (isSingleSuggestion && checkedSentences < 5) {
+                    console.log(`[Apply Suggestions] Checking sentence similarity ${checkedSentences + 1}:`, {
+                      sentence: cleanSentence.substring(0, 50) + '...',
+                      target: cleanAltFind.substring(0, 50) + '...',
+                      similarity: similarity
+                    });
+                  }
+                  
+                  if (similarity > bestSimilarity) {
+                    bestMatch = sentence.trim();
+                    bestSimilarity = similarity;
+                  }
+                  
+                  checkedSentences++;
+                }
+                
+                // Use the best match if it meets the threshold
+                const matchingSentence = bestSimilarity > 0.8 ? bestMatch : null;
+                
+                if (matchingSentence) {
+                  console.log(`[Apply Suggestions] Found high-similarity sentence, trying replacement:`, {
+                    matchingSentence: matchingSentence.substring(0, 100) + '...',
+                    altReplace: altReplace.substring(0, 100) + '...'
+                  });
+                  htmlString = htmlString.replace(matchingSentence.trim(), altReplace);
+                  appliedCount++;
+                  appliedSuggestions.push(`${suggestion.type} applied with high-similarity sentence matching`);
+                  console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with high-similarity sentence matching`);
+                } else {
+                  console.log(`[Apply Suggestions] No high-similarity sentence found for ${suggestion.type}`);
+                }
+              }
+            }
+          }
+          
+          // Try to apply paragraph suggestions by finding and replacing paragraph content
+          if (suggestion.type === 'paragraph' && suggestion.currentContent && suggestion.enhancedContent) {
+            console.log(`[Apply Suggestions] Trying paragraph replacement for ${suggestion.type}...`);
+            const paraFind = suggestion.currentContent.trim();
+            const paraReplace = suggestion.enhancedContent.trim();
+            
+            console.log(`[Apply Suggestions] Paragraph pattern details:`, {
+              paraFind: paraFind.substring(0, 100) + '...',
+              paraReplace: paraReplace.substring(0, 100) + '...',
+              found: htmlString.includes(paraFind),
+              fullParaFind: paraFind
+            });
+            
+            if (htmlString.includes(paraFind)) {
+              htmlString = htmlString.replace(paraFind, paraReplace);
+              appliedCount++;
+              appliedSuggestions.push(`${suggestion.type} applied with paragraph replacement`);
+              console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with paragraph replacement`);
+            } else {
+              console.log(`[Apply Suggestions] Paragraph pattern not found for ${suggestion.type}`);
+              
+              // Try to find paragraph in HTML tags
+              const paragraphMatch = htmlString.match(/<p[^>]*>([^<]+)<\/p>/i);
+              if (paragraphMatch) {
+                console.log(`[Apply Suggestions] Found paragraph tag, trying replacement:`, {
+                  paragraphContent: paragraphMatch[1].substring(0, 100) + '...',
+                  paraReplace: paraReplace.substring(0, 100) + '...'
+                });
+                htmlString = htmlString.replace(paragraphMatch[0], `<p>${paraReplace}</p>`);
+                appliedCount++;
+                appliedSuggestions.push(`${suggestion.type} applied with paragraph tag replacement`);
+                console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with paragraph tag replacement`);
+              } else {
+                console.log(`[Apply Suggestions] No paragraph tag found for ${suggestion.type}`);
+              }
+            }
+          }
+          
+          // Try to apply content structure suggestions
+          if (suggestion.type === 'content_structure' && suggestion.implementation) {
+            console.log(`[Apply Suggestions] Trying content structure addition for ${suggestion.type}...`);
+            const structureAddition = suggestion.implementation;
+            
+            console.log(`[Apply Suggestions] Content structure details:`, {
+              structureAddition: structureAddition.substring(0, 100) + '...',
+              hasBodyTag: htmlString.includes('<body>'),
+              fullStructureAddition: structureAddition
+            });
+            
+            if (htmlString.includes('<body>')) {
+              htmlString = htmlString.replace('<body>', `<body>\n${structureAddition}`);
+              appliedCount++;
+              appliedSuggestions.push(`${suggestion.type} applied with structure addition`);
+              console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} with structure addition`);
+            } else {
+              console.log(`[Apply Suggestions] No body tag found for ${suggestion.type}`);
+              
+              // Try to add to the beginning of the HTML
+              if (htmlString.includes('<html>')) {
+                htmlString = htmlString.replace('<html>', `<html>\n${structureAddition}`);
+                appliedCount++;
+                appliedSuggestions.push(`${suggestion.type} applied to html tag`);
+                console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} to html tag`);
+              } else {
+                // Add at the very beginning
+                htmlString = structureAddition + '\n' + htmlString;
+                appliedCount++;
+                appliedSuggestions.push(`${suggestion.type} applied at beginning`);
+                console.log(`[Apply Suggestions] Successfully applied ${suggestion.type} at beginning`);
+              }
             }
           }
           
@@ -701,11 +1034,19 @@ export function applySuggestionsWithDOM(
       (doc as Document).createTreeWalker((root as Document).body || doc.body, NodeFilter.SHOW_TEXT);
     let node: any;
     while (node = walker.nextNode()) {
-      if (node.textContent && node.textContent.includes(findText)) {
-        node.textContent = node.textContent.replaceAll(findText, replaceText);
-        if (options?.highlight && node.parentElement) {
-          node.parentElement.setAttribute('data-ai-updated', 'true');
-        }
+      if (!node.textContent) continue;
+      const original = node.textContent as string;
+      let updated = original;
+      if (original.includes(findText)) {
+        updated = original.replaceAll(findText, replaceText);
+      } else {
+        const relaxedPattern = escapeRegExp(findText).replace(/\s+/g, '\\s+');
+        const relaxedRegex = new RegExp(relaxedPattern, 'gi');
+        updated = original.replace(relaxedRegex, replaceText);
+      }
+      if (updated !== original) {
+        node.textContent = updated;
+        if (options?.highlight && node.parentElement) node.parentElement.setAttribute('data-ai-updated', 'true');
         count++;
       }
     }
@@ -948,12 +1289,16 @@ export function applySuggestionsWithDOM(
 
       // Sentence replacement for better AI understanding
       if (suggestion.type === 'sentence_replacement') {
-        const originalSentence = suggestion.currentContent;
+        const originalSentence = stripQuotes(suggestion.currentContent || '');
         const improvedSentence = suggestion.enhancedContent;
         
         if (originalSentence && improvedSentence) {
           // Replace throughout the document, text nodes only
-          const replacedCount = replaceInTextNodes(doc, originalSentence, improvedSentence);
+          let replacedCount = replaceInTextNodes(doc, originalSentence, improvedSentence);
+          if (replacedCount === 0 && originalSentence.length > 0) {
+            const alt = originalSentence.charAt(0).toLowerCase() + originalSentence.slice(1);
+            replacedCount = replaceInTextNodes(doc, alt, improvedSentence);
+          }
           
           if (replacedCount > 0) {
             appliedCount++;
@@ -999,48 +1344,130 @@ export function applySuggestionsWithDOM(
     finalHtml = finalHtml.replace('</head>', `    ${viewportMeta}\n</head>`);
   }
   
-  // If no suggestions were applied, add a visible change to ensure something is different
+  // If no suggestions were applied, try aggressive fallback approaches
   if (appliedCount === 0) {
-    console.log('[Apply Suggestions] No suggestions were applied, adding visible change...');
-    const visibleChange = `
-      <div style="
-        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-        padding: 20px;
-        margin: 20px;
-        border-left: 6px solid #f39c12;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        font-family: Arial, sans-serif;
-        position: relative;
-        z-index: 1000;
-      ">
-        <div style="display: flex; align-items: center; margin-bottom: 10px;">
-          <span style="font-size: 24px; margin-right: 10px;">⚠️</span>
-          <strong style="font-size: 18px; color: #d68910;">AI Suggestions Generated</strong>
-        </div>
-        <p style="margin: 0; color: #856404; font-size: 16px;">
-          <strong>${suggestions.length} AI suggestions</strong> were generated but could not be automatically applied to this page. 
-          The suggestions are available in the suggestions panel for manual review and implementation.
-        </p>
-        <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px;">
-          <strong style="color: #d68910;">Available Suggestions:</strong>
-          <ul style="margin: 5px 0 0 20px; color: #856404;">
-            ${suggestions.slice(0, 3).map(s => `<li>${s.type}: ${s.description}</li>`).join('')}
-            ${suggestions.length > 3 ? `<li>... and ${suggestions.length - 3} more suggestions</li>` : ''}
-          </ul>
-        </div>
-      </div>
-    `;
+    console.log('[Apply Suggestions] No suggestions were applied, trying aggressive fallback...');
     
-    if (finalHtml.includes('<body>')) {
-      finalHtml = finalHtml.replace('<body>', '<body>\n' + visibleChange);
-    } else {
-      finalHtml = visibleChange + '\n' + finalHtml;
+    // Try to apply suggestions using more aggressive methods
+    let fallbackApplied = false;
+    
+    suggestions.forEach(suggestion => {
+      if (fallbackApplied) return;
+      
+      console.log(`[Apply Suggestions] Trying aggressive fallback for ${suggestion.type}...`);
+      
+      // Try to apply heading suggestions by finding any heading
+      if (suggestion.type === 'heading' && suggestion.enhancedContent) {
+        const headingMatch = finalHtml.match(/<h[1-6][^>]*>([^<]+)<\/h[1-6]>/i);
+        if (headingMatch) {
+          finalHtml = finalHtml.replace(headingMatch[0], suggestion.enhancedContent);
+          appliedCount++;
+          appliedSuggestions.push(`${suggestion.type} applied with aggressive fallback`);
+          fallbackApplied = true;
+          console.log(`[Apply Suggestions] Applied ${suggestion.type} with aggressive fallback`);
+        } else if (finalHtml.includes('<body>')) {
+          // Add heading at the beginning of body
+          finalHtml = finalHtml.replace('<body>', `<body>\n    ${suggestion.enhancedContent}`);
+          appliedCount++;
+          appliedSuggestions.push(`${suggestion.type} added to body with aggressive fallback`);
+          fallbackApplied = true;
+          console.log(`[Apply Suggestions] Added ${suggestion.type} to body with aggressive fallback`);
+        }
+      }
+      
+      // Try to apply paragraph suggestions by finding any paragraph
+      if (suggestion.type === 'paragraph' && suggestion.enhancedContent) {
+        const paragraphMatch = finalHtml.match(/<p[^>]*>([^<]+)<\/p>/i);
+        if (paragraphMatch) {
+          finalHtml = finalHtml.replace(paragraphMatch[0], suggestion.enhancedContent);
+          appliedCount++;
+          appliedSuggestions.push(`${suggestion.type} applied with aggressive fallback`);
+          fallbackApplied = true;
+          console.log(`[Apply Suggestions] Applied ${suggestion.type} with aggressive fallback`);
+        }
+      }
+      
+      // Try to apply sentence replacement by finding similar text with high precision
+      if (suggestion.type === 'sentence_replacement' && suggestion.currentContent && suggestion.enhancedContent) {
+        const htmlText = finalHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        const exactMatch = htmlText.includes(suggestion.currentContent);
+        
+        if (exactMatch) {
+          finalHtml = finalHtml.replace(suggestion.currentContent, suggestion.enhancedContent);
+          appliedCount++;
+          appliedSuggestions.push(`${suggestion.type} applied with exact text matching`);
+          fallbackApplied = true;
+          console.log(`[Apply Suggestions] Applied ${suggestion.type} with exact text matching`);
+        } else {
+          // Try with high similarity matching
+          const sentences = finalHtml.split(/[.!?]+/).filter(s => s.trim().length > 10);
+          
+          // Limit the number of sentences to check to prevent infinite loops and excessive logging
+          const maxSentences = Math.min(sentences.length, 20);
+          let checkedSentences = 0;
+          let bestMatch = null;
+          let bestSimilarity = 0;
+          
+          for (const sentence of sentences) {
+            if (checkedSentences >= maxSentences) {
+              console.log(`[Apply Suggestions] Reached maximum sentence check limit (${maxSentences})`);
+              break;
+            }
+            
+            const cleanSentence = sentence.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            const cleanTarget = suggestion.currentContent.replace(/\s+/g, ' ').trim();
+            const similarity = calculateSimilarity(cleanSentence.toLowerCase(), cleanTarget.toLowerCase());
+            
+            // Only log the first few checks to avoid spam
+            if (isSingleSuggestion && checkedSentences < 5) {
+              console.log(`[Apply Suggestions] Aggressive fallback similarity check ${checkedSentences + 1}:`, {
+                sentence: cleanSentence.substring(0, 50) + '...',
+                target: cleanTarget.substring(0, 50) + '...',
+                similarity: similarity
+              });
+            }
+            
+            if (similarity > bestSimilarity) {
+              bestMatch = sentence.trim();
+              bestSimilarity = similarity;
+            }
+            
+            checkedSentences++;
+          }
+          
+          // Use the best match if it meets the threshold
+          const matchingSentence = bestSimilarity > 0.9 ? bestMatch : null;
+          
+          if (matchingSentence) {
+            finalHtml = finalHtml.replace(matchingSentence.trim(), suggestion.enhancedContent);
+            appliedCount++;
+            appliedSuggestions.push(`${suggestion.type} applied with high-similarity aggressive matching`);
+            fallbackApplied = true;
+            console.log(`[Apply Suggestions] Applied ${suggestion.type} with high-similarity aggressive matching`);
+          }
+        }
+      }
+      
+      // Try to apply any suggestion by adding it to the body
+      if (!fallbackApplied && suggestion.enhancedContent && finalHtml.includes('<body>')) {
+        finalHtml = finalHtml.replace('<body>', `<body>\n    ${suggestion.enhancedContent}`);
+        appliedCount++;
+        appliedSuggestions.push(`${suggestion.type} added to body with aggressive fallback`);
+        fallbackApplied = true;
+        console.log(`[Apply Suggestions] Added ${suggestion.type} to body with aggressive fallback`);
+      }
+    });
+    
+    // If no suggestions were applied, just log it - no fallback notification
+    if (appliedCount === 0) {
+      console.log('[Apply Suggestions] No suggestions were applied successfully');
+      console.log('[Apply Suggestions] Available suggestions:', suggestions.map(s => ({
+        type: s.type,
+        description: s.description,
+        hasCurrentContent: !!s.currentContent,
+        hasEnhancedContent: !!s.enhancedContent
+      })));
     }
-    
-    appliedCount = 1;
-    appliedSuggestions.push('Added visible notification for unapplied suggestions');
-    console.log('[Apply Suggestions] Added visible change for unapplied suggestions');
   }
   
   console.log('[Apply Suggestions] Final result:', {

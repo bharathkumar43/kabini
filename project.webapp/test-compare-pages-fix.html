@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Pages Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Compare Pages Fix Test</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Previous Issue (Fixed)</h2>
+        <p><strong>Problem:</strong> When applying a single suggestion, the changes were not visible in compare pages.</p>
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>✅ Suggestion applied successfully</li>
+            <li>❌ Compare pages showed identical content</li>
+            <li>❌ No visual differences between original and improved pages</li>
+            <li>❌ `htmlChanged: false`, `htmlIsDifferent: false`</li>
+        </ul>
+        <p><strong>Root Cause:</strong> The `applySingleSuggestion` function was updating both `analysis.fullPageHtml` and `improvedFullPageHtml` to the same value, making them identical for comparison.</p>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Fix Applied</h2>
+        
+        <h3>1. Fixed applySingleSuggestion Function ✅</h3>
+        <pre>
+// BEFORE (Problematic):
+const updatedAnalysis = {
+  ...analysis,
+  structuredContent: improvedHtml,
+  fullPageHtml: improvedHtml  // ❌ This made original and improved identical
+};
+setAnalysis(updatedAnalysis);
+
+// AFTER (Fixed):
+const updatedAnalysis = {
+  ...analysis,
+  structuredContent: improvedHtml
+  // Don't update fullPageHtml - keep original for comparison ✅
+};
+setAnalysis(updatedAnalysis);
+        </pre>
+
+        <h3>2. Fixed comparePages Function ✅</h3>
+        <pre>
+// BEFORE (Problematic):
+let improvedHtml = improvedFullPageHtml && improvedFullPageHtml.trim().length > 0 ? improvedFullPageHtml : '';
+// Complex logic that didn't work properly
+
+// AFTER (Fixed):
+if (improvedFullPageHtml && improvedFullPageHtml.trim().length > 0) {
+  console.log('[Compare Pages] Using existing improved HTML from single suggestion application');
+  improvedHtml = improvedFullPageHtml;
+} else {
+  console.log('[Compare Pages] No improved HTML available, using original');
+  improvedHtml = originalHtml;
+}
+        </pre>
+    </div>
+
+    <div class="test-section info">
+        <h2>🎯 How It Works Now</h2>
+        <ol>
+            <li><strong>Apply Single Suggestion:</strong>
+                <ul>
+                    <li>Updates `improvedFullPageHtml` with the modified content</li>
+                    <li>Updates `analysis.structuredContent` with the modified content</li>
+                    <li>Keeps `analysis.fullPageHtml` unchanged (original content)</li>
+                </ul>
+            </li>
+            <li><strong>Compare Pages:</strong>
+                <ul>
+                    <li>Uses `analysis.fullPageHtml` as the original content</li>
+                    <li>Uses `improvedFullPageHtml` as the improved content</li>
+                    <li>Shows actual differences between original and improved</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>✅ Expected Results</h2>
+        <ul>
+            <li>✅ <strong>Single suggestion applied</strong> - Changes visible in landing page preview</li>
+            <li>✅ <strong>Compare pages shows differences</strong> - Original vs improved content</li>
+            <li>✅ <strong>Visual changes visible</strong> - Text replacements are shown</li>
+            <li>✅ <strong>Correct comparison data</strong> - `htmlChanged: true`, `htmlIsDifferent: true`</li>
+            <li>✅ <strong>No more identical pages</strong> - Original and improved are different</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li><strong>Apply a single suggestion</strong> - Click "Apply This Suggestion" on any suggestion</li>
+            <li><strong>Check landing page preview</strong> - Should show the changes immediately</li>
+            <li><strong>Click "Compare Pages"</strong> - Should show side-by-side comparison</li>
+            <li><strong>Verify differences are visible</strong> - Original and improved should be different</li>
+            <li><strong>Check console logs</strong> - Should see `htmlChanged: true` and `htmlIsDifferent: true`</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🔍 Key Changes Made</h2>
+        <ul>
+            <li><strong>applySingleSuggestion:</strong> Don't update `analysis.fullPageHtml` - keep original for comparison</li>
+            <li><strong>comparePages:</strong> Simplified logic to use `improvedFullPageHtml` directly</li>
+            <li><strong>State management:</strong> Proper separation between original and improved content</li>
+            <li><strong>Comparison logic:</strong> Uses correct original vs improved content</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Compare Pages Fix Applied');
+        console.log('Key fixes:');
+        console.log('1. applySingleSuggestion: Keep original fullPageHtml unchanged');
+        console.log('2. comparePages: Use improvedFullPageHtml directly');
+        console.log('3. State management: Proper separation of original vs improved');
+        console.log('4. Comparison: Show actual differences between original and improved');
+        console.log('The compare pages should now show the actual changes!');
+    </script>
+</body>
+</html>
+

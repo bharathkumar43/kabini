@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Wrong Data Passing Issue</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix Wrong Data Passing Issue</h1>
+    
+    <div class="test-section error">
+        <h2>❌ Issue Confirmed</h2>
+        <p><strong>Problem:</strong> When clicking "Apply This Suggestion", 8 suggestions are being passed to `applySuggestionsWithDOM` instead of 1.</p>
+        <p><strong>Evidence:</strong></p>
+        <pre>
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+[Apply Suggestions] Number of suggestions: 8
+[Apply Suggestions] Suggestions: Array(8)
+[Apply Suggestions] FORCING SINGLE SUGGESTION MODE - Only processing first suggestion
+[Apply Suggestions] Filtered suggestions to: 1
+        </pre>
+        <p><strong>Root Cause:</strong> The wrong data is being passed from the button click to `applySingleSuggestion`.</p>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔧 Critical Fixes Applied</h2>
+        <h3>1. Enhanced Data Validation in applySingleSuggestion:</h3>
+        <pre>
+// CRITICAL: Check if suggestion is actually the analysis object
+if (suggestion === analysis) {
+  console.error('[Frontend] CRITICAL ERROR: The entire analysis object was passed instead of a single suggestion!');
+  return;
+}
+
+// CRITICAL: Check if suggestion contains multiple suggestions
+if (suggestion?.suggestions && Array.isArray(suggestion.suggestions)) {
+  console.error('[Frontend] CRITICAL ERROR: Suggestion contains suggestions array!');
+  return;
+}
+
+// CRITICAL: Check if suggestion is an array (should not happen)
+if (Array.isArray(suggestion)) {
+  console.error('[Frontend] CRITICAL ERROR: Suggestion is an array instead of a single object!');
+  return;
+}
+
+// CRITICAL: Check if suggestion has the wrong structure
+if (!suggestion.type || !suggestion.description) {
+  console.error('[Frontend] CRITICAL ERROR: Suggestion does not have expected structure!');
+  return;
+}
+        </pre>
+
+        <h3>2. Enhanced Data Validation Before applySuggestionsWithDOM:</h3>
+        <pre>
+// CRITICAL: Ensure we're only passing a single suggestion
+const singleSuggestion = [suggestion];
+console.log('[Frontend] Single suggestion array:', singleSuggestion);
+console.log('[Frontend] Single suggestion array length:', singleSuggestion.length);
+
+// Validate that the single suggestion is actually a single suggestion
+if (singleSuggestion.length !== 1) {
+  console.error('[Frontend] CRITICAL ERROR: Single suggestion array has wrong length!');
+  return;
+}
+
+if (singleSuggestion[0]?.suggestions && Array.isArray(singleSuggestion[0].suggestions)) {
+  console.error('[Frontend] CRITICAL ERROR: Single suggestion contains nested suggestions!');
+  return;
+}
+        </pre>
+
+        <h3>3. Enhanced Call Stack Analysis:</h3>
+        <pre>
+// CRITICAL: Check if this is being called from the wrong place
+const stack = new Error().stack || '';
+if (stack.includes('useEffect') || stack.includes('comparePages')) {
+  console.error('[Apply Suggestions] CRITICAL ERROR: This function is being called from useEffect or comparePages!');
+  console.error('[Apply Suggestions] This explains why 8 suggestions are being processed!');
+}
+        </pre>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on a page with multiple suggestions</li>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Apply This Suggestion" on any suggestion</li>
+            <li>Look for the critical error messages</li>
+            <li>Check what data is being passed at each step</li>
+        </ol>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Console Output</h2>
+        <h3>✅ Correct Behavior (Should See):</h3>
+        <pre>
+[Frontend] ===== BUTTON CLICKED =====
+[Frontend] Button clicked - suggestion data: {
+  suggestionType: "sentence_replacement",
+  suggestionKeys: ["type", "description", "implementation", "impact", "priority", "currentContent", "enhancedContent", "exactReplacement"],
+  hasSuggestionsArray: false,
+  suggestionsArrayLength: 0,
+  isAnalysisObject: false
+}
+[Frontend] ===== APPLY SINGLE SUGGESTION CALLED =====
+[Frontend] Suggestion received: { type: "sentence_replacement", ... }
+[Frontend] Suggestion type: object
+[Frontend] Suggestion is array: false
+[Frontend] Suggestion keys: ["type", "description", "implementation", "impact", "priority", "currentContent", "enhancedContent", "exactReplacement"]
+[Frontend] Suggestion has suggestions property: false
+[Frontend] Suggestion suggestions length: 0
+[Frontend] ===== CALLING applySuggestionsWithDOM WITH SINGLE SUGGESTION =====
+[Frontend] Single suggestion array: [{ type: "sentence_replacement", ... }]
+[Frontend] Single suggestion array length: 1
+[Apply Suggestions] ===== FUNCTION CALLED =====
+[Apply Suggestions] Single suggestion mode: true
+[Apply Suggestions] Arguments received: { suggestionsCount: 1, ... }
+        </pre>
+
+        <h3>❌ Problem Cases (Should NOT See):</h3>
+        <pre>
+[Frontend] CRITICAL ERROR: The entire analysis object was passed instead of a single suggestion!
+[Frontend] CRITICAL ERROR: Suggestion contains suggestions array!
+[Frontend] CRITICAL ERROR: Suggestion is an array instead of a single object!
+[Frontend] CRITICAL ERROR: Suggestion does not have expected structure!
+[Frontend] CRITICAL ERROR: Single suggestion array has wrong length!
+[Frontend] CRITICAL ERROR: Single suggestion contains nested suggestions!
+[Apply Suggestions] CRITICAL ERROR: This function is being called from useEffect or comparePages!
+[Apply Suggestions] CRITICAL ERROR: Received multiple suggestions when expecting single suggestion!
+        </pre>
+    </div>
+
+    <div class="test-section error">
+        <h2>🚨 Possible Root Causes</h2>
+        <ol>
+            <li><strong>Wrong Suggestion Data:</strong> The `suggestion` variable in the map function contains the wrong data</li>
+            <li><strong>Analysis Object Passed:</strong> The entire analysis object is being passed instead of a single suggestion</li>
+            <li><strong>Nested Suggestions:</strong> The suggestion object contains a nested suggestions array</li>
+            <li><strong>Array Data:</strong> The suggestion is an array instead of a single object</li>
+            <li><strong>Wrong Function Call:</strong> `applySuggestionsWithDOM` is being called from useEffect or comparePages</li>
+            <li><strong>State Management Issue:</strong> The analysis state is corrupted or contains wrong data</li>
+        </ol>
+    </div>
+
+    <div class="test-section info">
+        <h2>🔍 Debug Information to Look For</h2>
+        <h3>1. Button Click Data:</h3>
+        <p>Check if the button click shows the correct single suggestion data or if it shows multiple suggestions.</p>
+
+        <h3>2. applySingleSuggestion Data:</h3>
+        <p>Check if the function receives the correct single suggestion or if it receives the wrong data.</p>
+
+        <h3.3. Critical Error Messages:</h3>
+        <p>Look for any of the critical error messages that will identify the exact root cause.</p>
+
+        <h3>4. Call Stack Analysis:</h3>
+        <p>The call stack will show exactly what function called `applySuggestionsWithDOM` with 8 suggestions.</p>
+
+        <h3>5. Data Structure Validation:</h3>
+        <p>Check if the suggestion data has the expected structure or if it's corrupted.</p>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎉 Expected Fix</h2>
+        <p>After identifying the root cause, the fix should ensure:</p>
+        <ul>
+            <li>✅ Button click passes correct single suggestion data</li>
+            <li>✅ applySingleSuggestion receives correct single suggestion</li>
+            <li>✅ applySuggestionsWithDOM receives only 1 suggestion</li>
+            <li>✅ No critical error messages appear</li>
+            <li>✅ Clean sentence replacement without mixed content</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🔧 Fix Wrong Data Passing Issue Test Page Loaded');
+        console.log('Critical fixes applied:');
+        console.log('1. Enhanced data validation in applySingleSuggestion');
+        console.log('2. Enhanced data validation before applySuggestionsWithDOM');
+        console.log('3. Enhanced call stack analysis');
+        console.log('4. Critical error detection and prevention');
+        console.log('5. User-friendly error messages');
+    </script>
+</body>
+</html>
+

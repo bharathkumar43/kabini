@@ -691,6 +691,19 @@ Only respond with valid JSON.`;
       };
     }
   }
+
+  // Generate content using any LLM provider
+  async generateContent(prompt, provider, model) {
+    try {
+      console.log(`[LLMService] Generating content with ${provider}:${model}`);
+      const response = await this.callLLM(prompt, provider, model, false);
+      // Return just the text content for JSON parsing
+      return response.text;
+    } catch (error) {
+      console.error(`[LLMService] Error generating content:`, error);
+      throw error;
+    }
+  }
 }
 
 // async function getGeminiEmbedding(text) {

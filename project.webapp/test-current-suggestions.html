@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Current Suggestions Application Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Current Suggestions Application Test</h1>
+    
+    <div class="test-section success">
+        <h2>✅ Fixes Applied</h2>
+        <ul>
+            <li><strong>Current Analysis Data:</strong> Always uses current analysis fullPageHtml as source</li>
+            <li><strong>No Fallback to Old Data:</strong> Removed fallback to cached fullPageHtml or content</li>
+            <li><strong>Clear State on New Analysis:</strong> Clears improvedFullPageHtml when starting new analysis</li>
+            <li><strong>Enhanced Debugging:</strong> Added logging to track which analysis data is being used</li>
+        </ul>
+    </div>
+
+    <div class="test-section info">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Open the main application (http://localhost:3000)</li>
+            <li>Run analysis on Page A and note the suggestions</li>
+            <li>Apply a suggestion from Page A - verify it works correctly</li>
+            <li>Run analysis on Page B (different page) and note the different suggestions</li>
+            <li>Apply a suggestion from Page B - verify it applies to Page B content, not Page A</li>
+            <li>Go back to Page A and apply a suggestion - verify it applies to Page A content</li>
+            <li>Check console logs to verify correct analysis data is being used</li>
+        </ol>
+    </div>
+
+    <div class="test-section warning">
+        <h2>🔍 What to Look For in Console</h2>
+        <p>You should see detailed logging showing which analysis data is being used:</p>
+        <pre>
+[Frontend] Using source HTML from current analysis: {
+  analysisId: "Page A content preview...",
+  sourceHtmlLength: 12345,
+  sourceHtmlPreview: "Page A HTML content..."
+}
+
+[Frontend] Applying single suggestion: {
+  type: "sentence_replacement",
+  currentContent: "Page A specific content...",
+  enhancedContent: "Page A enhanced content...",
+  analysisOriginalContent: "Page A content preview...",
+  totalSuggestionsInAnalysis: 3
+}
+        </pre>
+    </div>
+
+    <div class="test-section success">
+        <h2>🎯 Expected Behavior</h2>
+        <h3>When Applying Suggestions:</h3>
+        <ul>
+            <li>Uses the current analysis fullPageHtml as source (not old cached data)</li>
+            <li>Applies suggestions to the correct page content</li>
+            <li>Shows correct analysis ID in console logs</li>
+            <li>Uses suggestions from the current analysis, not old analysis</li>
+        </ul>
+        
+        <h3>When Switching Between Pages:</h3>
+        <ul>
+            <li>Page A suggestions apply to Page A content</li>
+            <li>Page B suggestions apply to Page B content</li>
+            <li>No cross-contamination between different pages</li>
+            <li>Each page maintains its own analysis data</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Test Scenarios</h2>
+        <ol>
+            <li><strong>Same Page, Different Suggestions:</strong> Run analysis on same page multiple times, apply different suggestions</li>
+            <li><strong>Different Pages:</strong> Test with completely different websites</li>
+            <li><strong>Similar Content:</strong> Test with pages that have similar content but different suggestions</li>
+            <li><strong>Quick Switching:</strong> Rapidly switch between different pages and apply suggestions</li>
+        </ol>
+    </div>
+
+    <div class="test-section warning">
+        <h2>⚠️ What Should NOT Happen</h2>
+        <ul>
+            <li><strong>Wrong Content:</strong> Suggestions should not apply to old page content</li>
+            <li><strong>Mixed Analysis:</strong> Should not use suggestions from one page on another page</li>
+            <li><strong>Cached Data:</strong> Should not use cached fullPageHtml or content</li>
+            <li><strong>Incorrect Logging:</strong> Console should show correct analysis ID for each page</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 Verification Steps</h2>
+        <ol>
+            <li>Run analysis on Page A, note the analysis ID in console</li>
+            <li>Apply a suggestion, verify it uses Page A analysis ID</li>
+            <li>Run analysis on Page B, note the different analysis ID</li>
+            <li>Apply a suggestion, verify it uses Page B analysis ID</li>
+            <li>Check that suggestions are applied to the correct page content</li>
+            <li>Verify no old analysis data is being used</li>
+        </ol>
+    </div>
+
+    <script>
+        console.log('🎯 Current Suggestions Application Test Page Loaded');
+        console.log('Key improvements:');
+        console.log('1. Always use current analysis fullPageHtml as source');
+        console.log('2. No fallback to cached data');
+        console.log('3. Clear improved content state on new analysis');
+        console.log('4. Enhanced debugging to track analysis data usage');
+    </script>
+</body>
+</html>
+

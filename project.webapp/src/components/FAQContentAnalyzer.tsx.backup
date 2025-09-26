@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Loader2, RefreshCw, Download, Target, Globe, Zap, ShoppingCart, Package, Tag, Search, CheckCircle, AlertCircle, Check } from 'lucide-react';
+import { FileText, Plus, Loader2, RefreshCw, Download, Target, Globe, Zap, ShoppingCart, Package, Tag, Search, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { useNavigate } from 'react-router-dom';
@@ -82,8 +82,8 @@ export function FAQContentAnalyzer() {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  // Industry Selection State - Only e-commerce now
-  const [selectedIndustry, setSelectedIndustry] = useState<'ecommerce'>('ecommerce');
+  // Industry Selection State
+  const [selectedIndustry, setSelectedIndustry] = useState<'general' | 'ecommerce'>('general');
   const [contentType, setContentType] = useState<'product' | 'category' | 'faq'>('product');
   
   // FAQ Generation State
@@ -97,61 +97,6 @@ export function FAQContentAnalyzer() {
   // E-commerce Content State
   const [ecommerceContent, setEcommerceContent] = useState<EcommerceContent | null>(null);
   const [isGeneratingEcommerce, setIsGeneratingEcommerce] = useState(false);
-  
-  // E-commerce Questions and Answers State
-  const [ecomGeneratedQuestions, setEcomGeneratedQuestions] = useState<string[]>([]);
-  const [ecomSelectedQuestions, setEcomSelectedQuestions] = useState<Set<number>>(new Set());
-  const [isGeneratingEcomQuestions, setIsGeneratingEcomQuestions] = useState(false);
-  const [isGeneratingEcomAnswers, setIsGeneratingEcomAnswers] = useState(false);
-  const [showEcomQuestionsSection, setShowEcomQuestionsSection] = useState(false);
-  const [showEcomFAQSection, setShowEcomFAQSection] = useState(false);
-
-  // Persist e-commerce content and selected tab across navigation
-  const ECOMMERCE_CONTENT_KEY = 'kabini_ecommerce_content';
-  const ECOMMERCE_CONTENT_TYPE_KEY: 'kabini_ecommerce_content_type' = 'kabini_ecommerce_content_type';
-
-  // Restore on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(ECOMMERCE_CONTENT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const normalized = normalizeEcommerceContent(parsed);
-        if (normalized) setEcommerceContent(normalized);
-      }
-      const savedType = localStorage.getItem(ECOMMERCE_CONTENT_TYPE_KEY);
-      if (savedType === 'product' || savedType === 'category' || savedType === 'faq') {
-        setContentType(savedType as 'product' | 'category' | 'faq');
-      }
-    } catch (_err) {
-      // ignore persistence errors
-    }
-  }, []);
-
-  // Save when content changes
-  useEffect(() => {
-    try {
-      if (ecommerceContent) {
-        localStorage.setItem(ECOMMERCE_CONTENT_KEY, JSON.stringify(ecommerceContent));
-      } else {
-        localStorage.removeItem(ECOMMERCE_CONTENT_KEY);
-      }
-    } catch (_err) {}
-  }, [ecommerceContent]);
-
-  // Save current tab
-  useEffect(() => {
-    try {
-      localStorage.setItem(ECOMMERCE_CONTENT_TYPE_KEY, contentType);
-    } catch (_err) {}
-  }, [contentType]);
-
-  // Only clear content when leaving e-commerce industry
-  useEffect(() => {
-    if (selectedIndustry !== 'ecommerce') {
-      setEcommerceContent(null);
-    }
-  }, [selectedIndustry]);
   
   // Product Content Inputs
   const [productInputs, setProductInputs] = useState({
@@ -188,9 +133,6 @@ export function FAQContentAnalyzer() {
   const [extracting, setExtracting] = useState(false);
   const [crawling, setCrawling] = useState(false);
   
-  // E-commerce FAQ additional content state
-  const [ecomFaqContent, setEcomFaqContent] = useState('');
-  
   // History and sessions
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [currentSession, setCurrentSession] = useState<SessionData | null>(null);
@@ -200,13 +142,11 @@ export function FAQContentAnalyzer() {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [notificationType, setNotificationType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
   
-  // Textarea refs for auto-expansion
+  // Textarea ref for auto-expansion
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const ecomTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Helper function to get user-specific storage keys
   const getUserSpecificKey = (baseKey: string, userId: string) => `${baseKey}_${userId}`;
-  const getFaqPersistKey = () => getUserSpecificKey('faq_last_persisted', (user?.id || 'anonymous') as string);
   
   // Helper function to detect if content is a URL
   const isUrl = (text: string): boolean => {
@@ -239,15 +179,6 @@ export function FAQContentAnalyzer() {
     }
   }, [content]);
   
-  // Auto-expand e-commerce extra textarea when content changes
-  useEffect(() => {
-    if (ecomTextareaRef.current && ecomFaqContent) {
-      ecomTextareaRef.current.style.height = 'auto';
-      const newHeight = Math.max(36, Math.min(ecomTextareaRef.current.scrollHeight, 150));
-      ecomTextareaRef.current.style.height = newHeight + 'px';
-    }
-  }, [ecomFaqContent]);
-  
   // Auto-set model based on provider
   useEffect(() => {
     switch (faqProvider) {
@@ -261,7 +192,7 @@ export function FAQContentAnalyzer() {
         setFaqModel('sonar');
         break;
       case 'claude':
-        setFaqModel('claude-3.5-sonnet-20241022');
+        setFaqModel('claude-3-sonnet-20240229');
         break;
       default:
         setFaqModel('gemini-1.5-flash');
@@ -310,70 +241,6 @@ export function FAQContentAnalyzer() {
       }
     }
   }, [user?.id]);
-  
-  // Restore last persisted FAQ UI state if no current session (navigation persistence)
-  useEffect(() => {
-    try {
-      if (currentSession) return; // Prefer restoring from session if present
-      const key = getFaqPersistKey();
-      const persisted = localStorage.getItem(key);
-      if (!persisted) return;
-      const parsed = JSON.parse(persisted);
-      // Optional freshness window: 24h
-      if (parsed?.savedAt && (Date.now() - parsed.savedAt) > 24 * 60 * 60 * 1000) return;
-
-      console.log('[FAQ Persist] Restoring last persisted FAQ state');
-      if (parsed.selectedIndustry === 'general' || parsed.selectedIndustry === 'ecommerce') {
-        setSelectedIndustry(parsed.selectedIndustry);
-      }
-      if (parsed.contentType === 'product' || parsed.contentType === 'category' || parsed.contentType === 'faq') {
-        setContentType(parsed.contentType);
-      }
-      if (typeof parsed.content === 'string') setContent(parsed.content);
-      if (typeof parsed.ecomFaqContent === 'string') setEcomFaqContent(parsed.ecomFaqContent);
-      if (Array.isArray(parsed.generatedQuestions)) setGeneratedQuestions(parsed.generatedQuestions);
-      if (Array.isArray(parsed.ecomGeneratedQuestions)) setEcomGeneratedQuestions(parsed.ecomGeneratedQuestions);
-      if (Array.isArray(parsed.faqs)) setFaqs(parsed.faqs);
-      if (typeof parsed.showEcomQuestionsSection === 'boolean') setShowEcomQuestionsSection(parsed.showEcomQuestionsSection);
-      if (typeof parsed.showEcomFAQSection === 'boolean') setShowEcomFAQSection(parsed.showEcomFAQSection);
-      if (typeof parsed.faqProvider === 'string') setFaqProvider(parsed.faqProvider);
-      if (typeof parsed.faqModel === 'string') setFaqModel(parsed.faqModel);
-      if (typeof parsed.showQuestionsSection === 'boolean') setShowQuestionsSection(parsed.showQuestionsSection);
-      if (typeof parsed.showFAQSection === 'boolean') setShowFAQSection(parsed.showFAQSection);
-      if (parsed.ecommerceContent) {
-        const normalized = normalizeEcommerceContent(parsed.ecommerceContent);
-        if (normalized) setEcommerceContent(normalized);
-      }
-    } catch (e) {
-      console.warn('[FAQ Persist] Failed to restore persisted FAQ state:', e);
-    }
-  }, [currentSession, user?.id]);
-  
-  // Persist FAQ UI state for navigation
-  useEffect(() => {
-    try {
-      const payload = {
-        selectedIndustry,
-        contentType,
-        content,
-        ecomFaqContent,
-        generatedQuestions,
-        ecomGeneratedQuestions,
-        faqs,
-        faqProvider,
-        faqModel,
-        showQuestionsSection,
-        showFAQSection,
-        showEcomQuestionsSection,
-        showEcomFAQSection,
-        ecommerceContent,
-        savedAt: Date.now()
-      };
-      localStorage.setItem(getFaqPersistKey(), JSON.stringify(payload));
-    } catch (e) {
-      // Ignore quota errors silently
-    }
-  }, [selectedIndustry, contentType, content, ecomFaqContent, generatedQuestions, ecomGeneratedQuestions, faqs, faqProvider, faqModel, showQuestionsSection, showFAQSection, showEcomQuestionsSection, showEcomFAQSection, ecommerceContent, user?.id]);
   
   // Save sessions to localStorage whenever they change
   useEffect(() => {
@@ -442,7 +309,7 @@ export function FAQContentAnalyzer() {
       setFaqs(currentSession.qaData || []);
       setContent(currentSession.blogContent || '');
       setFaqProvider(currentSession.questionProvider || 'gemini');
-      setFaqModel(currentSession.questionModel || (currentSession.questionProvider === 'perplexity' ? 'sonar' : currentSession.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+      setFaqModel(currentSession.questionModel || (currentSession.questionProvider === 'perplexity' ? 'sonar' : currentSession.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
       
       // Restore questions state
       setGeneratedQuestions(currentSession.generatedQuestions || []);
@@ -741,273 +608,6 @@ export function FAQContentAnalyzer() {
       setNotificationMessage('Error generating questions. Please try again.');
     } finally {
       setIsGeneratingQuestions(false);
-    }
-  };
-
-  // Generate E-commerce Questions Function
-  const generateEcomQuestions = async () => {
-    // Check if we have either product/category input or additional content
-    const hasProductInput = (productInputs.name.trim() || categoryInputs.categoryName.trim());
-    const hasAdditionalContent = ecomFaqContent.trim();
-    
-    if (!hasProductInput && !hasAdditionalContent) {
-      setNotificationMessage('Please fill in product/category name or provide additional content');
-      return;
-    }
-    
-    // Validate additional content if provided (same validation as general section)
-    if (hasAdditionalContent) {
-      const trimmedContent = ecomFaqContent.trim();
-      
-      // Check if content is a valid URL
-      const isValidUrl = (text: string): boolean => {
-        try {
-          new URL(text);
-          return true;
-        } catch {
-          return false;
-        }
-      };
-      
-      // If it's a valid URL, allow it
-      if (isValidUrl(trimmedContent)) {
-        // URL is valid, proceed with generation
-      } else {
-        // For non-URL content, apply validation rules
-        
-        // Check if content is only numbers
-        if (/^\d+$/.test(trimmedContent)) {
-          setNotificationType('error');
-          setNotificationMessage('Enter valid content');
-          return;
-        }
-        
-        // Check if content is only emojis or special characters
-        if (/^[\p{Emoji}\p{Symbol}\p{Punctuation}\s]+$/u.test(trimmedContent)) {
-          setNotificationType('error');
-          setNotificationMessage('Enter valid content');
-          return;
-        }
-        
-        // Check if content is only single characters or very short meaningless text
-        if (trimmedContent.length < 10 || /^[a-zA-Z\s]{1,10}$/.test(trimmedContent)) {
-          setNotificationType('error');
-          setNotificationMessage('Enter valid content');
-          return;
-        }
-        
-        // Check if content has meaningful words (not just repeated characters)
-        const words = trimmedContent.split(/\s+/).filter(word => word.length > 0);
-        if (words.length < 3) {
-          setNotificationType('error');
-          setNotificationMessage('Enter valid content');
-          return;
-        }
-      }
-    }
-    
-    setIsGeneratingEcomQuestions(true);
-    setEcomGeneratedQuestions([]);
-    setEcomSelectedQuestions(new Set());
-    setFaqs([]); // Clear previous FAQs when starting new analysis
-    setShowEcomFAQSection(false);
-    
-    try {
-      // Prepare content for question generation
-      let contentForQuestions = '';
-      
-      if (hasProductInput) {
-        // Use product/category information
-        const productName = productInputs.name || categoryInputs.categoryName;
-        const targetAudience = productInputs.targetAudience || '';
-        contentForQuestions = `Product/Category: ${productName}\nTarget Audience: ${targetAudience}`;
-      }
-      
-      if (hasAdditionalContent) {
-        // Check if additional content is a URL and crawl it
-        const trimmedContent = ecomFaqContent.trim();
-        if (isUrl(trimmedContent)) {
-          // It's a URL, crawl it first
-          console.log('[E-commerce FAQ] Detected URL, crawling content:', trimmedContent);
-          try {
-            const urlResult = await apiService.extractContentFromUrl(trimmedContent);
-            if (urlResult.success && urlResult.content) {
-              const crawledContent = urlResult.content;
-              if (contentForQuestions) {
-                contentForQuestions += `\n\nAdditional Content from URL (${trimmedContent}):\n${crawledContent}`;
-              } else {
-                contentForQuestions = `Content from URL (${trimmedContent}):\n${crawledContent}`;
-              }
-              console.log('[E-commerce FAQ] Successfully crawled URL content, length:', crawledContent.length);
-            } else {
-              console.warn('[E-commerce FAQ] Failed to crawl URL, using URL as text');
-              if (contentForQuestions) {
-                contentForQuestions += `\n\nAdditional Content:\n${ecomFaqContent}`;
-              } else {
-                contentForQuestions = ecomFaqContent;
-              }
-            }
-          } catch (urlError) {
-            console.error('[E-commerce FAQ] Error crawling URL:', urlError);
-            // Fallback to using URL as text
-            if (contentForQuestions) {
-              contentForQuestions += `\n\nAdditional Content:\n${ecomFaqContent}`;
-            } else {
-              contentForQuestions = ecomFaqContent;
-            }
-          }
-        } else {
-          // It's regular text content
-          if (contentForQuestions) {
-            contentForQuestions += `\n\nAdditional Content:\n${ecomFaqContent}`;
-          } else {
-            contentForQuestions = ecomFaqContent;
-          }
-        }
-      }
-      
-      // Generate questions using the same prompt structure
-      const response = await apiService.generateAIFAQs({
-        content: contentForQuestions.trim(),
-        provider: faqProvider,
-        model: faqModel,
-        targetKeywords: faqTargetKeywords,
-        generateQuestionsOnly: true
-      });
-      
-      if (response.success && response.questions) {
-        const questions = response.questions || [];
-        setEcomGeneratedQuestions(questions);
-        setShowEcomQuestionsSection(true);
-        const questionText = questions.length === 1 ? 'question' : 'questions';
-        setNotificationType('success');
-        setNotificationMessage(`Generated ${questions.length} ${questionText} successfully!`);
-      } else {
-        setNotificationType('error');
-        setNotificationMessage('Failed to generate questions. Please try again.');
-      }
-    } catch (error) {
-      console.error('[E-commerce Questions Generation] Error:', error);
-      setNotificationType('error');
-      
-      // Check if it's an authentication error
-      if (error instanceof Error && (error.message.includes('403') || error.message.includes('Forbidden') || error.message.includes('Invalid or expired token') || error.message.includes('Session expired'))) {
-        setNotificationMessage('Your session has expired. Please log in again.');
-        // Redirect to login after a short delay
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 2000);
-      } else {
-        setNotificationMessage('Error generating questions. Please try again.');
-      }
-    } finally {
-      setIsGeneratingEcomQuestions(false);
-    }
-  };
-
-  // Generate E-commerce Answers Function
-  const generateEcomAnswers = async () => {
-    if (ecomSelectedQuestions.size === 0) {
-      setNotificationMessage('Please select at least one question to generate answers for');
-      return;
-    }
-    
-    setIsGeneratingEcomAnswers(true);
-    
-    try {
-      // Prepare content for answer generation
-      let contentForAnswers = '';
-      
-      const hasProductInput = (productInputs.name.trim() || categoryInputs.categoryName.trim());
-      const hasAdditionalContent = ecomFaqContent.trim();
-      
-      if (hasProductInput) {
-        const productName = productInputs.name || categoryInputs.categoryName;
-        const targetAudience = productInputs.targetAudience || '';
-        contentForAnswers = `Product/Category: ${productName}\nTarget Audience: ${targetAudience}`;
-      }
-      
-      if (hasAdditionalContent) {
-        // Check if additional content is a URL and crawl it
-        const trimmedContent = ecomFaqContent.trim();
-        if (isUrl(trimmedContent)) {
-          // It's a URL, crawl it first
-          console.log('[E-commerce FAQ] Detected URL for answers, crawling content:', trimmedContent);
-          try {
-            const urlResult = await apiService.extractContentFromUrl(trimmedContent);
-            if (urlResult.success && urlResult.content) {
-              const crawledContent = urlResult.content;
-              if (contentForAnswers) {
-                contentForAnswers += `\n\nAdditional Content from URL (${trimmedContent}):\n${crawledContent}`;
-              } else {
-                contentForAnswers = `Content from URL (${trimmedContent}):\n${crawledContent}`;
-              }
-              console.log('[E-commerce FAQ] Successfully crawled URL content for answers, length:', crawledContent.length);
-            } else {
-              console.warn('[E-commerce FAQ] Failed to crawl URL for answers, using URL as text');
-              if (contentForAnswers) {
-                contentForAnswers += `\n\nAdditional Content:\n${ecomFaqContent}`;
-              } else {
-                contentForAnswers = ecomFaqContent;
-              }
-            }
-          } catch (urlError) {
-            console.error('[E-commerce FAQ] Error crawling URL for answers:', urlError);
-            // Fallback to using URL as text
-            if (contentForAnswers) {
-              contentForAnswers += `\n\nAdditional Content:\n${ecomFaqContent}`;
-            } else {
-              contentForAnswers = ecomFaqContent;
-            }
-          }
-        } else {
-          // It's regular text content
-          if (contentForAnswers) {
-            contentForAnswers += `\n\nAdditional Content:\n${ecomFaqContent}`;
-          } else {
-            contentForAnswers = ecomFaqContent;
-          }
-        }
-      }
-      
-      // Get selected questions
-      const selectedQuestionsList = Array.from(ecomSelectedQuestions).map(index => ecomGeneratedQuestions[index]);
-      
-      // Generate answers for selected questions
-      const response = await apiService.generateAIFAQs({
-        content: contentForAnswers.trim(),
-        provider: faqProvider,
-        model: faqModel,
-        targetKeywords: faqTargetKeywords,
-        selectedQuestions: selectedQuestionsList,
-        generateAnswersOnly: true
-      });
-      
-      if (response.success && response.faqs) {
-        const newFaqs = response.faqs.map(faq => ({ question: faq.question, answer: faq.answer })) as FAQItem[];
-        setFaqs(prevFaqs => [...prevFaqs, ...newFaqs]);
-        setNotificationType('success');
-        setNotificationMessage(`Generated answers for ${newFaqs.length} questions successfully!`);
-      } else {
-        setNotificationType('error');
-        setNotificationMessage('Failed to generate answers. Please try again.');
-      }
-    } catch (error) {
-      console.error('[E-commerce Answers Generation] Error:', error);
-      setNotificationType('error');
-      
-      // Check if it's an authentication error
-      if (error instanceof Error && (error.message.includes('403') || error.message.includes('Forbidden') || error.message.includes('Invalid or expired token') || error.message.includes('Session expired'))) {
-        setNotificationMessage('Your session has expired. Please log in again.');
-        // Redirect to login after a short delay
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 2000);
-      } else {
-        setNotificationMessage('Error generating answers. Please try again.');
-      }
-    } finally {
-      setIsGeneratingEcomAnswers(false);
     }
   };
 
@@ -1351,7 +951,7 @@ export function FAQContentAnalyzer() {
       setShowFAQSection(true);
       setContent(session.blogContent || '');
       setFaqProvider(session.questionProvider || 'gemini');
-      setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+      setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
       
               // Reset textarea height to accommodate content
         if (textareaRef.current && session.blogContent) {
@@ -1364,62 +964,6 @@ export function FAQContentAnalyzer() {
           }, 100);
       }
     }
-  };
-
-  // Normalize backend response into EcommerceContent shape
-  const normalizeEcommerceContent = (data: any): EcommerceContent | null => {
-    if (!data) return null;
-    // If already in expected shape, return as-is
-    if (
-      typeof data === 'object' && (
-        'productContent' in data || 'categoryContent' in data || 'faqs' in data
-      )
-    ) {
-      return data as EcommerceContent;
-    }
-    // If it looks like a raw product content object, wrap it
-    if (typeof data === 'object' && 'shortDescription' in data && 'longDescription' in data) {
-      return {
-        productContent: data as ProductContent,
-        categoryContent: undefined,
-        faqs: [],
-        seoRecommendations: {
-          schemaSuggestions: [],
-          contentDepthScore: 0,
-          aiOptimizationTips: [],
-          technicalSeoReminders: [],
-        },
-      };
-    }
-    // If it looks like raw FAQs result (supports nested shape)
-    if (typeof data === 'object' && ('faqs' in (data as any))) {
-      const maybeNested = (data as any).faqs;
-      let faqsArray: any[] = [];
-      if (Array.isArray(maybeNested)) {
-        faqsArray = maybeNested;
-      } else if (Array.isArray(maybeNested?.faqs)) {
-        faqsArray = maybeNested.faqs;
-      } else if (maybeNested && typeof maybeNested === 'object') {
-        try {
-          faqsArray = Object.values(maybeNested);
-        } catch (_) {
-          faqsArray = [];
-        }
-      }
-      const seo = (data as any).seoRecommendations || maybeNested?.seoRecommendations || {
-        schemaSuggestions: [],
-        contentDepthScore: 0,
-        aiOptimizationTips: [],
-        technicalSeoReminders: [],
-      };
-      return {
-        productContent: undefined,
-        categoryContent: undefined,
-        faqs: faqsArray,
-        seoRecommendations: seo,
-      };
-    }
-    return null;
   };
 
   // E-commerce Content Generation Functions
@@ -1440,8 +984,7 @@ export function FAQContentAnalyzer() {
 
       if (response.success) {
         console.log('[Product Content] Received data:', response.data);
-        const normalized = normalizeEcommerceContent(response.data);
-        setEcommerceContent(normalized);
+        setEcommerceContent(response.data || null);
         setNotificationMessage('Product content generated successfully!');
       } else {
         console.error('[Product Content] API error:', response.error);
@@ -1472,8 +1015,7 @@ export function FAQContentAnalyzer() {
 
       if (response.success) {
         console.log('[Category Content] Received data:', response.data);
-        const normalized = normalizeEcommerceContent(response.data);
-        setEcommerceContent(normalized);
+        setEcommerceContent(response.data || null);
         setNotificationMessage('Category content generated successfully!');
       } else {
         console.error('[Category Content] API error:', response.error);
@@ -1504,42 +1046,7 @@ export function FAQContentAnalyzer() {
 
       if (response.success) {
         console.log('[E-commerce FAQs] Received data:', response.data);
-        const normalized = normalizeEcommerceContent(response.data);
-        
-        // Start with FAQs from ecommerce content
-        let mergedFaqs: FAQItem[] = normalized?.faqs || [];
-
-        // If user provided optional URL/content for extra FAQs, generate and merge
-        const extraSource = (ecomFaqContent || '').trim();
-        if (extraSource.length > 0) {
-          try {
-            const gen = await apiService.generateAIFAQs({
-              content: extraSource,
-              provider: faqProvider,
-              model: faqModel,
-              targetKeywords: faqTargetKeywords,
-              generateAnswersOnly: false
-            });
-            const extraFaqs = (gen.faqs || []).map(f => ({ question: f.question, answer: f.answer })) as FAQItem[];
-            // Merge and de-duplicate by question
-            const map = new Map<string, FAQItem>();
-            mergedFaqs.forEach(f => map.set(f.question.trim(), f));
-            extraFaqs.forEach(f => {
-              const q = f.question.trim();
-              if (!map.has(q)) map.set(q, f);
-            });
-            mergedFaqs = Array.from(map.values());
-          } catch (e) {
-            console.warn('[E-commerce FAQs] Extra content FAQ generation failed; proceeding with e-commerce FAQs only.', e);
-          }
-        }
-
-        // Save merged back into ecommerceContent state
-        const finalContent: EcommerceContent | null = normalized
-          ? { ...normalized, faqs: mergedFaqs }
-          : { productContent: undefined, categoryContent: undefined, faqs: mergedFaqs, seoRecommendations: { schemaSuggestions: [], contentDepthScore: 0, aiOptimizationTips: [], technicalSeoReminders: [] } };
-
-        setEcommerceContent(finalContent);
+        setEcommerceContent(response.data || null);
         setNotificationMessage('E-commerce FAQs generated successfully!');
       } else {
         console.error('[E-commerce FAQs] API error:', response.error);
@@ -1561,13 +1068,45 @@ export function FAQContentAnalyzer() {
         <div className="card bg-white border border-primary/10 shadow-xl">
           <div className="flex items-center gap-2 mb-6">
             <FileText className="w-8 h-8 text-black drop-shadow" />
-            <h2 className="text-3xl font-extrabold text-black tracking-tight">GEO Content Writer Tool</h2>
+            <h2 className="text-3xl font-extrabold text-black tracking-tight">Content Enhancement</h2>
           </div>
           
+            {/* Industry Selection */}
+          <div className="mb-6">
+              <label className="block text-base font-semibold text-black mb-3 flex items-center gap-2">
+              <Globe className="w-5 h-5 text-black" />
+              Select Industry
+              </label>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setSelectedIndustry('general')}
+                className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 ${
+                  selectedIndustry === 'general'
+                    ? 'bg-blue-600 text-white shadow-lg'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <FileText className="w-5 h-5" />
+                General Content
+              </button>
+              <button
+                onClick={() => setSelectedIndustry('ecommerce')}
+                className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 ${
+                      selectedIndustry === 'ecommerce' 
+                    ? 'bg-blue-600 text-white shadow-lg'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <ShoppingCart className="w-5 h-5" />
+                E-commerce
+              </button>
+                  </div>
+                </div>
                 
           <div className="space-y-8">
             {/* E-commerce Content Forms */}
-            <div className="space-y-6">
+            {selectedIndustry === 'ecommerce' && (
+              <div className="space-y-6">
                 {/* Content Type Selection */}
                 <div>
                   <label className="block text-base font-semibold text-black mb-3 flex items-center gap-2">
@@ -1682,7 +1221,7 @@ export function FAQContentAnalyzer() {
 
                 {/* Category Content Form */}
                 {contentType === 'category' && (
-                  <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                  <div className="space-y-4 p-4 bg-green-50 rounded-lg">
                     <h3 className="text-lg font-semibold text-black">Category Page Content Generator</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -1705,21 +1244,21 @@ export function FAQContentAnalyzer() {
                           placeholder="e.g., Cotton, Polyester, Blends"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Target Audience</label>
-                        <input
-                          type="text"
-                          value={categoryInputs.audience}
-                          onChange={(e) => setCategoryInputs(prev => ({ ...prev, audience: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="e.g., Fashion-conscious men, 25-45 years old"
-                        />
-                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Target Audience</label>
+                      <input
+                        type="text"
+                        value={categoryInputs.audience}
+                        onChange={(e) => setCategoryInputs(prev => ({ ...prev, audience: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., Fashion-conscious men, 25-45 years old"
+                      />
                     </div>
                         <button
                       onClick={generateCategoryContent}
                       disabled={isGeneratingEcommerce}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
                         >
                       {isGeneratingEcommerce ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                       Generate Category Content
@@ -1729,7 +1268,7 @@ export function FAQContentAnalyzer() {
 
                 {/* E-commerce FAQ Form */}
                 {contentType === 'faq' && (
-                  <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                  <div className="space-y-4 p-4 bg-purple-50 rounded-lg">
                     <h3 className="text-lg font-semibold text-black">E-commerce FAQ Generator</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -1756,153 +1295,261 @@ export function FAQContentAnalyzer() {
                         />
                       </div>
                     </div>
-
-                    {/* Optional URL or Long Content (merge with e-commerce FAQs) */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Paste URL or content (optional)</label>
-                      <div className="relative">
-                        <textarea
-                          ref={ecomTextareaRef}
-                          value={ecomFaqContent}
-                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                            const val = e.target.value;
-                            setEcomFaqContent(val);
-                            const target = e.target as HTMLTextAreaElement;
-                            target.style.height = 'auto';
-                            const newHeight = Math.max(36, Math.min(target.scrollHeight, 150));
-                            target.style.height = `${newHeight}px`;
-                          }}
-                          placeholder="Paste URL or content here..."
-                          rows={1}
-                          className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 pr-12 text-black text-sm placeholder-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none scrollbar-hide"
-                          style={{ minHeight: '36px', maxHeight: '150px', height: 'auto', overflow: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                        />
-                        {/* File Upload Plus Icon */}
-                        <div className="absolute right-2 bottom-2">
-                          <input
-                            type="file"
-                            id="ecom-file-upload"
-                            accept=".txt,.md,.doc,.docx"
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (ev: ProgressEvent<FileReader>) => {
-                                  const text = (ev.target?.result as string) || '';
-                                  setEcomFaqContent(text);
-                                  setTimeout(() => {
-                                    if (ecomTextareaRef.current) {
-                                      ecomTextareaRef.current.style.height = 'auto';
-                                      const h = Math.max(36, Math.min(ecomTextareaRef.current.scrollHeight, 150));
-                                      ecomTextareaRef.current.style.height = `${h}px`;
-                                    }
-                                  }, 100);
-                                };
-                                reader.readAsText(file);
-                              }
-                            }}
-                            className="hidden"
-                          />
-                          <label
-                            htmlFor="ecom-file-upload"
-                            className="cursor-pointer p-1.5 rounded-full transition-all duration-200 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800"
-                            title="Upload file (.txt, .md, .doc, .docx)"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-
                         <button
-                      onClick={generateEcomQuestions}
-                      disabled={isGeneratingEcomQuestions}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      onClick={generateEcommerceFAQs}
+                      disabled={isGeneratingEcommerce}
+                      className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50"
                         >
-                      {isGeneratingEcomQuestions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                      Generate Questions
+                      {isGeneratingEcommerce ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                      Generate E-commerce FAQs
                         </button>
                   </div>
                 )}
               </div>
-
-            {/* E-commerce Questions Section */}
-            {contentType === 'faq' && showEcomQuestionsSection && ecomGeneratedQuestions.length > 0 && (
-              <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-black flex items-center gap-2">
-                    <Target className="w-5 h-5" />
-                    Generated Questions
-                  </h3>
-                  <span className="text-sm text-gray-600">
-                    Select questions to generate answers
-                  </span>
-                </div>
-                <div className="space-y-4">
-                  {ecomGeneratedQuestions.map((question, index) => {
-                    const questionAnswer = faqs.find(faq => faq.question === question);
-                    return (
-                      <div key={index} className="bg-white rounded border p-4">
-                        <label className="flex items-start gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={ecomSelectedQuestions.has(index)}
-                            onChange={(e) => {
-                              const newSelected = new Set(ecomSelectedQuestions);
-                              if (e.target.checked) {
-                                newSelected.add(index);
-                              } else {
-                                newSelected.delete(index);
-                              }
-                              setEcomSelectedQuestions(newSelected);
-                            }}
-                            className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <div className="flex-1">
-                            <div className="text-gray-800 font-medium mb-2">
-                              Q{index + 1}: {question}
-                            </div>
-                            {/* Show answer if it exists */}
-                            {questionAnswer && (
-                              <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
-                                <div className="text-sm text-gray-600 mb-2 font-medium">Answer:</div>
-                                <div className="text-gray-700 text-sm leading-relaxed">
-                                  {questionAnswer.answer}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-start">
-                  <button
-                    onClick={generateEcomAnswers}
-                    disabled={isGeneratingEcomAnswers || ecomSelectedQuestions.size === 0}
-                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingEcomAnswers ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                    Generate Answers
-                  </button>
-                </div>
-              </div>
             )}
 
+            {/* Unified Content Input - Only show for general industry */}
+            {selectedIndustry === 'general' && (
+              <div>
+              <label className="block text-base font-semibold text-black mb-3 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-black" />
+                Paste your content or enter a URL
+              </label>
+              <div className="relative">
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={(e) => {
+                    setContent(e.target.value);
+                    // Auto-expand textarea with maximum height limit
+                    const target = e.target;
+                    target.style.height = 'auto';
+                    const newHeight = Math.max(36, Math.min(target.scrollHeight, 150));
+                    target.style.height = newHeight + 'px';
+                  }}
+                  placeholder="Paste URL or content here..."
+                  rows={1}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 pr-12 text-black text-base placeholder-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none scrollbar-hide"
+                  style={{ 
+                    minHeight: '36px', 
+                    maxHeight: '150px',
+                    height: 'auto',
+                    overflow: 'auto',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none'
+                  }}
+                />
+                {/* File Upload Plus Icon */}
+                <div className="absolute right-3 bottom-3">
+                  <input
+                    type="file"
+                    id="file-upload"
+                    accept=".txt,.md,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                          const text = e.target?.result as string;
+                          setContent(text);
+                          // Trigger height adjustment after content is set
+                          setTimeout(() => {
+                            if (textareaRef.current) {
+                              textareaRef.current.style.height = 'auto';
+                              const newHeight = Math.max(36, Math.min(textareaRef.current.scrollHeight, 150));
+                              textareaRef.current.style.height = newHeight + 'px';
+                            }
+                          }, 100);
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer p-1.5 rounded-full transition-all duration-200 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800"
+                    title="Upload file (.txt, .md, .doc, .docx)"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </label>
+                </div>
+              </div>
+            </div>
 
+            {/* Generate Questions Button */}
+            <div className="flex items-center gap-4">
+              {!user ? (
+                <div className="flex items-center gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <span className="text-yellow-800">⚠️ Please log in to generate questions</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  {/* Provider Selection for Questions */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-black">Provider:</label>
+                    <select
+                      value={faqProvider}
+                      onChange={(e) => setFaqProvider(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="gemini">Gemini</option>
+                      <option value="openai">ChatGPT</option>
+                      <option value="perplexity">Perplexity</option>
+                      <option value="claude">Claude</option>
+                    </select>
+                  </div>
+                  
+                  {/* Question Generation Button */}
+                  <button
+                    type="button"
+                    onClick={generateQuestions}
+                    disabled={isGeneratingQuestions || !content.trim()}
+                    className="bg-blue-600 text-white font-bold px-8 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-lg shadow"
+                  >
+                    {isGeneratingQuestions ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Generating Questions...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Generate AI Questions
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* Questions Section - Only show for general industry */}
+          {selectedIndustry === 'general' && showQuestionsSection && generatedQuestions.length > 0 && (
+            <div className="card mt-8 p-6 bg-white border border-blue-600/10 shadow-xl">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <h3 className="text-2xl font-bold text-black">Generated Questions</h3>
+                  </div>
+                </div>
+                
+                <div className="text-sm text-black">
+                  Select questions to generate answers
+                </div>
+              </div>
+              
+              {/* Generated Questions with Answers */}
+              <div className="space-y-4 mb-6">
+                {generatedQuestions.map((question, index) => (
+                  <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-start gap-3 mb-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedQuestions.has(index)}
+                        onChange={() => toggleQuestionSelection(index)}
+                                                        className="mt-1 w-4 h-4 text-black bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold text-black text-base">
+                          {index + 1}. {question}
+                        </div>
+                        {/* Show answer if it exists */}
+                        {faqs.find(faq => faq.question === question) && (
+                          <div className="mt-3 p-3 bg-white rounded border border-gray-200 relative">
+                            {/* Action icons positioned at top right */}
+                            <div className="absolute top-2 right-2 flex gap-1">
+                              <button
+                                onClick={() => copyQAPair(question, faqs.find(faq => faq.question === question)?.answer || '')}
+                                className="p-1.5 bg-white border border-gray-300 rounded-lg text-black hover:bg-gray-50 transition-colors"
+                                title="Copy question and answer"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => reanalyzeAnswer(question)}
+                                className="p-1.5 bg-white border border-gray-300 rounded-lg text-black hover:bg-gray-50 transition-colors"
+                                title="Generate new answer"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="text-sm text-black mb-1 font-medium">Answer:</div>
+                            <div className="text-black text-sm leading-relaxed pr-16">
+                              {faqs.find(faq => faq.question === question)?.answer}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Generate Answers Button - Bottom Left */}
+              <div className="flex items-center gap-4 justify-start">
+                {/* Provider Selection for Answers */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-black">Provider:</label>
+                  <select
+                    value={faqProvider}
+                    onChange={(e) => setFaqProvider(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="gemini">Gemini</option>
+                    <option value="openai">ChatGPT</option>
+                    <option value="perplexity">Perplexity</option>
+                    <option value="claude">Claude</option>
+                  </select>
+                </div>
+                
+                <button
+                  onClick={generateAnswers}
+                  disabled={isGeneratingAnswers || selectedQuestions.size === 0}
+                  className="bg-blue-600 text-white font-medium px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow text-base"
+                >
+                  {isGeneratingAnswers ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Generating Answers...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Generate Answers
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
 
+          {/* Debug Info */}
+          {selectedIndustry === 'ecommerce' && (
+            <div className="bg-yellow-50 p-4 rounded-lg mb-4">
+              <h4 className="font-semibold text-black mb-2">Debug Info:</h4>
+              <p className="text-sm text-gray-700">Selected Industry: {selectedIndustry}</p>
+              <p className="text-sm text-gray-700">E-commerce Content: {ecommerceContent ? 'Present' : 'Not Present'}</p>
+              {ecommerceContent && (
+                <div className="mt-2">
+                  <p className="text-sm text-gray-700">Product Content: {ecommerceContent.productContent ? 'Present' : 'Not Present'}</p>
+                  <p className="text-sm text-gray-700">Category Content: {ecommerceContent.categoryContent ? 'Present' : 'Not Present'}</p>
+                  <p className="text-sm text-gray-700">FAQs: {ecommerceContent.faqs ? ecommerceContent.faqs.length : 0} items</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* E-commerce Content Display */}
-          {(() => {
-            const hasRelevantContent = !!(
-              (contentType === 'product' && ecommerceContent && ecommerceContent?.productContent) ||
-              (contentType === 'category' && ecommerceContent && ecommerceContent?.categoryContent) ||
-              (contentType === 'faq' && ecommerceContent && ecommerceContent?.faqs && ecommerceContent?.faqs.length > 0)
-            );
-            if (!hasRelevantContent) return false;
+          {selectedIndustry === 'ecommerce' && ecommerceContent && (() => {
             console.log('[E-commerce Display] Rendering content:', ecommerceContent);
             return true;
           })() && (
@@ -1913,7 +1560,7 @@ export function FAQContentAnalyzer() {
               </div>
 
               {/* Product Content Display */}
-              {contentType === 'product' && ecommerceContent?.productContent && (
+              {ecommerceContent.productContent && (
                 <div className="space-y-6">
                   <div className="bg-blue-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
@@ -1924,19 +1571,19 @@ export function FAQContentAnalyzer() {
                     <div className="space-y-4">
                       <div>
                         <h5 className="font-medium text-black mb-2">Short Description</h5>
-                        <p className="text-gray-700 bg-white p-3 rounded border">{ecommerceContent?.productContent?.shortDescription}</p>
+                        <p className="text-gray-700 bg-white p-3 rounded border">{ecommerceContent.productContent.shortDescription}</p>
                       </div>
                       
                       <div>
                         <h5 className="font-medium text-black mb-2">Long Description</h5>
-                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent?.productContent.longDescription}</div>
+                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent.productContent.longDescription}</div>
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <h5 className="font-medium text-black mb-2">Key Features</h5>
                           <ul className="text-gray-700 bg-white p-3 rounded border">
-                            {ecommerceContent?.productContent.features.map((feature, index) => (
+                            {ecommerceContent.productContent.features.map((feature, index) => (
                               <li key={index} className="flex items-start gap-2">
                                 <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                                 {feature}
@@ -1948,7 +1595,7 @@ export function FAQContentAnalyzer() {
                         <div>
                           <h5 className="font-medium text-black mb-2">Benefits</h5>
                           <ul className="text-gray-700 bg-white p-3 rounded border">
-                            {ecommerceContent?.productContent.benefits.map((benefit, index) => (
+                            {ecommerceContent.productContent.benefits.map((benefit, index) => (
                               <li key={index} className="flex items-start gap-2">
                                 <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                                 {benefit}
@@ -1960,7 +1607,7 @@ export function FAQContentAnalyzer() {
                       
                       <div>
                         <h5 className="font-medium text-black mb-2">Comparison</h5>
-                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent?.productContent.comparison}</div>
+                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent.productContent.comparison}</div>
                       </div>
                       
                       <div>
@@ -1968,7 +1615,7 @@ export function FAQContentAnalyzer() {
                         <div className="bg-white p-3 rounded border">
                           <table className="w-full text-sm">
                             <tbody>
-                              {Object.entries(ecommerceContent?.productContent.specs).map(([key, value]) => (
+                              {Object.entries(ecommerceContent.productContent.specs).map(([key, value]) => (
                                 <tr key={key} className="border-b border-gray-100">
                                   <td className="font-medium text-gray-700 py-2 pr-4">{key}</td>
                                   <td className="text-gray-600 py-2">{value}</td>
@@ -1982,9 +1629,9 @@ export function FAQContentAnalyzer() {
                       <div>
                         <h5 className="font-medium text-black mb-2">Use Cases</h5>
                         <ul className="text-gray-700 bg-white p-3 rounded border">
-                          {ecommerceContent?.productContent.useCases.map((useCase, index) => (
+                          {ecommerceContent.productContent.useCases.map((useCase, index) => (
                             <li key={index} className="flex items-start gap-2">
-                              <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                              <Target className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
                               {useCase}
                             </li>
                           ))}
@@ -1995,7 +1642,7 @@ export function FAQContentAnalyzer() {
                         <div>
                           <h5 className="font-medium text-black mb-2">Keywords</h5>
                           <div className="flex flex-wrap gap-2">
-                            {ecommerceContent?.productContent.keywords.map((keyword, index) => (
+                            {ecommerceContent.productContent.keywords.map((keyword, index) => (
                               <span key={index} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
                                 {keyword}
                               </span>
@@ -2006,7 +1653,7 @@ export function FAQContentAnalyzer() {
                         <div>
                           <h5 className="font-medium text-black mb-2">Image Alt Text</h5>
                           <div className="space-y-1">
-                            {ecommerceContent?.productContent.altText.map((alt, index) => (
+                            {ecommerceContent.productContent.altText.map((alt, index) => (
                               <div key={index} className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
                                 {alt}
                               </div>
@@ -2020,15 +1667,15 @@ export function FAQContentAnalyzer() {
                         <div className="space-y-2 text-sm">
                           <div>
                             <span className="font-medium text-gray-700">Title:</span>
-                            <div className="text-gray-600 bg-white p-2 rounded border mt-1">{ecommerceContent?.productContent.metaTags.title}</div>
+                            <div className="text-gray-600 bg-white p-2 rounded border mt-1">{ecommerceContent.productContent.metaTags.title}</div>
                           </div>
                           <div>
                             <span className="font-medium text-gray-700">Description:</span>
-                            <div className="text-gray-600 bg-white p-2 rounded border mt-1">{ecommerceContent?.productContent.metaTags.description}</div>
+                            <div className="text-gray-600 bg-white p-2 rounded border mt-1">{ecommerceContent.productContent.metaTags.description}</div>
                           </div>
                           <div>
                             <span className="font-medium text-gray-700">Keywords:</span>
-                            <div className="text-gray-600 bg-white p-2 rounded border mt-1">{ecommerceContent?.productContent.metaTags.keywords}</div>
+                            <div className="text-gray-600 bg-white p-2 rounded border mt-1">{ecommerceContent.productContent.metaTags.keywords}</div>
                           </div>
                         </div>
                       </div>
@@ -2038,9 +1685,9 @@ export function FAQContentAnalyzer() {
               )}
 
               {/* Category Content Display */}
-              {contentType === 'category' && ecommerceContent?.categoryContent && (
+              {ecommerceContent.categoryContent && (
                 <div className="space-y-6">
-                  <div className="bg-blue-50 p-6 rounded-lg">
+                  <div className="bg-green-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
                       <Tag className="w-5 h-5" />
                       Category Page Content
@@ -2049,59 +1696,23 @@ export function FAQContentAnalyzer() {
                     <div className="space-y-4">
                       <div>
                         <h5 className="font-medium text-black mb-2">Introduction</h5>
-                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent?.categoryContent.intro}</div>
+                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent.categoryContent.intro}</div>
                       </div>
                       
                       <div>
                         <h5 className="font-medium text-black mb-2">Buying Guide</h5>
-                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent?.categoryContent.buyingGuide}</div>
+                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent.categoryContent.buyingGuide}</div>
                       </div>
                       
                       <div>
                         <h5 className="font-medium text-black mb-2">Comparison Chart</h5>
-                        {(() => {
-                          const raw = ecommerceContent?.categoryContent.comparisonChart || '';
-                          // If the content looks like a markdown table, render it as table; otherwise show as preformatted
-                          const isTable = /\|\s*Feature\s*\|/i.test(raw) || /\|\-+\|/.test(raw);
-                          if (!isTable) {
-                            return <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{raw}</div>;
-                          }
-                          // Parse simple markdown-like table into rows and cells
-                          const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
-                          const allRows = lines.map(l => l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c => c.trim()));
-                          // Drop markdown separator rows like | ----- | :----: | ---- |
-                          const rows = allRows.filter(cells => !cells.every(c => /^:?-{2,}:?$/.test(c)));
-                          const header = rows[0] || [];
-                          const body = rows.slice(1);
-                          return (
-                            <div className="bg-white p-3 rounded border overflow-x-auto">
-                              <table className="min-w-full text-sm text-gray-700">
-                                <thead>
-                                  <tr>
-                                    {header.map((h, i) => (
-                                      <th key={i} className="text-left font-semibold border-b border-gray-200 px-3 py-2 whitespace-nowrap">{h}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {body.map((cells, r) => (
-                                    <tr key={r} className="border-b border-gray-100">
-                                      {cells.map((c, i) => (
-                                        <td key={i} className="px-3 py-2 align-top whitespace-nowrap">{c}</td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        })()}
+                        <div className="text-gray-700 bg-white p-3 rounded border whitespace-pre-wrap">{ecommerceContent.categoryContent.comparisonChart}</div>
                       </div>
                       
                       <div>
                         <h5 className="font-medium text-black mb-2">Internal Links</h5>
                         <ul className="text-gray-700 bg-white p-3 rounded border">
-                          {ecommerceContent?.categoryContent.internalLinks.map((link, index) => (
+                          {ecommerceContent.categoryContent.internalLinks.map((link, index) => (
                             <li key={index} className="flex items-start gap-2">
                               <Globe className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
                               {link}
@@ -2115,16 +1726,16 @@ export function FAQContentAnalyzer() {
               )}
 
               {/* FAQ Content Display */}
-              {contentType === 'faq' && ecommerceContent?.faqs && ecommerceContent?.faqs.length > 0 && (
+              {ecommerceContent.faqs && ecommerceContent.faqs.length > 0 && (
                 <div className="space-y-6">
-                  <div className="bg-blue-50 p-6 rounded-lg">
+                  <div className="bg-purple-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
                       <Search className="w-5 h-5" />
                       Generated FAQs
                     </h4>
                     
                     <div className="space-y-4">
-                      {ecommerceContent?.faqs.map((faq, index) => (
+                      {ecommerceContent.faqs.map((faq, index) => (
                         <div key={index} className="bg-white p-4 rounded border">
                           <div className="font-medium text-black mb-2">Q: {faq.question}</div>
                           <div className="text-gray-700">A: {faq.answer}</div>
@@ -2135,13 +1746,8 @@ export function FAQContentAnalyzer() {
                 </div>
               )}
 
-                {/* SEO Recommendations */}
-                {ecommerceContent?.seoRecommendations
-                  && (
-                  (contentType === 'product' && !!ecommerceContent?.productContent)
-                  || (contentType === 'category' && !!ecommerceContent?.categoryContent)
-                  || (contentType === 'faq' && !!(ecommerceContent?.faqs && ecommerceContent?.faqs.length > 0))
-                ) && (
+              {/* SEO Recommendations */}
+              {ecommerceContent.seoRecommendations && (
                 <div className="space-y-6">
                   <div className="bg-yellow-50 p-6 rounded-lg">
                     <h4 className="text-lg font-semibold text-black mb-4 flex items-center gap-2">
@@ -2153,11 +1759,9 @@ export function FAQContentAnalyzer() {
                       <div>
                         <h5 className="font-medium text-black mb-2">Schema Suggestions</h5>
                         <ul className="text-gray-700 bg-white p-3 rounded border">
-                          {ecommerceContent?.seoRecommendations.schemaSuggestions.map((suggestion, index) => (
+                          {ecommerceContent.seoRecommendations.schemaSuggestions.map((suggestion, index) => (
                             <li key={index} className="flex items-start gap-2">
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                              <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                               {suggestion}
                             </li>
                           ))}
@@ -2165,11 +1769,11 @@ export function FAQContentAnalyzer() {
                       </div>
                       
                       <div>
-                        <h5 className="font-medium text-black mb-2">Content Depth Score: {ecommerceContent?.seoRecommendations.contentDepthScore}/100</h5>
+                        <h5 className="font-medium text-black mb-2">Content Depth Score: {ecommerceContent.seoRecommendations.contentDepthScore}/100</h5>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div 
                             className="bg-blue-600 h-2 rounded-full" 
-                            style={{ width: `${ecommerceContent?.seoRecommendations.contentDepthScore}%` }}
+                            style={{ width: `${ecommerceContent.seoRecommendations.contentDepthScore}%` }}
                           ></div>
                         </div>
                       </div>
@@ -2177,7 +1781,7 @@ export function FAQContentAnalyzer() {
                       <div>
                         <h5 className="font-medium text-black mb-2">AI Optimization Tips</h5>
                         <ul className="text-gray-700 bg-white p-3 rounded border">
-                          {ecommerceContent?.seoRecommendations.aiOptimizationTips.map((tip, index) => (
+                          {ecommerceContent.seoRecommendations.aiOptimizationTips.map((tip, index) => (
                             <li key={index} className="flex items-start gap-2">
                               <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
                               {tip}
@@ -2189,7 +1793,7 @@ export function FAQContentAnalyzer() {
                       <div>
                         <h5 className="font-medium text-black mb-2">Technical SEO Reminders</h5>
                         <ul className="text-gray-700 bg-white p-3 rounded border">
-                          {ecommerceContent?.seoRecommendations.technicalSeoReminders.map((reminder, index) => (
+                          {ecommerceContent.seoRecommendations.technicalSeoReminders.map((reminder, index) => (
                             <li key={index} className="flex items-start gap-2">
                               <AlertCircle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
                               {reminder}
@@ -2214,16 +1818,11 @@ export function FAQContentAnalyzer() {
           <button
             onClick={() => {
               setContent('');
-              setEcomFaqContent('');
               setFaqs([]);
               setGeneratedQuestions([]);
               setSelectedQuestions(new Set());
-              setEcomGeneratedQuestions([]);
-              setEcomSelectedQuestions(new Set());
               setShowFAQSection(false);
               setShowQuestionsSection(false);
-              setShowEcomFAQSection(false);
-              setShowEcomQuestionsSection(false);
               setCurrentSession(null);
               setIsGeneratingQuestions(false);
               setIsGeneratingAnswers(false);
@@ -2236,8 +1835,6 @@ export function FAQContentAnalyzer() {
                 localStorage.removeItem(userCurrentSessionKey);
                 localStorage.removeItem(pendingKey);
                 localStorage.removeItem(generatedFAQsKey);
-                // Clear last persisted FAQ UI state
-                try { localStorage.removeItem(getFaqPersistKey()); } catch {}
               }
               // Reset textarea height to original state
               if (textareaRef.current) {
@@ -2329,7 +1926,7 @@ export function FAQContentAnalyzer() {
                               // Regenerate FAQs for this session
                               setContent(session.blogContent || '');
                               setFaqProvider(session.questionProvider || 'gemini');
-                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
                               generateQuestions();
                             }}
                             className="p-2 bg-white border border-gray-300 rounded-lg text-black hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"
@@ -2430,7 +2027,7 @@ export function FAQContentAnalyzer() {
                               // Regenerate Q&A for this session
                               setContent(session.blogContent || '');
                               setFaqProvider(session.questionProvider || 'gemini');
-                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3-sonnet-20240229' : 'gemini-1.5-flash'));
                               generateQuestions();
                             }}
                             className="p-2 bg-white border border-gray-300 rounded-lg text-black hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"

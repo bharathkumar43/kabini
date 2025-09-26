@@ -20,6 +20,45 @@ class ApiService {
     console.log('[ApiService] Response status:', response.status);
     console.log('[ApiService] Response headers:', response.headers);
 
+    // Handle 403 Forbidden (token expired)
+    if (response.status === 403) {
+      console.log('[ApiService] 403 Forbidden - attempting token refresh');
+      const refreshed = await authService.refreshToken();
+      if (refreshed) {
+        console.log('[ApiService] Token refreshed successfully, retrying request');
+        // Retry the request with new token
+        const retryResponse = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...authService.getAuthHeaders(),
+            ...options.headers,
+          },
+          ...options,
+        });
+        
+        if (!retryResponse.ok) {
+          const errorData = await retryResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP error! status: ${retryResponse.status}`);
+        }
+        
+        // Check if retry response is JSON
+        const retryContentType = retryResponse.headers.get('content-type');
+        if (!retryContentType || !retryContentType.includes('application/json')) {
+          const text = await retryResponse.text();
+          console.error('[ApiService] Non-JSON response received on retry:', text.substring(0, 200));
+          throw new Error(`Expected JSON response but got: ${retryContentType}`);
+        }
+        
+        return retryResponse.json();
+      } else {
+        console.log('[ApiService] Token refresh failed, redirecting to login');
+        // Clear tokens and redirect to login
+        authService.logout();
+        window.location.href = '/login';
+        throw new Error('Session expired. Please log in again.');
+      }
+    }
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
@@ -630,6 +669,50 @@ class ApiService {
     });
   }
 
+  async extractSmartHtml(url: string): Promise<{ success: boolean; html: string }> {
+    console.log('[API Service] Smart extract for URL:', url);
+    return this.request('/extract/smart', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  // E-commerce content analysis helpers (Google Custom Search based)
+  async getOffsiteSignals(params: { brandOrProduct: string; domain?: string }) {
+    return this.request('/ecommerce-content/offsite-signals', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+
+  async getCompetitors(params: { brandOrProduct: string; category?: string; currentUrl?: string }) {
+    return this.request('/ecommerce-content/competitors', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+
+  async getProductCompetitors(productQuery: string, currentUrl?: string) {
+    return this.request('/ecommerce-content/product-competitors', {
+      method: 'POST',
+      body: JSON.stringify({ productQuery, currentUrl })
+    });
+  }
+
+  async getSerpTop(query: string, num: number = 10) {
+    return this.request('/ecommerce-content/serp-top', {
+      method: 'POST',
+      body: JSON.stringify({ query, num })
+    });
+  }
+
+  async fetchBatchHtml(urls: string[]) {
+    return this.request('/ecommerce-content/fetch-batch', {
+      method: 'POST',
+      body: JSON.stringify({ urls })
+    });
+  }
+
 
   // Smart Competitor Analysis Methods
   // GET all smart analyses for the user
@@ -792,6 +875,141 @@ class ApiService {
   // Publish improved HTML to Webflow CMS item
   // Webflow disabled
   // async publishToWebflow(...) {}
+
+  // ===================== Shopify OAuth Integration =====================
+  getShopifyAuthStartUrl(shopDomain: string) {
+    const params = new URLSearchParams({ shop: shopDomain });
+    return `${API_BASE_URL}/shopify/auth/start?${params.toString()}`;
+  }
+  getShopifyAuthStartUrlWithCreds(shopDomain: string, credsId: string) {
+    const params = new URLSearchParams({ shop: shopDomain, credsId });
+    return `${API_BASE_URL}/shopify/auth/start?${params.toString()}`;
+  }
+  async listShopifyProducts(cursor?: string, shop?: string) {
+    const sp = new URLSearchParams();
+    if (cursor) sp.append('after', cursor);
+    if (shop) sp.append('shop', shop);
+    const qs = sp.toString() ? `?${sp.toString()}` : '';
+    return this.request(`/shopify/products${qs}`, { method: 'GET' });
+  }
+  async getShopifyProductByHandle(handle: string, shop?: string) {
+    const sp = new URLSearchParams({ handle });
+    if (shop) sp.append('shop', shop);
+    const qs = `?${sp.toString()}`;
+    return this.request(`/shopify/product${qs}`, { method: 'GET' });
+  }
+  async getShopifyProductById(id: string, shop?: string) {
+    const sp = new URLSearchParams({ id });
+    if (shop) sp.append('shop', shop);
+    const qs = `?${sp.toString()}`;
+    return this.request(`/shopify/product${qs}`, { method: 'GET' });
+  }
+  async listShopifyConnections() {
+    return this.request('/shopify/connections', { method: 'GET' });
+  }
+  async disconnectShopify(shop: string) {
+    const qs = `?shop=${encodeURIComponent(shop)}`;
+    return this.request(`/shopify/connection${qs}`, { method: 'DELETE' });
+  }
+
+  // Shopify Credentials Manager (BYO)
+  async createShopifyCreds(input: { name?: string; apiKey: string; apiSecret: string; redirectUri?: string }) {
+    return this.request('/shopify/credentials', { method: 'POST', body: JSON.stringify(input) });
+  }
+  async listShopifyCreds() {
+    return this.request('/shopify/credentials', { method: 'GET' });
+  }
+  async deleteShopifyCreds(id: string) {
+    return this.request(`/shopify/credentials/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  // Shopify Public
+  async getPublicShopifyProduct(params: { url?: string; shop?: string; handle?: string }) {
+    const sp = new URLSearchParams();
+    if (params.url) sp.append('url', params.url);
+    if (params.shop) sp.append('shop', params.shop);
+    if (params.handle) sp.append('handle', params.handle);
+    const qs = sp.toString() ? `?${sp.toString()}` : '';
+    return this.request(`/shopify/public-product${qs}`, { method: 'GET' });
+  }
+  async listPublicShopifyProducts(shop: string) {
+    const qs = `?shop=${encodeURIComponent(shop)}`;
+    return this.request(`/shopify/public-list${qs}`, { method: 'GET' });
+  }
+
+  // Shopify Storefront
+  async connectStorefront(shop: string, token: string) {
+    return this.request('/shopify/storefront/connect', { method: 'POST', body: JSON.stringify({ shop, token }) });
+  }
+  async testStorefront(shop: string) {
+    const qs = `?shop=${encodeURIComponent(shop)}`;
+    return this.request(`/shopify/storefront/test${qs}`, { method: 'GET' });
+  }
+  async listStorefrontConnections() {
+    return this.request('/shopify/storefront/connections', { method: 'GET' });
+  }
+  async listStorefrontProducts(shop: string, after?: string) {
+    const sp = new URLSearchParams({ shop }); if (after) sp.append('after', after);
+    const qs = `?${sp.toString()}`;
+    return this.request(`/shopify/storefront/products${qs}`, { method: 'GET' });
+  }
+  async getStorefrontProduct(shop: string, handle: string) {
+    const sp = new URLSearchParams({ shop, handle });
+    const qs = `?${sp.toString()}`;
+    return this.request(`/shopify/storefront/product${qs}`, { method: 'GET' });
+  }
+
+  // E-commerce AI Visibility Methods
+  async getShopperBehaviorData(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/shopper-behavior${qs}`, { method: 'GET' });
+  }
+
+  async getCartAbandonmentAnalysis(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/cart-abandonment${qs}`, { method: 'GET' });
+  }
+
+  async getQueryIntentAnalysis(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/query-intent${qs}`, { method: 'GET' });
+  }
+
+  async getEngagementFunnel(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/engagement-funnel${qs}`, { method: 'GET' });
+  }
+
+  async getRealTimeMetrics(storeId: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}`;
+    return this.request(`/ecommerce/real-time-metrics${qs}`, { method: 'GET' });
+  }
+
+  async getAIInsights(storeId: string, timeRange: string) {
+    const qs = `?storeId=${encodeURIComponent(storeId)}&timeRange=${encodeURIComponent(timeRange)}`;
+    return this.request(`/ecommerce/ai-insights${qs}`, { method: 'GET' });
+  }
+
+  // E-commerce Content Analysis helpers
+  async priceCompare(productQuery: string, currentUrl?: string) {
+    return this.request('/ecommerce-content/price-compare', {
+      method: 'POST',
+      body: JSON.stringify({ productQuery, currentUrl })
+    });
+  }
+
+  // E-commerce Content Generation
+  async generateEcommerceContent(data: {
+    type: 'product' | 'category' | 'faq';
+    inputs: any;
+    provider: string;
+    model: string;
+  }) {
+    return this.request('/ecommerce/generate-content', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
 
   // Webflow OAuth helpers
   // getWebflowAuthUrl(): string { return ''; }
