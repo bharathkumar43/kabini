@@ -1,40 +1,42 @@
 import { useState, useEffect } from 'react';
-import { User, BarChart3, FileText, History as HistoryIcon, DollarSign, Zap, Menu, X, Target, Globe, Plus, Loader2, RefreshCw, LogOut, Eye, Settings } from 'lucide-react';
-import { ContentInput } from './components/ContentInput';
-import { historyService } from './services/historyService';
+import { User, BarChart3, FileText, History as HistoryIcon, Zap, LogOut, Eye, Settings, Target } from 'lucide-react';
+// import { ContentInput } from './components/ContentInput';
+// import { historyService } from './services/historyService';
 import { Statistics } from './components/Statistics';
 import Login from './components/Login';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { downloadFile } from './utils/fileUtils';
-import type { QAItem, SessionData, User as UserType, QAHistoryItem } from './types';
-import type { UrlData } from './components/ContentInput';
+import type { SessionData, User as UserType } from './types';
+// import type { QAItem, QAHistoryItem } from './types';
+// import type { UrlData } from './components/ContentInput';
 import { useAuth } from './contexts/AuthContext';
-import { calculateCost } from './utils/pricing';
+// import { calculateCost } from './utils/pricing';
 import { History } from './components/History';
-import { apiService } from './services/apiService';
-import { performFullCleanup } from './utils/sessionCleanup';
+// import { apiService } from './services/apiService';
+// import { performFullCleanup } from './utils/sessionCleanup';
 
 // Utility function to hash content for cache keys
-const hashContent = (content: string): string => {
-  let hash = 0;
-  if (content.length === 0) return hash.toString();
-  for (let i = 0; i < content.length; i++) {
-    const char = content.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString();
-};
+// const hashContent = (content: string): string => {
+//   let hash = 0;
+//   if (content.length === 0) return hash.toString();
+//   for (let i = 0; i < content.length; i++) {
+//     const char = content.charCodeAt(i);
+//     hash = ((hash << 5) - hash) + char;
+//     hash = hash & hash; // Convert to 32-bit integer
+//   }
+//   return Math.abs(hash).toString();
+// };
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Overview } from './components/Overview.tsx';
 // import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
-import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
+// import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
+import { CompetitorInsight } from './components/AIVisibilityAnalysis';
 import EmailVerification from './components/EmailVerification';
 
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
 // Content structure pages disabled
 import { ContentStructureAnalysisRoute } from './components/ContentStructureAnalysisRoute';
-import { ContentStructureLanding } from './components/ContentStructureLanding';
+// import { ContentStructureLanding } from './components/ContentStructureLanding';
 import SignUp from './components/SignUp';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
@@ -47,10 +49,10 @@ import IdleSessionManager from './components/IdleSessionManager';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
-const COMPETITOR_URLS_KEY = 'llm_competitor_urls';
-const QA_WORK_KEY = 'llm_qa_current_work';
-const ENHANCE_CONTENT_KEY = 'enhance_content_state';
-const ENHANCE_CONTENT_CACHE_KEY = 'enhance_content_cache_';
+// const COMPETITOR_URLS_KEY = 'llm_competitor_urls';
+// const QA_WORK_KEY = 'llm_qa_current_work';
+// const ENHANCE_CONTENT_KEY = 'enhance_content_state';
+// const ENHANCE_CONTENT_CACHE_KEY = 'enhance_content_cache_';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: <Zap />, path: '/overview' },
@@ -215,44 +217,44 @@ function QAGenerationPage() {
   return <FAQContentAnalyzer />;
 }
 
-function CostBreakdownPage() {
-  const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
-  const [currentSession] = useLocalStorage<SessionData | null>(CURRENT_SESSION_KEY, null);
-
-  const getTotalCost = () => {
-    return sessions.reduce((sum, session) => {
-      return sum + parseFloat(session.statistics?.totalCost || '0');
-    }, 0);
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="card">
-        <h2 className="text-2xl font-bold mb-6 text-primary">Cost Breakdown</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center p-6 bg-gray-800/50 rounded-lg border border-primary/20">
-            <div className="text-3xl font-bold text-primary mb-2">
-              ${getTotalCost().toFixed(2)}
-            </div>
-            <div className="text-gray-300">Total Cost</div>
-          </div>
-          <div className="text-center p-6 bg-gray-800/50 rounded-lg border border-primary/20">
-            <div className="text-3xl font-bold text-primary mb-2">
-              {currentSession?.qaData?.length || 0}
-            </div>
-            <div className="text-gray-300">Questions Generated</div>
-          </div>
-          <div className="text-center p-6 bg-gray-800/50 rounded-lg border border-primary/20">
-            <div className="text-3xl font-bold text-primary mb-2">
-              ${((currentSession?.qaData?.length || 0) * 0.01).toFixed(2)}
-            </div>
-            <div className="text-gray-300">Estimated Monthly</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// function CostBreakdownPage() {
+//   const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
+//   const [currentSession] = useLocalStorage<SessionData | null>(CURRENT_SESSION_KEY, null);
+// 
+//   const getTotalCost = () => {
+//     return sessions.reduce((sum, session) => {
+//       return sum + parseFloat(session.statistics?.totalCost || '0');
+//     }, 0);
+//   };
+// 
+//   return (
+//     <div className="max-w-4xl mx-auto">
+//       <div className="card">
+//         <h2 className="text-2xl font-bold mb-6 text-primary">Cost Breakdown</h2>
+//         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+//           <div className="text-center p-6 bg-gray-800/50 rounded-lg border border-primary/20">
+//             <div className="text-3xl font-bold text-primary mb-2">
+//               ${getTotalCost().toFixed(2)}
+//             </div>
+//             <div className="text-gray-300">Total Cost</div>
+//           </div>
+//           <div className="text-center p-6 bg-gray-800/50 rounded-lg border border-primary/20">
+//             <div className="text-3xl font-bold text-primary mb-2">
+//               {currentSession?.qaData?.length || 0}
+//             </div>
+//             <div className="text-gray-300">Questions Generated</div>
+//           </div>
+//           <div className="text-center p-6 bg-gray-800/50 rounded-lg border border-primary/20">
+//             <div className="text-3xl font-bold text-primary mb-2">
+//               ${((currentSession?.qaData?.length || 0) * 0.01).toFixed(2)}
+//             </div>
+//             <div className="text-gray-300">Estimated Monthly</div>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 function AppContent() {
   const { isAuthenticated, isLoading, logout, user, refreshUser } = useAuth();
@@ -300,17 +302,17 @@ function AppContent() {
   const [currentSession] = useLocalStorage<SessionData | null>(CURRENT_SESSION_KEY, null);
 
   // Get competitor domains from COMPETITOR_URLS_KEY
-  let competitorDomains: string[] = [];
-  try {
-    const urlList = JSON.parse(localStorage.getItem(COMPETITOR_URLS_KEY) || '[]') as string[];
-    competitorDomains = Array.from(new Set(urlList.map((url: string) => {
-      try {
-        return new URL(url).hostname.replace(/^www\./, '');
-      } catch {
-        return url;
-      }
-    }))).filter(Boolean);
-  } catch {}
+  // let competitorDomains: string[] = [];
+  // try {
+  //   const urlList = JSON.parse(localStorage.getItem(COMPETITOR_URLS_KEY) || '[]') as string[];
+  //   competitorDomains = Array.from(new Set(urlList.map((url: string) => {
+  //     try {
+  //       return new URL(url).hostname.replace(/^www\./, '');
+  //     } catch {
+  //       return url;
+  //     }
+  //   }))).filter(Boolean);
+  // } catch {}
 
   if (isLoading) {
     return (
@@ -382,7 +384,7 @@ function AppContent() {
           <div className="main-content-container">
             <Routes>
               <Route path="/overview" element={<Overview />} />
-              <Route path="/ai-visibility-analysis" element={<SmartCompetitorAnalysis />} />
+              <Route path="/ai-visibility-analysis" element={<CompetitorInsight />} />
               <Route path="/qa-generation" element={<QAGenerationPage />} />
               <Route path="/enhance-content" element={<QAGenerationPage />} />
               {/* Content Analysis disabled */}

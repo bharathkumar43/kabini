@@ -288,6 +288,8 @@ export function CompetitorInsight() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string>('auto');
+  // Dropdown open/close state for any menus tied to '.dropdown-container'
+  const [showDropdown, setShowDropdown] = useState(false);
   // New structured inputs for analysis configuration
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [productName, setProductName] = useState('');

@@ -610,6 +610,8 @@ export function Overview() {
   const [refreshKey, setRefreshKey] = useState(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Dropdown open/close state for any menus tied to '.dropdown-container'
+  const [showDropdown, setShowDropdown] = useState(false);
 
   // Load history items from service
   useEffect(() => {

@@ -1,4 +1,4 @@
-const axios = require('axios');
+﻿const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { LLMService } = require('./llmService');
 const cheerio = require('cheerio');
@@ -83,7 +83,7 @@ function getConfiguredModelKeys() {
   if (isValidApiKey(ANTHROPIC_API_KEY)) keys.push('claude');
   if (isValidApiKey(PERPLEXITY_API_KEY)) keys.push('perplexity');
   
-  console.log(`🔧 Configured model keys: [${keys.join(', ')}]`);
+  console.log(`≡ƒöº Configured model keys: [${keys.join(', ')}]`);
   return keys;
 }
 
@@ -200,7 +200,7 @@ function normalizeAndScoreModels(rawMetricsByCompetitor) {
   return rawMetricsByCompetitor;
 }
 
-// --- AI Traffic Share (query-pool → model responses) ---
+// --- AI Traffic Share (query-pool ΓåÆ model responses) ---
 function getDefaultQueryPool(industry = '', geo = null, companyName = '', product = '') {
   const base = [
     'top companies in [INDUSTRY]',
@@ -244,7 +244,7 @@ function getCitationPromptBank({ company = '', industry = '', product = '', coun
   const industryCtx = industry || '[industry]';
   const productCtx = product || '[product]';
   const countryCtx = country ? ` in ${country}` : '';
-  const wrapper = 'Answer briefly. Then output a Sources section with 3–8 items as: Category | Domain | URL. Use real HTTPS links, one domain per line, no duplicates.';
+  const wrapper = 'Answer briefly. Then output a Sources section with 3ΓÇô8 items as: Category | Domain | URL. Use real HTTPS links, one domain per line, no duplicates.';
   return [
     `${wrapper}\nWho are the leading vendors in ${industryCtx}? For each key claim include a supporting source.`,
     `${wrapper}\nCompare ${company} to peers in ${industryCtx}. Cite one link per claim.`,
@@ -262,10 +262,10 @@ function getContentStylePromptBank({ company = '', competitorA = '', competitorB
   const geo = country ? ` in ${country}` : '';
   const compA = competitorA || 'Competitor A';
   const compB = competitorB || 'Competitor B';
-  const wrap = 'Answer briefly. Then output a Sources section with 3–8 items as: Category | Domain | URL.';
+  const wrap = 'Answer briefly. Then output a Sources section with 3ΓÇô8 items as: Category | Domain | URL.';
   return [
     // List style
-    `${wrap}\nTop 10 ecommerce sites for ${prod}${geo}. Rank them and give one‑line reasons.`,
+    `${wrap}\nTop 10 ecommerce sites for ${prod}${geo}. Rank them and give oneΓÇæline reasons.`,
     `${wrap}\nBest places to buy ${prod} today; list 5 with key strengths.`,
     // Comparison style
     `${wrap}\nCompare ${company} vs ${compA} vs ${compB} on price, selection, shipping, returns. Provide a concise table and pros/cons.`,
@@ -277,8 +277,8 @@ function getContentStylePromptBank({ company = '', competitorA = '', competitorB
     `${wrap}\nWhere can I buy ${prod} safely online${geo}? Include any trust or warranty cues.`,
     `${wrap}\nIs ${company} legit for ${prod}? What do buyers typically say?`,
     // Editorial style
-    `${wrap}\nSummarize recent editorial coverage of top ${ind} retailers (last 12 months). Who is called 'most trusted' or 'best overall' and why?`,
-    `${wrap}\nAccording to major publications, which ${ind} stores lead today? Cite 3–5 sources.`
+    `${wrap}\nSummarize recent editorial coverage of top ${ind} retailers (last 12 months). Who is called ΓÇÿmost trustedΓÇÖ or ΓÇÿbest overallΓÇÖ and why?`,
+    `${wrap}\nAccording to major publications, which ${ind} stores lead today? Cite 3ΓÇô5 sources.`
   ];
 }
 
@@ -327,7 +327,7 @@ function getGeoCompetitorPromptBank({ product, category, city, country, region, 
 }
 
 async function callModelSimple(modelKey, prompt) {
-  console.log(`\n🤖 [callModelSimple] Calling ${modelKey} with prompt: "${prompt.substring(0, 100)}..."`);
+  console.log(`\n≡ƒñû [callModelSimple] Calling ${modelKey} with prompt: "${prompt.substring(0, 100)}..."`);
   
   try {
     // Check if API key exists and is not a placeholder value
@@ -343,23 +343,23 @@ async function callModelSimple(modelKey, prompt) {
     
     if (modelKey === 'gemini') {
       if (!isValidApiKey(GEMINI_API_KEY)) {
-        console.log(`   ❌ [callModelSimple] Invalid Gemini API key`);
+        console.log(`   Γ¥î [callModelSimple] Invalid Gemini API key`);
         return '';
       }
-      console.log(`   📞 [callModelSimple] Calling Gemini API...`);
+      console.log(`   ≡ƒô₧ [callModelSimple] Calling Gemini API...`);
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
       const res = await model.generateContent(prompt);
       const response = res?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      console.log(`   ✅ [callModelSimple] Gemini response: ${response.length} characters`);
+      console.log(`   Γ£à [callModelSimple] Gemini response: ${response.length} characters`);
       return response;
     }
     if (modelKey === 'chatgpt') {
       if (!isValidApiKey(OPENAI_API_KEY)) {
-        console.log(`   ❌ [callModelSimple] Invalid ChatGPT API key`);
+        console.log(`   Γ¥î [callModelSimple] Invalid ChatGPT API key`);
         return '';
       }
-      console.log(`   📞 [callModelSimple] Calling ChatGPT API...`);
+      console.log(`   ≡ƒô₧ [callModelSimple] Calling ChatGPT API...`);
       const res = await axios.post('https://api.openai.com/v1/chat/completions', {
         model: 'gpt-3.5-turbo',
         messages: [
@@ -369,50 +369,50 @@ async function callModelSimple(modelKey, prompt) {
         max_tokens: 400
       }, { headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` } });
       const response = res?.data?.choices?.[0]?.message?.content || '';
-      console.log(`   ✅ [callModelSimple] ChatGPT response: ${response.length} characters`);
+      console.log(`   Γ£à [callModelSimple] ChatGPT response: ${response.length} characters`);
       return response;
     }
     if (modelKey === 'claude') {
       if (!isValidApiKey(ANTHROPIC_API_KEY)) {
-        console.log(`   ❌ [callModelSimple] Invalid Claude API key`);
+        console.log(`   Γ¥î [callModelSimple] Invalid Claude API key`);
         return '';
       }
-      console.log(`   📞 [callModelSimple] Calling Claude API...`);
+      console.log(`   ≡ƒô₧ [callModelSimple] Calling Claude API...`);
       const res = await axios.post('https://api.anthropic.com/v1/messages', {
         model: 'claude-3.5-sonnet-20241022',
         max_tokens: 400,
         messages: [{ role: 'user', content: prompt }]
       }, { headers: { 'Authorization': `Bearer ${ANTHROPIC_API_KEY}`, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' } });
       const response = res?.data?.content?.[0]?.text || '';
-      console.log(`   ✅ [callModelSimple] Claude response: ${response.length} characters`);
+      console.log(`   Γ£à [callModelSimple] Claude response: ${response.length} characters`);
       return response;
     }
     if (modelKey === 'perplexity') {
       if (!isValidApiKey(PERPLEXITY_API_KEY)) {
-        console.log(`   ❌ [callModelSimple] Invalid Perplexity API key`);
+        console.log(`   Γ¥î [callModelSimple] Invalid Perplexity API key`);
         return '';
       }
-      console.log(`   📞 [callModelSimple] Calling Perplexity API...`);
+      console.log(`   ≡ƒô₧ [callModelSimple] Calling Perplexity API...`);
       try {
         const resp = await sharedLLM.callPerplexityAPI(prompt, 'sonar', false);
         const response = resp?.text || '';
-        console.log(`   ✅ [callModelSimple] Perplexity response: ${response.length} characters`);
+        console.log(`   Γ£à [callModelSimple] Perplexity response: ${response.length} characters`);
         return response;
       } catch (error) {
-        console.log(`   ❌ [callModelSimple] Perplexity API error: ${error.message}`);
+        console.log(`   Γ¥î [callModelSimple] Perplexity API error: ${error.message}`);
         return '';
       }
     }
-    console.log(`   ❌ [callModelSimple] Unknown model key: ${modelKey}`);
+    console.log(`   Γ¥î [callModelSimple] Unknown model key: ${modelKey}`);
     return '';
   } catch (error) {
-    console.log(`   ❌ [callModelSimple] Error calling ${modelKey}: ${error.message}`);
+    console.log(`   Γ¥î [callModelSimple] Error calling ${modelKey}: ${error.message}`);
     return '';
   }
 }
 
 async function computeAiTrafficShares(competitorNames, industry, isFast, opts = {}) {
-  console.log('\n🚦 [computeAiTrafficShares] Starting AI Traffic Share calculation...');
+  console.log('\n≡ƒÜª [computeAiTrafficShares] Starting AI Traffic Share calculation...');
   console.log(`   Competitors: ${competitorNames.join(', ')}`);
   console.log(`   Industry: ${industry}`);
   console.log(`   Fast mode: ${isFast}`);
@@ -430,7 +430,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   console.log(`   Configured models: ${modelKeys.join(', ')}`);
   
   if (modelKeys.length === 0) {
-    console.log('❌ [computeAiTrafficShares] No models configured - returning empty result');
+    console.log('Γ¥î [computeAiTrafficShares] No models configured - returning empty result');
     return { sharesByCompetitor: {}, totals: {}, counts: {}, queries: [] };
   }
   
@@ -450,7 +450,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   const promptFor = (q) => `For the topic: "${q}", consider these vendors: ${listVendors}. Briefly discuss which of these are most relevant/recommended today. Mention vendor names directly.`;
 
   // Create all LLM calls in parallel
-  console.log('\n🚀 [computeAiTrafficShares] Creating parallel LLM calls...');
+  console.log('\n≡ƒÜÇ [computeAiTrafficShares] Creating parallel LLM calls...');
   const allCalls = [];
   
   modelKeys.forEach(m => {
@@ -464,14 +464,14 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
     });
   });
   
-  console.log(`   Total parallel calls: ${allCalls.length} (${modelKeys.length} models × ${queries.length} queries)`);
+  console.log(`   Total parallel calls: ${allCalls.length} (${modelKeys.length} models ├ù ${queries.length} queries)`);
   
   // Execute all calls in parallel
   const responses = await Promise.all(allCalls.map(async (call) => {
     try {
-      console.log(`   📞 [${call.model}] Query ${call.queryIndex + 1}: "${call.query}"`);
+      console.log(`   ≡ƒô₧ [${call.model}] Query ${call.queryIndex + 1}: "${call.query}"`);
       const text = await withTimeout(callModelSimple(call.model, call.prompt), isFast ? 8000 : 12000, '').catch(() => '');
-      console.log(`   ✅ [${call.model}] Response: ${text ? text.length : 0} characters`);
+      console.log(`   Γ£à [${call.model}] Response: ${text ? text.length : 0} characters`);
       return {
         model: call.model,
         query: call.query,
@@ -480,7 +480,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
         success: !!(text && String(text).trim())
       };
     } catch (error) {
-      console.log(`   ❌ [${call.model}] Error: ${error.message}`);
+      console.log(`   Γ¥î [${call.model}] Error: ${error.message}`);
       return {
         model: call.model,
         query: call.query,
@@ -491,12 +491,12 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
     }
   }));
   
-  console.log(`\n📊 [computeAiTrafficShares] Processing ${responses.length} responses...`);
+  console.log(`\n≡ƒôè [computeAiTrafficShares] Processing ${responses.length} responses...`);
   
   // Process all responses in parallel
   const processingPromises = responses.map(async (response) => {
     if (!response.success) {
-      console.log(`   ⚠️ Skipping failed response from ${response.model} for "${response.query}"`);
+      console.log(`   ΓÜá∩╕Å Skipping failed response from ${response.model} for "${response.query}"`);
       return { model: response.model, queryIndex: response.queryIndex, mentions: [], ranked: [] };
     }
     
@@ -509,7 +509,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
       const matched = aliases.some(a => wordBoundaryRegex(a).test(lower));
       if (matched) {
         mentions.push(name);
-        console.log(`     ✅ [${response.model}] Found mention of "${name}"`);
+        console.log(`     Γ£à [${response.model}] Found mention of "${name}"`);
       }
     });
     const ranked = rankCompetitorsInText(response.text, competitorNames, aliasMap);
@@ -519,7 +519,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   const processedResults = await Promise.all(processingPromises);
   
   // Aggregate results
-  console.log('\n📈 [computeAiTrafficShares] Aggregating results...');
+  console.log('\n≡ƒôê [computeAiTrafficShares] Aggregating results...');
   processedResults.forEach(result => {
     const m = result.model;
     const queryIndex = result.queryIndex;
@@ -545,7 +545,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   });
 
   // Finalize raw counts only (no formulas)
-  console.log('\n📊 [computeAiTrafficShares] Finalizing counts...');
+  console.log('\n≡ƒôè [computeAiTrafficShares] Finalizing counts...');
   const countsByCompetitor = {};
   competitorNames.forEach(name => {
     const byModelCounts = {};
@@ -569,7 +569,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
     countsByCompetitor[name] = { totalMentions, byModel: byModelCounts, placementByModel, placementTotals };
   });
   
-  console.log('\n✅ [computeAiTrafficShares] Calculation completed (counts only)');
+  console.log('\nΓ£à [computeAiTrafficShares] Calculation completed (counts only)');
   return { countsByCompetitor, queries };
 }
 
@@ -959,7 +959,7 @@ function classifySourceCategoryFromText(text) {
   if (/forbes|bloomberg|wsj|nytimes|guardian|techcrunch|press|editorial/.test(t)) return 'News / PR Mentions';
   if (/amazon|etsy|ebay|walmart|flipkart|aliexpress/.test(t)) return 'Marketplaces';
   if (/blog|guide|buyers guide|how to|list of/.test(t)) return 'Blogs / Guides';
-  return '—';
+  return 'ΓÇö';
 }
 
 // --- Shopping Visibility (Transactional Mentions) ---
@@ -987,7 +987,7 @@ function textIncludesNear(text, term, keywords) {
 }
 
 async function computeShoppingVisibilityCounts(competitorNames, product, country, isFast) {
-  console.log('\n🛍️ [computeShoppingVisibilityCounts] Starting transactional mentions calculation...');
+  console.log('\n≡ƒ¢ì∩╕Å [computeShoppingVisibilityCounts] Starting transactional mentions calculation...');
   console.log(`   Competitors: ${competitorNames.join(', ')}`);
   console.log(`   Product: ${product || '(none)'}`);
   console.log(`   Country: ${country || '(none)'}`);
@@ -1000,7 +1000,7 @@ async function computeShoppingVisibilityCounts(competitorNames, product, country
   const modelKeys = getConfiguredModelKeys();
   console.log(`   Configured models: ${modelKeys.join(', ')}`);
   if (modelKeys.length === 0) {
-    console.log('❌ [computeShoppingVisibilityCounts] No models configured - returning empty result');
+    console.log('Γ¥î [computeShoppingVisibilityCounts] No models configured - returning empty result');
     return { countsByCompetitor: {}, queries };
   }
 
@@ -1013,24 +1013,24 @@ async function computeShoppingVisibilityCounts(competitorNames, product, country
 
   const promptFor = (q) => `For the topic: "${q}", consider these vendors: ${listVendors}. Mention the vendors that are commonly recommended as a place to buy. Mention vendor names directly.`;
 
-  console.log('\n🚀 [computeShoppingVisibilityCounts] Creating parallel LLM calls...');
+  console.log('\n≡ƒÜÇ [computeShoppingVisibilityCounts] Creating parallel LLM calls...');
   const allCalls = [];
   modelKeys.forEach(m => {
     queries.forEach((q, i) => {
       allCalls.push({ model: m, query: q, queryIndex: i, prompt: promptFor(q) });
     });
   });
-  console.log(`   Total parallel calls: ${allCalls.length} (${modelKeys.length} models × ${queries.length} queries)`);
+  console.log(`   Total parallel calls: ${allCalls.length} (${modelKeys.length} models ├ù ${queries.length} queries)`);
 
   const responses = await Promise.all(allCalls.map(async (call) => {
     try {
-      console.log(`   📞 [${call.model}] Q${call.queryIndex + 1}: "${call.query}"`);
+      console.log(`   ≡ƒô₧ [${call.model}] Q${call.queryIndex + 1}: "${call.query}"`);
       const text = await withTimeout(callModelSimple(call.model, call.prompt), isFast ? 8000 : 12000, '').catch(() => '');
       const ok = !!(text && String(text).trim());
-      console.log(`   ✅ [${call.model}] Q${call.queryIndex + 1}: ${ok ? (String(text).length + ' chars') : 'empty'}`);
+      console.log(`   Γ£à [${call.model}] Q${call.queryIndex + 1}: ${ok ? (String(text).length + ' chars') : 'empty'}`);
       return { model: call.model, queryIndex: call.queryIndex, text: text || '', success: ok };
     } catch {
-      console.log(`   ❌ [${call.model}] Q${call.queryIndex + 1}: error`);
+      console.log(`   Γ¥î [${call.model}] Q${call.queryIndex + 1}: error`);
       return { model: call.model, queryIndex: call.queryIndex, text: '', success: false };
     }
   }));
@@ -1045,7 +1045,7 @@ async function computeShoppingVisibilityCounts(competitorNames, product, country
       const mentioned = aliases.some(a => textIncludesNear(lower, a, transactionalKeywords));
       if (mentioned) mentions.push(name);
     });
-    console.log(`   🔎 [${r.model}] Q${r.queryIndex + 1}: Mentions → ${mentions.length ? mentions.join(', ') : 'none'}`);
+    console.log(`   ≡ƒöÄ [${r.model}] Q${r.queryIndex + 1}: Mentions ΓåÆ ${mentions.length ? mentions.join(', ') : 'none'}`);
     return { ...r, mentions };
   }));
 
@@ -1063,13 +1063,13 @@ async function computeShoppingVisibilityCounts(competitorNames, product, country
     countsByCompetitor[name] = { total, byModel };
   });
 
-  console.log('\n📊 [computeShoppingVisibilityCounts] Final counts:');
+  console.log('\n≡ƒôè [computeShoppingVisibilityCounts] Final counts:');
   Object.keys(countsByCompetitor).forEach(k => {
     const row = countsByCompetitor[k];
     const byM = modelKeys.map(m => `${m}:${row.byModel[m] || 0}`).join(', ');
     console.log(`   ${k}: total=${row.total} | ${byM}`);
   });
-  console.log('✅ [computeShoppingVisibilityCounts] Completed');
+  console.log('Γ£à [computeShoppingVisibilityCounts] Completed');
   return { countsByCompetitor, queries };
 }
 
@@ -1115,7 +1115,7 @@ function rankCompetitorsInText(text, competitorNames, aliasMap) {
 }
 
 async function computeCitationMetrics(competitorNames, industry, isFast, opts = {}) {
-  console.log('\n🔍 [computeCitationMetrics] Starting citation metrics calculation...');
+  console.log('\n≡ƒöì [computeCitationMetrics] Starting citation metrics calculation...');
   console.log(`   Competitors: ${competitorNames.join(', ')}`);
   console.log(`   Industry: ${industry}`);
   console.log(`   Fast mode: ${isFast}`);
@@ -1127,7 +1127,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
   console.log(`   Configured models: ${modelKeys.join(', ')}`);
   
   if (modelKeys.length === 0) {
-    console.log('❌ [computeCitationMetrics] No models configured - returning empty result');
+    console.log('Γ¥î [computeCitationMetrics] No models configured - returning empty result');
     return {};
   }
   
@@ -1142,7 +1142,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
   console.log(`   Domain keywords: ${domainKeywords.join(', ')}`);
 
   // Create all LLM calls in parallel
-  console.log('\n🚀 [computeCitationMetrics] Creating parallel LLM calls...');
+  console.log('\n≡ƒÜÇ [computeCitationMetrics] Creating parallel LLM calls...');
   const allCalls = [];
   
   modelKeys.forEach(m => {
@@ -1156,14 +1156,14 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
     });
   });
   
-  console.log(`   Total parallel calls: ${allCalls.length} (${modelKeys.length} models × ${queries.length} queries)`);
+  console.log(`   Total parallel calls: ${allCalls.length} (${modelKeys.length} models ├ù ${queries.length} queries)`);
   
   // Execute all calls in parallel
   const responses = await Promise.all(allCalls.map(async (call) => {
     try {
-      console.log(`   📞 [${call.model}] Query ${call.queryIndex + 1}: "${call.query}"`);
+      console.log(`   ≡ƒô₧ [${call.model}] Query ${call.queryIndex + 1}: "${call.query}"`);
       const text = await withTimeout(callModelSimple(call.model, call.prompt), isFast ? 8000 : 12000, '').catch(() => '');
-      console.log(`   ✅ [${call.model}] Response: ${text ? text.length : 0} characters`);
+      console.log(`   Γ£à [${call.model}] Response: ${text ? text.length : 0} characters`);
       return {
         model: call.model,
         query: call.query,
@@ -1172,7 +1172,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
         success: !!(text && String(text).trim())
       };
     } catch (error) {
-      console.log(`   ❌ [${call.model}] Error: ${error.message}`);
+      console.log(`   Γ¥î [${call.model}] Error: ${error.message}`);
       return {
         model: call.model,
         query: call.query,
@@ -1183,12 +1183,12 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
     }
   }));
   
-  console.log(`\n📊 [computeCitationMetrics] Processing ${responses.length} responses...`);
+  console.log(`\n≡ƒôè [computeCitationMetrics] Processing ${responses.length} responses...`);
   
   // Process all responses in parallel
   const processingPromises = responses.map(async (response) => {
     if (!response.success) {
-      console.log(`   ⚠️ Skipping failed response from ${response.model} for "${response.query}"`);
+      console.log(`   ΓÜá∩╕Å Skipping failed response from ${response.model} for "${response.query}"`);
       return { model: response.model, queryIndex: response.queryIndex, mentions: [] };
     }
     
@@ -1202,7 +1202,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
           continue; 
         }
         
-        console.log(`     ✅ [${response.model}] Found mention of "${c}" (count: ${det.count})`);
+        console.log(`     Γ£à [${response.model}] Found mention of "${c}" (count: ${det.count})`);
         
         const s = quickSentimentScore(response.text);
         const sw = sentimentWeightFromScore(s);
@@ -1219,7 +1219,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
           prominence: pf
         });
       } catch (error) {
-        console.log(`     ❌ [${response.model}] Error processing competitor "${c}": ${error.message}`);
+        console.log(`     Γ¥î [${response.model}] Error processing competitor "${c}": ${error.message}`);
       }
     }
     
@@ -1229,7 +1229,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
   const processedResults = await Promise.all(processingPromises);
   
   // Aggregate results
-  console.log('\n📈 [computeCitationMetrics] Aggregating results...');
+  console.log('\n≡ƒôê [computeCitationMetrics] Aggregating results...');
   processedResults.forEach(result => {
     const m = result.model;
     const queryIndex = result.queryIndex;
@@ -1252,7 +1252,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
   });
 
   // Finalize metrics
-  console.log('\n📊 [computeCitationMetrics] Finalizing metrics...');
+  console.log('\n≡ƒôè [computeCitationMetrics] Finalizing metrics...');
   const result = {};
   competitorNames.forEach(c => {
     console.log(`\n   Processing competitor: ${c}`);
@@ -1296,7 +1296,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
     const alpha = 1;
     const smoothedRate = (sumMentions + alpha) / (sumTotals + 2 * alpha);
 
-    // Display scores on 0–100 scale
+    // Display scores on 0ΓÇô100 scale
     const displayScore_volume = Math.max(0, Math.min(100, globalCitationScore * 100));
     const displayScore_equal = Math.max(0, Math.min(100, equalWeighted * 100));
 
@@ -1329,7 +1329,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
     };
   });
   
-  console.log('\n✅ [computeCitationMetrics] Final result summary:');
+  console.log('\nΓ£à [computeCitationMetrics] Final result summary:');
   Object.keys(result).forEach(competitor => {
     const data = result[competitor];
     console.log(`   ${competitor}: Global Citation Score = ${(data.global.citationScore * 100).toFixed(1)}%`);
@@ -1502,7 +1502,7 @@ async function getAudienceProfile(competitorName) {
 
 // Automatic industry and product detection functions
 async function detectIndustryAndProduct(companyName) {
-  console.log(`🔍 Detecting industry and product for: ${companyName}`);
+  console.log(`≡ƒöì Detecting industry and product for: ${companyName}`);
   
   try {
     // Use Google search to find company information
@@ -1520,12 +1520,12 @@ async function detectIndustryAndProduct(companyName) {
         const results = await queryCustomSearchAPI(query);
         allSearchResults = allSearchResults.concat(results);
       } catch (error) {
-        console.log(`   ⚠️ Search failed for: ${query}`);
+        console.log(`   ΓÜá∩╕Å Search failed for: ${query}`);
       }
     }
     
     if (allSearchResults.length === 0) {
-      console.log(`   ⚠️ No search results found for ${companyName}`);
+      console.log(`   ΓÜá∩╕Å No search results found for ${companyName}`);
       return { industry: '', product: '' };
     }
     
@@ -1562,20 +1562,20 @@ Return ONLY a JSON object with this format:
         }
         
         const analysis = JSON.parse(cleanedResponse);
-        console.log(`   ✅ Detected industry: ${analysis.industry}`);
-        console.log(`   ✅ Detected product: ${analysis.product}`);
+        console.log(`   Γ£à Detected industry: ${analysis.industry}`);
+        console.log(`   Γ£à Detected product: ${analysis.product}`);
         return analysis;
       } catch (error) {
-        console.error('   ❌ Failed to parse AI analysis:', error.message);
+        console.error('   Γ¥î Failed to parse AI analysis:', error.message);
         return { industry: '', product: '' };
       }
     } else {
-      console.log(`   ⚠️ No Gemini API key, using fallback detection`);
+      console.log(`   ΓÜá∩╕Å No Gemini API key, using fallback detection`);
       return { industry: '', product: '' };
     }
     
   } catch (error) {
-    console.error(`❌ Industry/product detection error:`, error.message);
+    console.error(`Γ¥î Industry/product detection error:`, error.message);
     return { industry: '', product: '' };
   }
 }
@@ -1670,18 +1670,18 @@ async function queryCustomSearchAPI(query) {
     throw new Error('Google API credentials not configured');
   }
   
-  console.log(`   🔍 Google Search: "${query}"`);
+  console.log(`   ≡ƒöì Google Search: "${query}"`);
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`   📡 Google Search attempt ${attempt}/${maxRetries}...`);
+      console.log(`   ≡ƒôí Google Search attempt ${attempt}/${maxRetries}...`);
       const response = await axios.get(
         `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}`
       );
       
       // Check if response has items
       if (!response.data || !response.data.items) {
-        console.log(`   ⚠️ Google Search returned no results for: "${query}"`);
+        console.log(`   ΓÜá∩╕Å Google Search returned no results for: "${query}"`);
         return [];
       }
       
@@ -1690,35 +1690,35 @@ async function queryCustomSearchAPI(query) {
         link: item.link,
         snippet: item.snippet
       }));
-      console.log(`   ✅ Google Search successful: ${results.length} results`);
+      console.log(`   Γ£à Google Search successful: ${results.length} results`);
       return results;
     } catch (error) {
       if (error?.response?.status === 429) {
         const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(`   ⏳ Rate limited, waiting ${delay}ms before retry...`);
+        console.log(`   ΓÅ│ Rate limited, waiting ${delay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
       if (attempt === maxRetries) {
-        console.error(`   ❌ Google Search failed after ${maxRetries} attempts:`, error.message);
+        console.error(`   Γ¥î Google Search failed after ${maxRetries} attempts:`, error.message);
         // Return empty array instead of throwing error
-        console.log(`   ⚠️ Returning empty results for: "${query}"`);
+        console.log(`   ΓÜá∩╕Å Returning empty results for: "${query}"`);
         return [];
       }
-      console.log(`   ⏳ Google Search attempt ${attempt} failed, retrying...`);
+      console.log(`   ΓÅ│ Google Search attempt ${attempt} failed, retrying...`);
       await new Promise(resolve => setTimeout(resolve, baseDelay));
     }
   }
   
   // If we get here, return empty array
-  console.log(`   ⚠️ Returning empty results for: "${query}"`);
+  console.log(`   ΓÜá∩╕Å Returning empty results for: "${query}"`);
   return [];
 }
 
 // Industry news search method with parallel queries
 async function searchIndustryNewsCompetitors(companyName) {
   try {
-    console.log(`   📰 Method 1: Industry news search for "${companyName}"`);
+    console.log(`   ≡ƒô░ Method 1: Industry news search for "${companyName}"`);
     
     // Multiple industry news search queries
     const searchQueries = [
@@ -1729,18 +1729,18 @@ async function searchIndustryNewsCompetitors(companyName) {
       `${companyName} competitive landscape`
     ];
     
-    console.log(`   🚀 Running ${searchQueries.length} industry news queries in parallel...`);
+    console.log(`   ≡ƒÜÇ Running ${searchQueries.length} industry news queries in parallel...`);
     
     // Run all queries truly in parallel without delays
     const queryPromises = searchQueries.map(async (query, index) => {
       try {
-        console.log(`   🔍 Industry news query ${index + 1}: "${query}"`);
+        console.log(`   ≡ƒöì Industry news query ${index + 1}: "${query}"`);
         
         const searchResults = await queryCustomSearchAPI(query);
-        console.log(`   📄 Found ${searchResults.length} results for query ${index + 1}`);
+        console.log(`   ≡ƒôä Found ${searchResults.length} results for query ${index + 1}`);
         return searchResults;
       } catch (error) {
-        console.error(`   ❌ Industry news query ${index + 1} failed:`, error.message);
+        console.error(`   Γ¥î Industry news query ${index + 1} failed:`, error.message);
         return [];
       }
     });
@@ -1750,13 +1750,13 @@ async function searchIndustryNewsCompetitors(companyName) {
     
     // Flatten results
     const flattenedResults = allSearchResults.flat();
-    console.log(`   📊 Total industry news results: ${flattenedResults.length}`);
+    console.log(`   ≡ƒôè Total industry news results: ${flattenedResults.length}`);
     
     const competitors = await extractCompetitorNames(companyName, flattenedResults);
-    console.log(`   🎯 Extracted ${competitors.length} competitors from industry news:`, competitors);
+    console.log(`   ≡ƒÄ» Extracted ${competitors.length} competitors from industry news:`, competitors);
     return competitors;
   } catch (error) {
-    console.error('❌ Industry news search error:', error.message);
+    console.error('Γ¥î Industry news search error:', error.message);
     return [];
   }
 }
@@ -1764,7 +1764,7 @@ async function searchIndustryNewsCompetitors(companyName) {
 // Public company database search method with parallel queries
 async function searchPublicCompanyDatabase(companyName) {
   try {
-    console.log(`   🏢 Method 2: Public company database search for "${companyName}"`);
+    console.log(`   ≡ƒÅó Method 2: Public company database search for "${companyName}"`);
     
     // Multiple public database search queries
     const searchQueries = [
@@ -1774,18 +1774,18 @@ async function searchPublicCompanyDatabase(companyName) {
       `${companyName} market competitors`
     ];
     
-    console.log(`   🚀 Running ${searchQueries.length} public database queries in parallel...`);
+    console.log(`   ≡ƒÜÇ Running ${searchQueries.length} public database queries in parallel...`);
     
     // Run all queries truly in parallel without delays
     const queryPromises = searchQueries.map(async (query, index) => {
       try {
-        console.log(`   🔍 Public database query ${index + 1}: "${query}"`);
+        console.log(`   ≡ƒöì Public database query ${index + 1}: "${query}"`);
         
         const searchResults = await queryCustomSearchAPI(query);
-        console.log(`   📄 Found ${searchResults.length} results for query ${index + 1}`);
+        console.log(`   ≡ƒôä Found ${searchResults.length} results for query ${index + 1}`);
         return searchResults;
       } catch (error) {
-        console.error(`   ❌ Public database query ${index + 1} failed:`, error.message);
+        console.error(`   Γ¥î Public database query ${index + 1} failed:`, error.message);
         return [];
       }
     });
@@ -1795,13 +1795,13 @@ async function searchPublicCompanyDatabase(companyName) {
     
     // Flatten results
     const flattenedResults = allSearchResults.flat();
-    console.log(`   📊 Total public database results: ${flattenedResults.length}`);
+    console.log(`   ≡ƒôè Total public database results: ${flattenedResults.length}`);
     
     const competitors = await extractCompetitorNames(companyName, flattenedResults);
-    console.log(`   🎯 Extracted ${competitors.length} competitors from public database:`, competitors);
+    console.log(`   ≡ƒÄ» Extracted ${competitors.length} competitors from public database:`, competitors);
     return competitors;
   } catch (error) {
-    console.error('❌ Public database search error:', error.message);
+    console.error('Γ¥î Public database search error:', error.message);
     return [];
   }
 }
@@ -1809,17 +1809,17 @@ async function searchPublicCompanyDatabase(companyName) {
 // Web search with relaxed filtering
 async function extractCompetitorsWithRelaxedFiltering(searchResults, companyName) {
   try {
-    console.log(`   🔍 Extracting competitors from ${searchResults.length} search results`);
+    console.log(`   ≡ƒöì Extracting competitors from ${searchResults.length} search results`);
     const competitors = await extractCompetitorNames(companyName, searchResults);
-    console.log(`   🎯 Extracted ${competitors.length} competitors from web search`);
+    console.log(`   ≡ƒÄ» Extracted ${competitors.length} competitors from web search`);
     const filtered = competitors.filter(name => 
       name.toLowerCase() !== companyName.toLowerCase() &&
       name.length > 2
     );
-    console.log(`   ✅ Filtered to ${filtered.length} valid competitors`);
+    console.log(`   Γ£à Filtered to ${filtered.length} valid competitors`);
     return filtered;
   } catch (error) {
-    console.error('❌ Relaxed filtering error:', error.message);
+    console.error('Γ¥î Relaxed filtering error:', error.message);
     return [];
   }
 }
@@ -1827,7 +1827,7 @@ async function extractCompetitorsWithRelaxedFiltering(searchResults, companyName
 // Wikipedia-based search with parallel queries
 async function searchWikipediaCompetitors(companyName) {
   try {
-    console.log(`   📚 Method 4: Wikipedia-based search for "${companyName}"`);
+    console.log(`   ≡ƒôÜ Method 4: Wikipedia-based search for "${companyName}"`);
     
     // Multiple Wikipedia search queries
     const searchQueries = [
@@ -1837,18 +1837,18 @@ async function searchWikipediaCompetitors(companyName) {
       `${companyName} market competitors`
     ];
     
-    console.log(`   🚀 Running ${searchQueries.length} Wikipedia queries in parallel...`);
+    console.log(`   ≡ƒÜÇ Running ${searchQueries.length} Wikipedia queries in parallel...`);
     
     // Run all queries truly in parallel without delays
     const queryPromises = searchQueries.map(async (query, index) => {
       try {
-        console.log(`   🔍 Wikipedia query ${index + 1}: "${query}"`);
+        console.log(`   ≡ƒöì Wikipedia query ${index + 1}: "${query}"`);
         
         const searchResults = await queryCustomSearchAPI(query);
-        console.log(`   📄 Found ${searchResults.length} results for query ${index + 1}`);
+        console.log(`   ≡ƒôä Found ${searchResults.length} results for query ${index + 1}`);
         return searchResults;
       } catch (error) {
-        console.error(`   ❌ Wikipedia query ${index + 1} failed:`, error.message);
+        console.error(`   Γ¥î Wikipedia query ${index + 1} failed:`, error.message);
         return [];
       }
     });
@@ -1858,13 +1858,13 @@ async function searchWikipediaCompetitors(companyName) {
     
     // Flatten results
     const flattenedResults = allSearchResults.flat();
-    console.log(`   📊 Total Wikipedia results: ${flattenedResults.length}`);
+    console.log(`   ≡ƒôè Total Wikipedia results: ${flattenedResults.length}`);
     
     const competitors = await extractCompetitorNames(companyName, flattenedResults);
-    console.log(`   🎯 Extracted ${competitors.length} competitors from Wikipedia:`, competitors);
+    console.log(`   ≡ƒÄ» Extracted ${competitors.length} competitors from Wikipedia:`, competitors);
     return competitors;
   } catch (error) {
-    console.error('❌ Wikipedia search error:', error.message);
+    console.error('Γ¥î Wikipedia search error:', error.message);
     return [];
   }
 }
@@ -1949,7 +1949,7 @@ function cleanCompetitorNames(names) {
     finalSeen.add(key);
     final.push(name);
   });
-  console.log('   🧹 [cleanCompetitorNames] Unique brands:', final);
+  console.log('   ≡ƒº╣ [cleanCompetitorNames] Unique brands:', final);
   return final;
 }
 
@@ -1979,8 +1979,8 @@ ${searchText}
 
 Return format: ["Company1", "Company2", "Company3"]`;
 
-  console.log(`   🤖 Extracting competitors using AI for "${companyName}"`);
-  console.log(`   📄 Analyzing ${searchResults.length} search results`);
+  console.log(`   ≡ƒñû Extracting competitors using AI for "${companyName}"`);
+  console.log(`   ≡ƒôä Analyzing ${searchResults.length} search results`);
   
   const result = await model.generateContent(prompt);
   const response = result.response.candidates[0]?.content?.parts[0]?.text || '';
@@ -2004,10 +2004,10 @@ Return format: ["Company1", "Company2", "Company3"]`;
     competitors = cleanCompetitorNames(competitors);
     const validCompetitors = Array.isArray(competitors) ? competitors : [];
     
-    console.log(`   ✅ AI extracted ${validCompetitors.length} competitors`);
+    console.log(`   Γ£à AI extracted ${validCompetitors.length} competitors`);
     return validCompetitors;
   } catch (error) {
-    console.error('❌ Failed to parse competitor names:', error.message);
+    console.error('Γ¥î Failed to parse competitor names:', error.message);
     console.error('Raw response:', response);
     return [];
   }
@@ -2016,11 +2016,11 @@ Return format: ["Company1", "Company2", "Company3"]`;
 // Validate competitors using AI with parallel processing
 async function validateCompetitors(companyName, competitorNames, searchResults) {
   if (!GEMINI_API_KEY) {
-    console.log(`   ⚠️ No Gemini API key, returning top 10 competitors without validation`);
+    console.log(`   ΓÜá∩╕Å No Gemini API key, returning top 10 competitors without validation`);
     return competitorNames.slice(0, 10);
   }
   
-  console.log(`   🤖 Validating ${competitorNames.length} competitors for "${companyName}" in parallel...`);
+  console.log(`   ≡ƒñû Validating ${competitorNames.length} competitors for "${companyName}" in parallel...`);
   
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -2055,7 +2055,7 @@ Return only a number between 0-100.`;
       };
       
     } catch (error) {
-      console.error(`   ❌ Error validating ${competitor}:`, error.message);
+      console.error(`   Γ¥î Error validating ${competitor}:`, error.message);
       return {
         competitor,
         score: 0,
@@ -2066,7 +2066,7 @@ Return only a number between 0-100.`;
   });
   
   // Wait for all validations to complete
-  console.log(`   ⏳ Running ${validationPromises.length} parallel validations...`);
+  console.log(`   ΓÅ│ Running ${validationPromises.length} parallel validations...`);
   const validationResults = await Promise.all(validationPromises);
   
   // Filter valid competitors
@@ -2074,14 +2074,14 @@ Return only a number between 0-100.`;
     .filter(result => result.isValid)
     .map(result => result.competitor);
   
-  console.log(`   ✅ Parallel validation complete: ${validatedCompetitors.length} valid competitors out of ${competitorNames.length}`);
+  console.log(`   Γ£à Parallel validation complete: ${validatedCompetitors.length} valid competitors out of ${competitorNames.length}`);
   
   // Log validation summary
   validationResults.forEach(result => {
     if (result.isValid) {
-      console.log(`   ✅ ${result.competitor}: Score ${result.score}/100`);
+      console.log(`   Γ£à ${result.competitor}: Score ${result.score}/100`);
     } else {
-      console.log(`   ❌ ${result.competitor}: Score ${result.score}/100 (rejected)`);
+      console.log(`   Γ¥î ${result.competitor}: Score ${result.score}/100 (rejected)`);
     }
   });
   
@@ -2090,77 +2090,77 @@ Return only a number between 0-100.`;
 
 // Multi-method competitor detection with parallel processing
 async function detectCompetitors(companyName, searchResults) {
-  console.log('\n🔍 Starting parallel competitor detection...');
+  console.log('\n≡ƒöì Starting parallel competitor detection...');
   const allCompetitors = new Map();
   const methodResults = {};
   
   // Run all 4 detection methods in parallel for maximum speed
-  console.log('🚀 Launching all detection methods simultaneously...');
+  console.log('≡ƒÜÇ Launching all detection methods simultaneously...');
   
   const detectionPromises = [
     // Method 1: Industry news search
     (async () => {
-      console.log('📰 Method 1: Industry news search...');
+      console.log('≡ƒô░ Method 1: Industry news search...');
       try {
         const competitors = await searchIndustryNewsCompetitors(companyName);
         const cleaned = cleanCompetitorNames(competitors);
         methodResults.industryNews = cleaned;
-        console.log(`   ✅ Found ${cleaned.length} competitors via industry news:`, cleaned);
+        console.log(`   Γ£à Found ${cleaned.length} competitors via industry news:`, cleaned);
         return { method: 'industryNews', competitors: cleaned };
       } catch (error) {
-        console.error(`   ❌ Industry news search failed:`, error.message);
+        console.error(`   Γ¥î Industry news search failed:`, error.message);
         return { method: 'industryNews', competitors: [] };
       }
     })(),
     
     // Method 2: Public company database search
     (async () => {
-      console.log('🏢 Method 2: Public company database search...');
+      console.log('≡ƒÅó Method 2: Public company database search...');
       try {
         const competitors = await searchPublicCompanyDatabase(companyName);
         const cleaned = cleanCompetitorNames(competitors);
         methodResults.publicDatabase = cleaned;
-        console.log(`   ✅ Found ${cleaned.length} competitors via public database:`, cleaned);
+        console.log(`   Γ£à Found ${cleaned.length} competitors via public database:`, cleaned);
         return { method: 'publicDatabase', competitors: cleaned };
       } catch (error) {
-        console.error(`   ❌ Public database search failed:`, error.message);
+        console.error(`   Γ¥î Public database search failed:`, error.message);
         return { method: 'publicDatabase', competitors: [] };
       }
     })(),
     
     // Method 3: Web search with relaxed filtering
     (async () => {
-      console.log('🌐 Method 3: Web search with relaxed filtering...');
+      console.log('≡ƒîÉ Method 3: Web search with relaxed filtering...');
       try {
         const competitors = await extractCompetitorsWithRelaxedFiltering(searchResults, companyName);
         const cleaned = cleanCompetitorNames(competitors);
         methodResults.webSearch = cleaned;
-        console.log(`   ✅ Found ${cleaned.length} competitors via web search:`, cleaned);
+        console.log(`   Γ£à Found ${cleaned.length} competitors via web search:`, cleaned);
         return { method: 'webSearch', competitors: cleaned };
       } catch (error) {
-        console.error(`   ❌ Web search failed:`, error.message);
+        console.error(`   Γ¥î Web search failed:`, error.message);
         return { method: 'webSearch', competitors: [] };
       }
     })(),
     
     // Method 4: Wikipedia-based search
     (async () => {
-      console.log('📚 Method 4: Wikipedia-based search...');
+      console.log('≡ƒôÜ Method 4: Wikipedia-based search...');
       try {
         const competitors = await searchWikipediaCompetitors(companyName);
         const cleaned = cleanCompetitorNames(competitors);
         methodResults.wikipedia = cleaned;
-        console.log(`   ✅ Found ${cleaned.length} competitors via Wikipedia:`, cleaned);
+        console.log(`   Γ£à Found ${cleaned.length} competitors via Wikipedia:`, cleaned);
         return { method: 'wikipedia', competitors: cleaned };
       } catch (error) {
-        console.error(`   ❌ Wikipedia search failed:`, error.message);
+        console.error(`   Γ¥î Wikipedia search failed:`, error.message);
         return { method: 'wikipedia', competitors: [] };
       }
     })(),
     
     // Method 5: Geo-intent prompt bank search
     (async () => {
-      console.log('🌍 Method 5: Geo-intent prompt bank search...');
+      console.log('≡ƒîì Method 5: Geo-intent prompt bank search...');
       try {
         const prompts = getGeoCompetitorPromptBank({
           product: '',
@@ -2171,33 +2171,33 @@ async function detectCompetitors(companyName, searchResults) {
           competitorA: companyName,
           competitorB: 'Amazon'
         });
-        console.log(`   📝 Geo prompt bank size: ${prompts.length}`);
+        console.log(`   ≡ƒô¥ Geo prompt bank size: ${prompts.length}`);
         // Run all searches in parallel with tight timeouts
         const searchPromises = prompts.map((q, i) => {
-          console.log(`   🔎 Geo query ${i + 1}/${prompts.length}: "${q}"`);
+          console.log(`   ≡ƒöÄ Geo query ${i + 1}/${prompts.length}: "${q}"`);
           return withTimeout(queryCustomSearchAPI(q), 6000, []).catch(() => []);
         });
         const resultsNested = await Promise.all(searchPromises);
         const flattened = resultsNested.flat();
-        console.log(`   📄 Geo prompt bank total results: ${flattened.length}`);
+        console.log(`   ≡ƒôä Geo prompt bank total results: ${flattened.length}`);
         const extracted = await withTimeout(extractCompetitorNames(companyName, flattened), 6000, []).catch(() => []);
         const cleaned = cleanCompetitorNames(extracted);
-        console.log(`   ✅ Geo prompt bank extracted ${cleaned.length} competitors`);
+        console.log(`   Γ£à Geo prompt bank extracted ${cleaned.length} competitors`);
         methodResults.geoPromptBank = cleaned;
         return { method: 'geoPromptBank', competitors: cleaned };
       } catch (error) {
-        console.error(`   ❌ Geo-intent prompt bank search failed:`, error.message);
+        console.error(`   Γ¥î Geo-intent prompt bank search failed:`, error.message);
         return { method: 'geoPromptBank', competitors: [] };
       }
     })()
   ];
   
   // Wait for all detection methods to complete
-  console.log('⏳ Waiting for all detection methods to complete...');
+  console.log('ΓÅ│ Waiting for all detection methods to complete...');
   const detectionResults = await Promise.all(detectionPromises);
   
   // Consolidate results from all methods
-  console.log('\n📊 Consolidating results from all detection methods...');
+  console.log('\n≡ƒôè Consolidating results from all detection methods...');
   detectionResults.forEach(result => {
     if (result.competitors && result.competitors.length > 0) {
       result.competitors.forEach(rawComp => {
@@ -2210,12 +2210,12 @@ async function detectCompetitors(companyName, searchResults) {
   });
   
   // Rank competitors by frequency
-  console.log('\n📊 Ranking competitors by frequency...');
+  console.log('\n≡ƒôè Ranking competitors by frequency...');
   const rankedCompetitors = Array.from(allCompetitors.entries())
     .map(([key, frequency]) => ({ name: prettifyBrandNameFromKey(key) || key, frequency, key }))
     .sort((a, b) => b.frequency - a.frequency);
   
-  console.log('📈 Competitor frequency ranking:');
+  console.log('≡ƒôê Competitor frequency ranking:');
   rankedCompetitors.forEach((comp, index) => {
     console.log(`   ${index + 1}. ${comp.name} (found ${comp.frequency} times)`);
   });
@@ -2224,19 +2224,19 @@ async function detectCompetitors(companyName, searchResults) {
   console.log('   [DEDUP] Final ranked (name,key,freq):', rankedCompetitors);
   
   // Validate competitors with parallel processing
-  console.log('\n✅ Validating competitors with AI in parallel...');
+  console.log('\nΓ£à Validating competitors with AI in parallel...');
   const validatedCompetitors = await validateCompetitors(companyName, competitorNames, searchResults);
-  console.log(`🎯 Final validated competitors:`, validatedCompetitors);
+  console.log(`≡ƒÄ» Final validated competitors:`, validatedCompetitors);
   
   return validatedCompetitors;
 }
 
 // Web scraping functionality
 async function scrapeWebsite(url) {
-  console.log(`   🌐 Scraping website: ${url}`);
+  console.log(`   ≡ƒîÉ Scraping website: ${url}`);
   
   try {
-    console.log(`   📄 Loading page...`);
+    console.log(`   ≡ƒôä Loading page...`);
     
     const response = await axios.get(url, {
       timeout: 30000,
@@ -2258,10 +2258,10 @@ async function scrapeWebsite(url) {
       description: $('meta[name="description"]').attr('content') || 'No description available'
       };
     
-    console.log(`   ✅ Scraping successful: "${companyData.name}"`);
+    console.log(`   Γ£à Scraping successful: "${companyData.name}"`);
     return companyData;
   } catch (error) {
-    console.error(`   ❌ Scraping failed:`, error.message);
+    console.error(`   Γ¥î Scraping failed:`, error.message);
     return { error: 'Scraping failed', details: error.message };
   }
 }
@@ -2408,8 +2408,8 @@ async function queryGeminiVisibility(competitorName, industry = '', customPrompt
   const prompts = customPrompts || getGeminiPrompts(competitorName, industry);
   let allResponsesText = '';
   
-  console.log(`   🤖 Gemini: Analyzing ${competitorName} with ${prompts.length} prompts`);
-  console.log(`   📝 Gemini prompts to be used:`);
+  console.log(`   ≡ƒñû Gemini: Analyzing ${competitorName} with ${prompts.length} prompts`);
+  console.log(`   ≡ƒô¥ Gemini prompts to be used:`);
   prompts.forEach((prompt, i) => {
     console.log(`   ${i + 1}. ${prompt}`);
   });
@@ -2423,7 +2423,7 @@ async function queryGeminiVisibility(competitorName, industry = '', customPrompt
         if (error.message.includes('overloaded') || error.message.includes('503') || error.message.includes('429')) {
           if (attempt < maxRetries) {
             const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
-            console.log(`   ⏳ Gemini service overloaded, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+            console.log(`   ΓÅ│ Gemini service overloaded, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -2440,15 +2440,15 @@ async function queryGeminiVisibility(competitorName, industry = '', customPrompt
     const batchResponses = await Promise.all(batch.map(async (prompt, idx) => {
       const promptIndex = i + idx;
       try {
-        console.log(`   📝 Gemini prompt ${promptIndex + 1}: ${prompt.substring(0, 50)}...`);
+        console.log(`   ≡ƒô¥ Gemini prompt ${promptIndex + 1}: ${prompt.substring(0, 50)}...`);
         const response = await retryWithBackoff(async () => {
           const result = await model.generateContent(prompt);
           return result.response.candidates[0]?.content?.parts[0]?.text || '';
         });
-        console.log(`   ✅ Gemini prompt ${promptIndex + 1} completed (${response.length} chars)`);
+        console.log(`   Γ£à Gemini prompt ${promptIndex + 1} completed (${response.length} chars)`);
         return response;
       } catch (error) {
-        console.error(`   ❌ Gemini prompt ${promptIndex + 1} error after retries:`, error.message);
+        console.error(`   Γ¥î Gemini prompt ${promptIndex + 1} error after retries:`, error.message);
         return '';
       }
     }));
@@ -2463,7 +2463,7 @@ async function queryGeminiVisibility(competitorName, industry = '', customPrompt
   
   const scoreResult = calculateVisibilityScore(allResponsesText, competitorName);
   
-  console.log(`   📊 Gemini analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
+  console.log(`   ≡ƒôè Gemini analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
   
   return { 
     analysis: allResponsesText || 'No analysis available', 
@@ -2482,8 +2482,8 @@ async function queryPerplexity(competitorName, industry = '', customPrompts = nu
   const prompts = customPrompts || getPerplexityPrompts(competitorName, industry);
   let allResponsesText = '';
   
-  console.log(`   🤖 Perplexity: Analyzing ${competitorName} with ${prompts.length} prompts`);
-  console.log(`   📝 Perplexity prompts to be used:`);
+  console.log(`   ≡ƒñû Perplexity: Analyzing ${competitorName} with ${prompts.length} prompts`);
+  console.log(`   ≡ƒô¥ Perplexity prompts to be used:`);
   prompts.forEach((prompt, i) => {
     console.log(`   ${i + 1}. ${prompt}`);
   });
@@ -2497,7 +2497,7 @@ async function queryPerplexity(competitorName, industry = '', customPrompts = nu
         if (error.message.includes('overloaded') || error.message.includes('503') || error.message.includes('429') || error.response?.status === 503 || error.response?.status === 429) {
           if (attempt < maxRetries) {
             const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
-            console.log(`   ⏳ Perplexity service overloaded, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+            console.log(`   ΓÅ│ Perplexity service overloaded, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -2513,17 +2513,17 @@ async function queryPerplexity(competitorName, industry = '', customPrompts = nu
     
     const batchPromises = batch.map(async (prompt, index) => {
       try {
-        console.log(`   📝 Perplexity prompt ${i + index + 1}: ${prompt.substring(0, 50)}...`);
+        console.log(`   ≡ƒô¥ Perplexity prompt ${i + index + 1}: ${prompt.substring(0, 50)}...`);
         
         const responseObj = await retryWithBackoff(async () => {
           return sharedLLM.callPerplexityAPI(prompt, 'sonar', false);
         });
         const responseText = responseObj?.text || '';
         
-        console.log(`   ✅ Perplexity prompt ${i + index + 1} completed (${responseText.length} chars)`);
+        console.log(`   Γ£à Perplexity prompt ${i + index + 1} completed (${responseText.length} chars)`);
         return responseText;
       } catch (error) {
-        console.error(`   ❌ Perplexity prompt ${i + index + 1} error after retries:`, error.message);
+        console.error(`   Γ¥î Perplexity prompt ${i + index + 1} error after retries:`, error.message);
         return '';
       }
     });
@@ -2541,7 +2541,7 @@ async function queryPerplexity(competitorName, industry = '', customPrompts = nu
   
   const scoreResult = calculateVisibilityScore(allResponsesText, competitorName);
   
-  console.log(`   📊 Perplexity analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
+  console.log(`   ≡ƒôè Perplexity analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
   
   return { 
     analysis: allResponsesText, 
@@ -2554,7 +2554,7 @@ async function queryPerplexity(competitorName, industry = '', customPrompts = nu
 // Query Claude for visibility analysis
 async function queryClaude(competitorName, industry = '', customPrompts = null) {
   if (!ANTHROPIC_API_KEY) {
-    console.log(`   ⚠️ Claude: ANTHROPIC_API_KEY not set, returning fallback response`);
+    console.log(`   ΓÜá∩╕Å Claude: ANTHROPIC_API_KEY not set, returning fallback response`);
     return { 
       analysis: 'Claude analysis unavailable - API key not configured', 
       visibilityScore: 0, 
@@ -2567,8 +2567,8 @@ async function queryClaude(competitorName, industry = '', customPrompts = null) 
   const prompts = customPrompts || getClaudePrompts(competitorName, industry);
   let allResponsesText = '';
   
-  console.log(`   🤖 Claude: Analyzing ${competitorName} with ${prompts.length} prompts`);
-  console.log(`   📝 Claude prompts to be used:`);
+  console.log(`   ≡ƒñû Claude: Analyzing ${competitorName} with ${prompts.length} prompts`);
+  console.log(`   ≡ƒô¥ Claude prompts to be used:`);
   prompts.forEach((prompt, i) => {
     console.log(`   ${i + 1}. ${prompt}`);
   });
@@ -2580,7 +2580,7 @@ async function queryClaude(competitorName, industry = '', customPrompts = null) 
     const batchResponses = await Promise.all(batch.map(async (prompt, idx) => {
       const promptIndex = i + idx;
       try {
-        console.log(`   📝 Claude prompt ${promptIndex + 1}: ${prompt.substring(0, 50)}...`);
+        console.log(`   ≡ƒô¥ Claude prompt ${promptIndex + 1}: ${prompt.substring(0, 50)}...`);
         const response = await axios.post(
           'https://api.anthropic.com/v1/messages',
           {
@@ -2599,10 +2599,10 @@ async function queryClaude(competitorName, industry = '', customPrompts = null) 
           }
         );
         const content = response.data?.content?.[0]?.text || '';
-        console.log(`   ✅ Claude prompt ${promptIndex + 1} completed (${content.length} chars)`);
+        console.log(`   Γ£à Claude prompt ${promptIndex + 1} completed (${content.length} chars)`);
         return content;
       } catch (error) {
-        console.error(`   ❌ Claude prompt ${promptIndex + 1} error:`, error.message);
+        console.error(`   Γ¥î Claude prompt ${promptIndex + 1} error:`, error.message);
         return '';
       }
     }));
@@ -2617,7 +2617,7 @@ async function queryClaude(competitorName, industry = '', customPrompts = null) 
   
   const scoreResult = calculateVisibilityScore(allResponsesText, competitorName);
   
-  console.log(`   📊 Claude analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
+  console.log(`   ≡ƒôè Claude analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
   
   return { 
     analysis: allResponsesText, 
@@ -2641,7 +2641,7 @@ async function queryChatGPT(competitorName, industry = '', customPrompts = null)
   };
   
   if (!isValidApiKey(OPENAI_API_KEY)) {
-    console.log(`   ⚠️ ChatGPT: OPENAI_API_KEY not configured or is placeholder, returning fallback response`);
+    console.log(`   ΓÜá∩╕Å ChatGPT: OPENAI_API_KEY not configured or is placeholder, returning fallback response`);
     return { 
       analysis: 'ChatGPT analysis unavailable - API key not configured', 
       visibilityScore: 0, 
@@ -2654,8 +2654,8 @@ async function queryChatGPT(competitorName, industry = '', customPrompts = null)
   const prompts = customPrompts || getChatGPTPrompts(competitorName, industry);
   let allResponsesText = '';
   
-  console.log(`   🤖 ChatGPT: Analyzing ${competitorName} with ${prompts.length} prompts`);
-  console.log(`   📝 ChatGPT prompts to be used:`);
+  console.log(`   ≡ƒñû ChatGPT: Analyzing ${competitorName} with ${prompts.length} prompts`);
+  console.log(`   ≡ƒô¥ ChatGPT prompts to be used:`);
   prompts.forEach((prompt, i) => {
     console.log(`   ${i + 1}. ${prompt}`);
   });
@@ -2667,7 +2667,7 @@ async function queryChatGPT(competitorName, industry = '', customPrompts = null)
     const batchResponses = await Promise.all(batch.map(async (prompt, idx) => {
       const promptIndex = i + idx;
       try {
-        console.log(`   📝 ChatGPT prompt ${promptIndex + 1}: ${prompt.substring(0, 50)}...`);
+        console.log(`   ≡ƒô¥ ChatGPT prompt ${promptIndex + 1}: ${prompt.substring(0, 50)}...`);
         const response = await axios.post(
           'https://api.openai.com/v1/chat/completions',
           {
@@ -2683,10 +2683,10 @@ async function queryChatGPT(competitorName, industry = '', customPrompts = null)
           }
         );
         const content = response.data?.choices?.[0]?.message?.content || '';
-        console.log(`   ✅ ChatGPT prompt ${promptIndex + 1} completed (${content.length} chars)`);
+        console.log(`   Γ£à ChatGPT prompt ${promptIndex + 1} completed (${content.length} chars)`);
         return content;
       } catch (error) {
-        console.error(`   ❌ ChatGPT prompt ${promptIndex + 1} error:`, error.message);
+        console.error(`   Γ¥î ChatGPT prompt ${promptIndex + 1} error:`, error.message);
         return '';
       }
     }));
@@ -2701,7 +2701,7 @@ async function queryChatGPT(competitorName, industry = '', customPrompts = null)
   
   const scoreResult = calculateVisibilityScore(allResponsesText, competitorName);
   
-  console.log(`   📊 ChatGPT analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
+  console.log(`   ≡ƒôè ChatGPT analysis: ${scoreResult.analysis.mentionsCount} mentions, sentiment: ${scoreResult.analysis.sentiment}, score: ${scoreResult.totalScore.toFixed(4)}`);
   
   return { 
     analysis: allResponsesText, 
@@ -2722,13 +2722,13 @@ async function withTimeout(promise, ms, fallbackValue) {
 // Main AI visibility analysis function - now optimized by default
 // New parallel LLM analysis function
 async function analyzeCompanyWithAllModels(companyName, industry, product, prompts, isFast) {
-  console.log(`\n🚀 [analyzeCompanyWithAllModels] Starting parallel analysis for ${companyName}`);
+  console.log(`\n≡ƒÜÇ [analyzeCompanyWithAllModels] Starting parallel analysis for ${companyName}`);
   
   const modelKeys = getConfiguredModelKeys();
   console.log(`   Available models: ${modelKeys.join(', ')}`);
   
   if (modelKeys.length === 0) {
-    console.log('   ⚠️ No models available, returning fallback data');
+    console.log('   ΓÜá∩╕Å No models available, returning fallback data');
     return {
       aiScores: { gemini: 0, perplexity: 0, claude: 0, chatgpt: 0 },
       breakdowns: {
@@ -2804,12 +2804,12 @@ async function analyzeCompanyWithAllModels(companyName, industry, product, promp
   // Execute all calls in parallel
   const results = await Promise.all(analysisCalls.map(async (call) => {
     try {
-      console.log(`   📞 Starting ${call.model} analysis...`);
+      console.log(`   ≡ƒô₧ Starting ${call.model} analysis...`);
       const result = await call.promise;
-      console.log(`   ✅ ${call.model} analysis completed: Score ${result.visibilityScore || 0}`);
+      console.log(`   Γ£à ${call.model} analysis completed: Score ${result.visibilityScore || 0}`);
       return { model: call.model, result };
     } catch (error) {
-      console.log(`   ❌ ${call.model} analysis failed: ${error.message}`);
+      console.log(`   Γ¥î ${call.model} analysis failed: ${error.message}`);
       return { 
         model: call.model, 
         result: { analysis: 'Error', visibilityScore: 0, keyMetrics: {}, breakdown: {} }
@@ -2830,18 +2830,18 @@ async function analyzeCompanyWithAllModels(companyName, industry, product, promp
     analysis[model] = result.analysis || 'No analysis available';
   });
   
-  console.log(`   ✅ Parallel analysis completed for ${companyName}`);
+  console.log(`   Γ£à Parallel analysis completed for ${companyName}`);
   return { aiScores, breakdowns, keyMetrics, analysis };
 }
 
 async function getVisibilityData(companyName, industry = '', options = {}) {
   const startTime = Date.now();
-  console.log('🚀 Starting Optimized AI Visibility Analysis for:', companyName);
-  console.log('📊 Industry context:', industry || 'Not specified');
+  console.log('≡ƒÜÇ Starting Optimized AI Visibility Analysis for:', companyName);
+  console.log('≡ƒôè Industry context:', industry || 'Not specified');
   
   // Default to fast mode for better performance
   const isFast = options && options.fast !== false; // Changed: fast mode is now default
-  if (isFast) console.log('⚡ Optimized mode enabled: maximizing speed while maintaining accuracy');
+  if (isFast) console.log('ΓÜí Optimized mode enabled: maximizing speed while maintaining accuracy');
   
   try {
     // Automatic industry and product detection if not provided (optimized in fast mode)
@@ -2853,43 +2853,43 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     
     if (!industry) {
       if (isFast) {
-        console.log('🔍 Optimized mode: starting industry detection and search in parallel...');
+        console.log('≡ƒöì Optimized mode: starting industry detection and search in parallel...');
         // Start industry detection in parallel
         parallelTasks.push(
           withTimeout(detectIndustryAndProduct(companyName), 8000, { industry: '', product: '' })
             .then(detection => {
               detectedIndustry = detection.industry;
               detectedProduct = detection.product || inferProductFromCompanyName(companyName);
-              console.log(`📊 Quick detected industry: ${detectedIndustry || 'Unknown'}`);
+              console.log(`≡ƒôè Quick detected industry: ${detectedIndustry || 'Unknown'}`);
               return { type: 'industry', data: detection };
             })
             .catch(error => {
-              console.log('🔍 Quick detection failed, proceeding without industry context');
+              console.log('≡ƒöì Quick detection failed, proceeding without industry context');
               detectedIndustry = '';
               detectedProduct = inferProductFromCompanyName(companyName);
               return { type: 'industry', data: { industry: '', product: '' } };
             })
         );
       } else {
-        console.log('🔍 No industry specified, detecting automatically...');
+        console.log('≡ƒöì No industry specified, detecting automatically...');
         const detection = await detectIndustryAndProduct(companyName);
         detectedIndustry = detection.industry;
         detectedProduct = detection.product || inferProductFromCompanyName(companyName);
-        console.log(`📊 Detected industry: ${detectedIndustry || 'Unknown'}`);
-        console.log(`📊 Detected product: ${detectedProduct || 'Unknown'}`);
+        console.log(`≡ƒôè Detected industry: ${detectedIndustry || 'Unknown'}`);
+        console.log(`≡ƒôè Detected product: ${detectedProduct || 'Unknown'}`);
       }
     }
     
     // If product still missing, kick off a quick product-only detection in parallel
     let productOnlyPromise = null;
     if (!detectedProduct) {
-      console.log('🧪 Product not provided — attempting quick product inference...');
+      console.log('≡ƒº¬ Product not provided ΓÇö attempting quick product inference...');
       productOnlyPromise = withTimeout(detectProductOnly(companyName), 6000, { product: inferProductFromCompanyName(companyName) }).catch(() => ({ product: inferProductFromCompanyName(companyName) }));
     }
 
     // Get search results for competitors (start in parallel with industry detection)
     const searchQuery = `${companyName} competitors ${detectedIndustry}`.trim();
-    console.log('🔍 Search query:', searchQuery);
+    console.log('≡ƒöì Search query:', searchQuery);
     
     let searchResults = [];
     try {
@@ -2899,12 +2899,12 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           withTimeout(queryCustomSearchAPI(searchQuery), 8000, [])
             .then(results => {
               searchResults = results;
-              console.log('📈 Found', results.length, 'search results');
+              console.log('≡ƒôê Found', results.length, 'search results');
               return { type: 'search', data: results };
             })
             .catch(error => {
-              console.error('❌ Search API error:', error.message);
-              console.log('⚠️ Using empty search results, will rely on competitor detection');
+              console.error('Γ¥î Search API error:', error.message);
+              console.log('ΓÜá∩╕Å Using empty search results, will rely on competitor detection');
               searchResults = [];
               return { type: 'search', data: [] };
             })
@@ -2912,16 +2912,16 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         
         // Wait for both industry detection and search to complete
         if (parallelTasks.length > 0) {
-          console.log('⏳ Waiting for parallel tasks (industry detection + search) to complete...');
+          console.log('ΓÅ│ Waiting for parallel tasks (industry detection + search) to complete...');
           await Promise.all(parallelTasks);
         }
       } else {
         searchResults = await queryCustomSearchAPI(searchQuery);
-        console.log('📈 Found', searchResults.length, 'search results');
+        console.log('≡ƒôê Found', searchResults.length, 'search results');
       }
     } catch (error) {
-      console.error('❌ Search API error:', error.message);
-      console.log('⚠️ Using empty search results, will rely on competitor detection');
+      console.error('Γ¥î Search API error:', error.message);
+      console.log('ΓÜá∩╕Å Using empty search results, will rely on competitor detection');
       searchResults = [];
     }
     
@@ -2933,32 +2933,32 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         if (!detectedProduct && p?.product) detectedProduct = p.product;
       } catch {}
     }
-    console.log(`⏱️ Search and detections completed in ${searchTime - startTime}ms (product=${detectedProduct || 'Unknown'})`);
+    console.log(`ΓÅ▒∩╕Å Search and detections completed in ${searchTime - startTime}ms (product=${detectedProduct || 'Unknown'})`);
     
     // Detect competitors (optimized detection)
-    console.log('🎯 Starting parallel competitor detection...');
+    console.log('≡ƒÄ» Starting parallel competitor detection...');
     const competitorStartTime = Date.now();
     let competitors = [];
     if (isFast) {
       try {
         // Use our parallel competitor detection directly for maximum speed
-        console.log('🚀 Using parallel competitor detection for maximum speed...');
+        console.log('≡ƒÜÇ Using parallel competitor detection for maximum speed...');
         competitors = await withTimeout(detectCompetitors(companyName, searchResults), 20000, []);
         
         if (competitors.length === 0) {
-          console.log('⚠️ Parallel detection returned no competitors, using quick extraction fallback');
+          console.log('ΓÜá∩╕Å Parallel detection returned no competitors, using quick extraction fallback');
           // Fallback to quick extraction
           const extracted = await withTimeout(extractCompetitorNames(companyName, searchResults), 8000, []);
           competitors = cleanCompetitorNames(extracted).slice(0, 10);
         }
-        console.log('✅ Parallel competitor detection complete:', competitors);
+        console.log('Γ£à Parallel competitor detection complete:', competitors);
       } catch (e) {
-        console.log('⚠️ Parallel detection failed, using quick extraction fallback');
+        console.log('ΓÜá∩╕Å Parallel detection failed, using quick extraction fallback');
         try {
           const extracted = await withTimeout(extractCompetitorNames(companyName, searchResults), 8000, []);
           competitors = cleanCompetitorNames(extracted).slice(0, 10);
         } catch (fallbackError) {
-          console.log('⚠️ Quick extraction failed, returning empty competitors');
+          console.log('ΓÜá∩╕Å Quick extraction failed, returning empty competitors');
           competitors = [];
         }
       }
@@ -2966,39 +2966,39 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       try {
         const { detectCompetitorsEnhanced } = require('./enhancedCompetitorDetection');
         competitors = await detectCompetitorsEnhanced(companyName, industry);
-        console.log('✅ Enhanced competitor detection complete. Found', competitors.length, 'competitors:', competitors);
+        console.log('Γ£à Enhanced competitor detection complete. Found', competitors.length, 'competitors:', competitors);
       } catch (error) {
-        console.error('❌ Enhanced competitor detection failed:', error.message);
-        console.log('🔄 Falling back to original competitor detection...');
+        console.error('Γ¥î Enhanced competitor detection failed:', error.message);
+        console.log('≡ƒöä Falling back to original competitor detection...');
         try {
           competitors = await detectCompetitors(companyName, searchResults);
-          console.log('✅ Original competitor detection complete. Found', competitors.length, 'competitors:', competitors);
+          console.log('Γ£à Original competitor detection complete. Found', competitors.length, 'competitors:', competitors);
         } catch (fallbackError) {
-          console.error('❌ Original competitor detection also failed:', fallbackError.message);
+          console.error('Γ¥î Original competitor detection also failed:', fallbackError.message);
           competitors = [];
         }
       }
     }
     
     const competitorTime = Date.now();
-    console.log(`⏱️ Competitor detection completed in ${competitorTime - competitorStartTime}ms`);
+    console.log(`ΓÅ▒∩╕Å Competitor detection completed in ${competitorTime - competitorStartTime}ms`);
     
     // No fallback competitors - only use detected competitors
     if (competitors.length === 0) {
-      console.log('⚠️ No competitors detected - proceeding with empty competitor list');
+      console.log('ΓÜá∩╕Å No competitors detected - proceeding with empty competitor list');
     }
     
     // Analyze AI visibility across models (optimized: use all models but with timeouts)
-    console.log('🤖 Starting parallel AI analysis...');
+    console.log('≡ƒñû Starting parallel AI analysis...');
     const aiStartTime = Date.now();
     
     // Include the main company in analysis
     const allCompanies = [companyName, ...competitors];
-    console.log('📋 Companies to analyze:', allCompanies);
+    console.log('≡ƒôï Companies to analyze:', allCompanies);
     
     // Process all companies in parallel for maximum speed
     const analysisPromises = allCompanies.map(async (competitorName) => {
-      console.log(`🎯 Starting analysis for: ${competitorName}`);
+      console.log(`≡ƒÄ» Starting analysis for: ${competitorName}`);
       
       // Skip scraping in fast mode for speed
       let scrapedData = null;
@@ -3008,18 +3008,18 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
             item.name.toLowerCase().includes(competitorName.toLowerCase())
           );
           if (searchResult?.link) {
-            console.log(`🌐 Scraping website for ${competitorName}:`, searchResult.link);
+            console.log(`≡ƒîÉ Scraping website for ${competitorName}:`, searchResult.link);
             scrapedData = await scrapeWebsite(searchResult.link);
-            console.log(`✅ Scraping complete for ${competitorName}:`, scrapedData.name || 'No title');
+            console.log(`Γ£à Scraping complete for ${competitorName}:`, scrapedData.name || 'No title');
           } else {
-            console.log(`⚠️ No website link found for ${competitorName}`);
+            console.log(`ΓÜá∩╕Å No website link found for ${competitorName}`);
           }
         } catch (error) {
-          console.error(`❌ Scraping error for ${competitorName}:`, error.message);
+          console.error(`Γ¥î Scraping error for ${competitorName}:`, error.message);
         }
       }
       
-      console.log(`🤖 Starting AI analysis for ${competitorName}...`);
+      console.log(`≡ƒñû Starting AI analysis for ${competitorName}...`);
       
       // Use enhanced prompts with detected industry and product
       const enhancedPrompts = getEnhancedPrompts(competitorName, detectedIndustry, detectedProduct);
@@ -3074,7 +3074,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         rawModelMetrics
       ] = await Promise.all([
         queryGeminiVisibility(competitorName, detectedIndustry, enhancedPrompts.gemini).catch(err => {
-          console.error(`❌ Gemini error for ${competitorName}:`, err.message);
+          console.error(`Γ¥î Gemini error for ${competitorName}:`, err.message);
           return { 
             analysis: 'Gemini analysis unavailable due to service overload', 
             visibilityScore: 0, 
@@ -3083,7 +3083,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           };
         }),
         queryPerplexity(competitorName, detectedIndustry, enhancedPrompts.perplexity).catch(err => {
-          console.error(`❌ Perplexity error for ${competitorName}:`, err.message);
+          console.error(`Γ¥î Perplexity error for ${competitorName}:`, err.message);
           return { 
             analysis: 'Perplexity analysis unavailable due to service overload', 
             visibilityScore: 0, 
@@ -3092,7 +3092,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           };
         }),
         queryClaude(competitorName, detectedIndustry, enhancedPrompts.claude).catch(err => {
-          console.error(`❌ Claude error for ${competitorName}:`, err.message);
+          console.error(`Γ¥î Claude error for ${competitorName}:`, err.message);
           return { 
             analysis: 'Claude analysis unavailable due to service overload', 
             visibilityScore: 0, 
@@ -3101,7 +3101,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           };
         }),
         queryChatGPT(competitorName, detectedIndustry, enhancedPrompts.chatgpt).catch(err => {
-          console.error(`❌ ChatGPT error for ${competitorName}:`, err.message);
+          console.error(`Γ¥î ChatGPT error for ${competitorName}:`, err.message);
           return { 
             analysis: 'ChatGPT analysis unavailable due to service overload', 
             visibilityScore: 0, 
@@ -3120,11 +3120,11 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       const safeChatGPTResponse = chatgptResponse || { analysis: 'No analysis available', visibilityScore: 5, keyMetrics: {}, breakdown: {} };
       
       // Log response structures for debugging (truncate to keep logs small)
-      console.log(`\n🔍 Response structures for ${competitorName} (truncated):`);
+      console.log(`\n≡ƒöì Response structures for ${competitorName} (truncated):`);
       const truncate = (obj) => {
         try {
           const str = JSON.stringify(obj);
-          return str.length > 400 ? str.slice(0, 400) + '…' : str;
+          return str.length > 400 ? str.slice(0, 400) + 'ΓÇª' : str;
         } catch { return '[unserializable]'; }
       };
       console.log(`   Gemini:`, truncate(safeGeminiResponse));
@@ -3147,14 +3147,14 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       };
       
       const availableServices = Object.values(serviceStatus).filter(Boolean).length;
-      console.log(`📊 Service Status for ${competitorName}:`);
-      console.log(`   - Gemini: ${serviceStatus.gemini ? '✅ Available' : '❌ Overloaded'}`);
-      console.log(`   - Perplexity: ${serviceStatus.perplexity ? '✅ Available' : '❌ Overloaded'}`);
-      console.log(`   - Claude: ${serviceStatus.claude ? '✅ Available' : '❌ Overloaded'}`);
-      console.log(`   - ChatGPT: ${serviceStatus.chatgpt ? '✅ Available' : '❌ Overloaded'}`);
+      console.log(`≡ƒôè Service Status for ${competitorName}:`);
+      console.log(`   - Gemini: ${serviceStatus.gemini ? 'Γ£à Available' : 'Γ¥î Overloaded'}`);
+      console.log(`   - Perplexity: ${serviceStatus.perplexity ? 'Γ£à Available' : 'Γ¥î Overloaded'}`);
+      console.log(`   - Claude: ${serviceStatus.claude ? 'Γ£à Available' : 'Γ¥î Overloaded'}`);
+      console.log(`   - ChatGPT: ${serviceStatus.chatgpt ? 'Γ£à Available' : 'Γ¥î Overloaded'}`);
       console.log(`   - Available Services: ${availableServices}/4`);
       
-      console.log(`📈 Calculated scores for ${competitorName}:`);
+      console.log(`≡ƒôê Calculated scores for ${competitorName}:`);
       console.log(`   - Gemini: ${scores.gemini.toFixed(4)} ${!serviceStatus.gemini ? '(fallback)' : ''}`);
       console.log(`   - Perplexity: ${scores.perplexity.toFixed(4)} ${!serviceStatus.perplexity ? '(fallback)' : ''}`);
       console.log(`   - Claude: ${scores.claude.toFixed(4)} ${!serviceStatus.claude ? '(fallback)' : ''}`);
@@ -3162,7 +3162,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       console.log(`   - Average Score: ${totalScore.toFixed(4)}`);
       
       if (availableServices < 2) {
-        console.log(`⚠️ Warning: Only ${availableServices}/4 AI services available. Results may be less accurate.`);
+        console.log(`ΓÜá∩╕Å Warning: Only ${availableServices}/4 AI services available. Results may be less accurate.`);
       }
       
       return {
@@ -3207,7 +3207,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     });
     
     // Wait for all analyses to complete
-    console.log('⏳ Waiting for all parallel analyses to complete...');
+    console.log('ΓÅ│ Waiting for all parallel analyses to complete...');
     let analysisResults = await Promise.all(analysisPromises);
     // Compute normalized per-model scores from rawModels across all competitors
     const enriched = analysisResults.map(r => ({ name: r.name, rawModels: r.rawModels || { chatgpt: {}, gemini: {}, perplexity: {}, claude: {} } }));
@@ -3229,16 +3229,16 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     });
 
     // Compute AI Traffic shares using a small query pool (fast/full)
-    console.log('\n🚀 Starting AI Traffic Share and Citation Metrics calculation...');
+    console.log('\n≡ƒÜÇ Starting AI Traffic Share and Citation Metrics calculation...');
     console.log(`   Companies: ${allCompanies.join(', ')}`);
     console.log(`   Industry: ${detectedIndustry}`);
     console.log(`   Fast mode: ${isFast}`);
     
     try {
-      console.log('📊 Calling computeAiTrafficShares...');
+      console.log('≡ƒôè Calling computeAiTrafficShares...');
       const trafficPromise = computeAiTrafficShares(allCompanies, detectedIndustry, isFast, { companyName, product: detectedProduct })
         .then(result => {
-          console.log('✅ AI Traffic (counts) calculation completed successfully');
+          console.log('Γ£à AI Traffic (counts) calculation completed successfully');
           if (result && result.countsByCompetitor) {
             console.log('   Traffic results (counts):');
             Object.keys(result.countsByCompetitor).forEach(competitor => {
@@ -3247,20 +3247,20 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
               console.log(`     ${competitor}: total=${data.totalMentions}, P1=${p.first}, P2=${p.second}, P3+=${p.third}`);
             });
           } else {
-            console.log('   ⚠️ Traffic result is null/undefined');
+            console.log('   ΓÜá∩╕Å Traffic result is null/undefined');
           }
           return result;
         })
         .catch(error => {
-          console.log('❌ AI Traffic Share calculation failed:', error.message);
+          console.log('Γ¥î AI Traffic Share calculation failed:', error.message);
           console.log('   Stack trace:', error.stack);
           return null;
         });
 
-      console.log('📈 Calling computeCitationMetrics...');
+      console.log('≡ƒôê Calling computeCitationMetrics...');
       const citationsPromise = computeCitationMetrics(allCompanies, detectedIndustry, isFast, { companyName, product: detectedProduct })
         .then(result => {
-          console.log('✅ AI Citation Metrics calculation completed successfully');
+          console.log('Γ£à AI Citation Metrics calculation completed successfully');
           if (result) {
             console.log('   Citation results:');
             Object.keys(result).forEach(competitor => {
@@ -3272,12 +3272,12 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
               }
             });
           } else {
-            console.log('   ⚠️ Citation result is null/undefined');
+            console.log('   ΓÜá∩╕Å Citation result is null/undefined');
           }
           return result;
         })
         .catch(error => {
-          console.log('❌ AI Citation Metrics calculation failed:', error.message);
+          console.log('Γ¥î AI Citation Metrics calculation failed:', error.message);
           console.log('   Stack trace:', error.stack);
           return null;
         });
@@ -3316,21 +3316,21 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
       const [traffic, citations, shopping, sourceCapture] = await Promise.all([trafficPromise, citationsPromise, shoppingPromise, sourceCapturePromise]);
       
-      console.log('\n📋 Processing results...');
+      console.log('\n≡ƒôï Processing results...');
       console.log(`   Traffic result: ${traffic ? 'SUCCESS' : 'FAILED'}`);
       console.log(`   Citations result: ${citations ? 'SUCCESS' : 'FAILED'}`);
       
-      // Sentiment capture – targeted prompts per competitor with citation requirement
+      // Sentiment capture ΓÇô targeted prompts per competitor with citation requirement
       const toolsForSent = getConfiguredModelKeys();
       const sentCalls = [];
       const mkSentPromptsFor = (name) => {
         const base = [
           `Summarize shopper sentiment toward ${name} in ${detectedIndustry || '[industry]'} for ${detectedProduct || '[product]'}.
-Answer briefly. Then output a Sources section with 1–3 items as: Category | Domain | URL. Use real HTTPS links (no placeholders). Include ONE short quoted sentence that contains the brand name (e.g., "${name} ..."). Return Tone (Positive/Neutral/Negative/Mixed) and the main reason (price, delivery, trust, sustainability, UX).`,
+Answer briefly. Then output a Sources section with 1ΓÇô3 items as: Category | Domain | URL. Use real HTTPS links (no placeholders). Include ONE short quoted sentence that contains the brand name (e.g., "${name} ..."). Return Tone (Positive/Neutral/Negative/Mixed) and the main reason (price, delivery, trust, sustainability, UX).`,
           `Pros and cons for ${name} in ${detectedIndustry || '[industry]'}.
-Answer briefly. Then output a Sources section with 1–3 items as: Category | Domain | URL. Include ONE direct quote with the brand name ("${name} ...").`,
+Answer briefly. Then output a Sources section with 1ΓÇô3 items as: Category | Domain | URL. Include ONE direct quote with the brand name ("${name} ...").`,
           `Recent perception of ${name}: price, delivery, trust. Provide ONE quoted sentence that includes the brand name.
-Answer briefly. Then output a Sources section with 1–3 items as: Category | Domain | URL.`
+Answer briefly. Then output a Sources section with 1ΓÇô3 items as: Category | Domain | URL.`
         ];
         return base.slice(0, isFast ? 1 : 3);
       };
@@ -3358,7 +3358,7 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
         const quote = quoteDirect || extractSentenceWithName(txt, name);
         const source = classifySourceCategoryFromText(txt);
         const attr = detectAttributeFromText(txt);
-        const takeaway = tone === 'Positive' ? 'Positive framing may boost authority and conversions.' : tone === 'Negative' ? 'Visibility present but negative sentiment — address issues with content.' : tone === 'Mixed' ? 'Mixed perception — clarify value props where weak.' : 'Neutral presence — opportunity to shape narrative.';
+        const takeaway = tone === 'Positive' ? 'Positive framing may boost authority and conversions.' : tone === 'Negative' ? 'Visibility present but negative sentiment ΓÇö address issues with content.' : tone === 'Mixed' ? 'Mixed perception ΓÇö clarify value props where weak.' : 'Neutral presence ΓÇö opportunity to shape narrative.';
         sentimentByCompetitor[name].push({ name, tone, quote, source, attr, takeaway });
       });
 
@@ -3417,7 +3417,7 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
         return { ...r, aiTraffic, citations: citationsFor, shopping: shoppingFor, sourcesByTool, contentStyle: styleCounts, contentStyleSource: styleSource, sentiment: sentimentRows, productAttributes: attrCounts };
       });
     } catch (e) { 
-      console.log('❌ Error in AI Traffic/Citation calculation:', e.message);
+      console.log('Γ¥î Error in AI Traffic/Citation calculation:', e.message);
       console.log('   Stack trace:', e.stack);
     }
 
@@ -3426,42 +3426,16 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
       ...r,
       ravi: computeRaviForCompetitor(r)
     }));
-    console.log('✅ All parallel analyses completed!');
+    console.log('Γ£à All parallel analyses completed!');
     
     const aiTime = Date.now();
-    console.log(`⏱️ AI analysis completed in ${aiTime - aiStartTime}ms`);
+    console.log(`ΓÅ▒∩╕Å AI analysis completed in ${aiTime - aiStartTime}ms`);
     
-    console.log('\n🎉 Optimized AI Visibility Analysis complete!');
-    console.log('📋 Final results:');
+    console.log('\n≡ƒÄë Optimized AI Visibility Analysis complete!');
+    console.log('≡ƒôï Final results:');
     analysisResults.forEach(comp => {
       console.log(`   - ${comp.name}: Score ${comp.totalScore}/10`);
     });
-    
-    // Fallback: if no competitors found, use legacy discovery
-    if (!analysisResults || analysisResults.length === 0) {
-      try {
-        console.log('⚠️ No competitors from AI analysis. Falling back to legacy discovery...');
-        const CompetitorDiscoveryService = require('./competitorDiscovery');
-        const discovery = new CompetitorDiscoveryService();
-        const fallback = await discovery.discoverCompetitors(companyName, detectedIndustry || industry || 'general');
-        if (fallback?.success && Array.isArray(fallback.competitors) && fallback.competitors.length > 0) {
-          analysisResults = fallback.competitors.map(c => ({
-            name: c.name || c.domain || 'Unknown',
-            domain: c.domain || '',
-            totalScore: 5,
-            aiScores: { gemini: 0, perplexity: 0, claude: 0, chatgpt: 0 },
-            aiTraffic: { totalMentions: 0, placementTotals: { first: 0, second: 0, third: 0 } },
-            citations: { global: { citationScore: 0 } },
-            shopping: { total: 0, byModel: {} },
-            sentiment: [],
-            contentStyle: { List: 0, Comparison: 0, Recommendation: 0, FAQ: 0, Editorial: 0 },
-            productAttributes: {},
-          }));
-        }
-      } catch (e) {
-        console.warn('Fallback discovery failed:', e?.message);
-      }
-    }
     
     // Calculate overall service status
     const overallServiceStatus = {
@@ -3472,8 +3446,8 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
     };
     
     const totalTime = Date.now() - startTime;
-    console.log(`\n⏱️ Total analysis time: ${totalTime}ms (${(totalTime/1000).toFixed(1)}s)`);
-    console.log(`📊 Performance breakdown:`);
+    console.log(`\nΓÅ▒∩╕Å Total analysis time: ${totalTime}ms (${(totalTime/1000).toFixed(1)}s)`);
+    console.log(`≡ƒôè Performance breakdown:`);
     console.log(`   - Search & Industry: ${searchTime - startTime}ms`);
     console.log(`   - Competitor Detection: ${competitorTime - competitorStartTime}ms`);
     console.log(`   - AI Analysis: ${aiTime - aiStartTime}ms`);
@@ -3536,8 +3510,8 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
 
 // Analyze a single competitor for AI visibility
 async function analyzeSingleCompetitor(competitorName, industry = '') {
-  console.log(`\n🎯 Analyzing single competitor: ${competitorName}`);
-  console.log(`📋 Industry context: ${industry || 'Not specified'}`);
+  console.log(`\n≡ƒÄ» Analyzing single competitor: ${competitorName}`);
+  console.log(`≡ƒôï Industry context: ${industry || 'Not specified'}`);
   
   try {
     // Detect industry and product if not provided
@@ -3545,24 +3519,24 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
     let detectedProduct = '';
     
     if (!industry) {
-      console.log('🔍 Detecting industry and product automatically...');
+      console.log('≡ƒöì Detecting industry and product automatically...');
       const detection = await detectIndustryAndProduct(competitorName);
       detectedIndustry = detection.industry;
       detectedProduct = detection.product;
-      console.log(`   ✅ Detected industry: ${detectedIndustry}`);
-      console.log(`   ✅ Detected product: ${detectedProduct}`);
+      console.log(`   Γ£à Detected industry: ${detectedIndustry}`);
+      console.log(`   Γ£à Detected product: ${detectedProduct}`);
     }
     
     // Get enhanced prompts
     const enhancedPrompts = getEnhancedPrompts(competitorName, detectedIndustry, detectedProduct);
     
-    console.log(`\n📝 Enhanced prompts for ${competitorName}:`);
+    console.log(`\n≡ƒô¥ Enhanced prompts for ${competitorName}:`);
     console.log(`   Gemini prompts:`, enhancedPrompts.gemini);
     console.log(`   Perplexity prompts:`, enhancedPrompts.perplexity);
     console.log(`   Claude prompts:`, enhancedPrompts.claude);
     console.log(`   ChatGPT prompts:`, enhancedPrompts.chatgpt);
     
-    console.log('\n🤖 Querying AI models in parallel for visibility analysis...');
+    console.log('\n≡ƒñû Querying AI models in parallel for visibility analysis...');
     
     // Query all AI models in parallel for maximum speed
     const [
@@ -3571,7 +3545,7 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
       audienceProfile
     ] = await Promise.all([
       queryGeminiVisibility(competitorName, detectedIndustry, enhancedPrompts.gemini).catch(err => {
-        console.error(`❌ Gemini error for ${competitorName}:`, err.message);
+        console.error(`Γ¥î Gemini error for ${competitorName}:`, err.message);
         console.error(`   Stack trace:`, err.stack);
         return { 
           analysis: 'Analysis unavailable', 
@@ -3581,7 +3555,7 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
         };
       }),
       queryPerplexity(competitorName, detectedIndustry, enhancedPrompts.perplexity).catch(err => {
-        console.error(`❌ Perplexity error for ${competitorName}:`, err.message);
+        console.error(`Γ¥î Perplexity error for ${competitorName}:`, err.message);
         console.error(`   Stack trace:`, err.stack);
         return { 
           analysis: 'Analysis unavailable', 
@@ -3591,7 +3565,7 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
         };
       }),
       queryClaude(competitorName, detectedIndustry, enhancedPrompts.claude).catch(err => {
-        console.error(`❌ Claude error for ${competitorName}:`, err.message);
+        console.error(`Γ¥î Claude error for ${competitorName}:`, err.message);
         console.error(`   Stack trace:`, err.stack);
         return { 
           analysis: 'Analysis unavailable', 
@@ -3601,7 +3575,7 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
         };
       }),
       queryChatGPT(competitorName, detectedIndustry, enhancedPrompts.chatgpt).catch(err => {
-        console.error(`❌ ChatGPT error for ${competitorName}:`, err.message);
+        console.error(`Γ¥î ChatGPT error for ${competitorName}:`, err.message);
         console.error(`   Stack trace:`, err.stack);
         return { 
           analysis: 'Analysis unavailable', 
@@ -3613,7 +3587,7 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
       withTimeout(getAudienceProfile(competitorName), 12000, null).catch(() => null)
     ]);
     
-    console.log(`\n🔍 Raw AI responses for ${competitorName}:`);
+    console.log(`\n≡ƒöì Raw AI responses for ${competitorName}:`);
     console.log(`   Gemini:`, geminiResponse ? 'Success' : 'Failed');
     console.log(`   Perplexity:`, perplexityResponse ? 'Success' : 'Failed');
     console.log(`   Claude:`, claudeResponse ? 'Success' : 'Failed');
@@ -3626,7 +3600,7 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
     const safeChatGPTResponse = chatgptResponse || { analysis: 'No analysis available', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
     
     // Log response structures for debugging
-    console.log(`\n🔍 Response structures for ${competitorName}:`);
+    console.log(`\n≡ƒöì Response structures for ${competitorName}:`);
     console.log(`   Gemini:`, JSON.stringify(safeGeminiResponse, null, 2));
     console.log(`   Perplexity:`, JSON.stringify(safePerplexityResponse, null, 2));
     console.log(`   Claude:`, JSON.stringify(safeClaudeResponse, null, 2));
@@ -3642,7 +3616,7 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
     
     const totalScore = (scores.gemini + scores.perplexity + scores.claude + scores.chatgpt) / 4;
     
-    console.log(`\n📊 AI Visibility Scores for ${competitorName}:`);
+    console.log(`\n≡ƒôè AI Visibility Scores for ${competitorName}:`);
     console.log(`   - Gemini: ${scores.gemini.toFixed(4)}`);
     console.log(`   - Perplexity: ${scores.perplexity.toFixed(4)}`);
     console.log(`   - Claude: ${scores.claude.toFixed(4)}`);
@@ -3676,8 +3650,8 @@ async function analyzeSingleCompetitor(competitorName, industry = '') {
       audienceProfile: audienceProfile || null
     };
     
-    console.log(`\n✅ Single competitor analysis complete for ${competitorName}`);
-    console.log(`📋 Final result: Score ${totalScore.toFixed(4)}/10`);
+    console.log(`\nΓ£à Single competitor analysis complete for ${competitorName}`);
+    console.log(`≡ƒôï Final result: Score ${totalScore.toFixed(4)}/10`);
     
     return competitorAnalysis;
     
