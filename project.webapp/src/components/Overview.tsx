@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon } from 'lucide-react';
+import { Search, Loader2, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, FileText, X, Upload } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { SessionData } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -15,57 +15,7 @@ import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
 
-// SVG/mini-visuals for each feature
-const BarChartSVG = () => (
-  <svg width="40" height="24" viewBox="0 0 40 24" fill="none"><rect x="2" y="12" width="5" height="10" fill="#3b82f6"/><rect x="10" y="6" width="5" height="16" fill="#60a5fa"/><rect x="18" y="2" width="5" height="20" fill="#2563eb"/><rect x="26" y="8" width="5" height="14" fill="#93c5fd"/><rect x="34" y="16" width="5" height="6" fill="#1e40af"/></svg>
-);
-const PieChartSVG = () => (
-  <svg width="40" height="24" viewBox="0 0 40 24" fill="none"><circle cx="12" cy="12" r="10" fill="#fbbf24"/><path d="M12 2 A10 10 0 0 1 22 12 L12 12 Z" fill="#f59e42"/></svg>
-);
-const MagicWandSVG = () => (
-  <svg width="40" height="24" viewBox="0 0 40 24" fill="none"><rect x="18" y="4" width="4" height="16" rx="2" fill="#a21caf"/><circle cx="20" cy="4" r="3" fill="#f472b6"/><circle cx="20" cy="20" r="2" fill="#f472b6"/></svg>
-);
-const StructureSVG = () => (
-  <svg width="40" height="24" viewBox="0 0 40 24" fill="none"><rect x="6" y="10" width="8" height="8" fill="#10b981"/><rect x="26" y="6" width="8" height="8" fill="#34d399"/><rect x="16" y="2" width="8" height="8" fill="#6ee7b7"/><path d="M14 14 L20 10 L26 14" stroke="#10b981" strokeWidth="2" fill="none"/></svg>
-);
-const CalendarSVG = () => (
-  <svg width="40" height="24" viewBox="0 0 40 24" fill="none"><rect x="6" y="6" width="28" height="14" rx="3" fill="#f87171"/><rect x="10" y="10" width="6" height="6" fill="#fff"/><rect x="24" y="10" width="6" height="6" fill="#fff"/></svg>
-);
-const LineChartSVG = () => (
-  <svg width="40" height="24" viewBox="0 0 40 24" fill="none"><polyline points="2,22 10,10 18,14 26,6 34,18 38,10" fill="none" stroke="#6366f1" strokeWidth="2"/><circle cx="10" cy="10" r="2" fill="#6366f1"/><circle cx="26" cy="6" r="2" fill="#6366f1"/><circle cx="34" cy="18" r="2" fill="#6366f1"/></svg>
-);
-
-interface FeatureCardProps {
-  title: string;
-  description: string;
-  button: string;
-  onClick: () => void;
-  icon: React.ReactNode;
-  visual?: React.ReactNode;
-}
-
-function FeatureCard({ title, description, button, onClick, icon, visual }: FeatureCardProps) {
-  return (
-    <div className="bg-white border rounded-lg p-6 shadow hover:shadow-lg transition flex flex-col justify-between">
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          {icon}
-          {visual && <div className="ml-auto">{visual}</div>}
-        </div>
-        <h3 className="text-xl font-bold mb-2">{title}</h3>
-        <p className="mb-4 text-gray-600">{description}</p>
-      </div>
-      <button
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mt-auto"
-        onClick={onClick}
-      >
-        {button}
-      </button>
-    </div>
-  );
-}
-
-// New Dashboard Feature Cards
+// Dashboard Card Component
 interface DashboardCardProps {
   title: string;
   icon: React.ReactNode;
@@ -87,169 +37,31 @@ function DashboardCard({ title, icon, iconBgColor, children }: DashboardCardProp
   );
 }
 
-// Sentiment Analysis Component
-function SentimentAnalysisCard({ competitors, company }: { 
-  competitors: any[], 
-  company?: string 
-}) {
-  // Calculate sentiment percentages based on brand mentions
-  const calculateSentiment = () => {
-    if (!competitors || competitors.length === 0) {
-      return { positive: 0, neutral: 0, negative: 0, total: 0, drivers: { positive: [], neutral: [], negative: [] } };
-    }
-
-    let totalMentions = 0;
-    let positiveMentions = 0;
-    let neutralMentions = 0;
-    let negativeMentions = 0;
-    
-    const positiveDrivers: string[] = [];
-    const neutralDrivers: string[] = [];
-    const negativeDrivers: string[] = [];
-
-    competitors.forEach((competitor: any) => {
-      // Extract sentiment data from competitor analysis
-      const breakdowns = competitor.breakdowns || {};
-      const geminiBreakdown = breakdowns.gemini || {};
-      
-      // Count mentions by sentiment
-      const mentions = geminiBreakdown.mentionsScore || 0;
-      const sentiment = geminiBreakdown.sentimentScore || 0.5;
-      
-      totalMentions += mentions;
-      
-      // Categorize sentiment (0-0.3: negative, 0.3-0.7: neutral, 0.7-1: positive)
-      if (sentiment < 0.3) {
-        negativeMentions += mentions;
-        negativeDrivers.push(competitor.name || 'Unknown');
-      } else if (sentiment > 0.7) {
-        positiveMentions += mentions;
-        positiveDrivers.push(competitor.name || 'Unknown');
-      } else {
-        neutralMentions += mentions;
-        neutralDrivers.push(competitor.name || 'Unknown');
-      }
-    });
-
-    // Calculate percentages
-    let positivePercent = totalMentions > 0 ? (positiveMentions / totalMentions) * 100 : 0;
-    let neutralPercent = totalMentions > 0 ? (neutralMentions / totalMentions) * 100 : 0;
-    let negativePercent = totalMentions > 0 ? (negativeMentions / totalMentions) * 100 : 0;
-
-    // Apply override logic: if negative is 100%, show as Neutral 80% and Negative 20%
-    if (negativePercent === 100) {
-      neutralPercent = 80;
-      negativePercent = 20;
-      positivePercent = 0;
-    }
-
-    return {
-      positive: Math.round(positivePercent * 100) / 100,
-      neutral: Math.round(neutralPercent * 100) / 100,
-      negative: Math.round(negativePercent * 100) / 100,
-      total: totalMentions,
-      drivers: {
-        positive: positiveDrivers.slice(0, 3), // Top 3 positive drivers
-        neutral: neutralDrivers.slice(0, 3),   // Top 3 neutral drivers
-        negative: negativeDrivers.slice(0, 3)  // Top 3 negative drivers
-      }
-    };
-  };
-
-  const sentiment = calculateSentiment();
-  // Determine dominant sentiment based on highest percentage
-  const dominantSentiment = sentiment.neutral > sentiment.positive && sentiment.neutral > sentiment.negative ? 'Neutral' :
-                           sentiment.positive > sentiment.negative ? 'Positive' : 'Negative';
-  const sentimentColor = dominantSentiment === 'Positive' ? 'text-green-600' : 
-                        dominantSentiment === 'Negative' ? 'text-red-600' : 'text-yellow-600';
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
-        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-      </div>
-      
-      <div className="space-y-4">
-        {/* Overall Sentiment */}
-        <div className="text-center">
-          <div className={`text-2xl font-bold ${sentimentColor}`}>
-            {dominantSentiment}
-          </div>
-          
-        </div>
-
-        {/* Sentiment Percentages */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Positive</span>
-            <div className="flex items-center space-x-2">
-              <div className="w-20 bg-gray-200 rounded-full h-2">
-                <div className="bg-green-500 h-2 rounded-full" style={{ width: `${sentiment.positive}%` }}></div>
-              </div>
-              <span className="text-sm font-medium text-gray-900">{sentiment.positive}%</span>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Neutral</span>
-            <div className="flex items-center space-x-2">
-              <div className="w-20 bg-gray-200 rounded-full h-2">
-                <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${sentiment.neutral}%` }}></div>
-              </div>
-              <span className="text-sm font-medium text-gray-900">{sentiment.neutral}%</span>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Negative</span>
-            <div className="flex items-center space-x-2">
-              <div className="w-20 bg-gray-200 rounded-full h-2">
-                <div className="bg-red-500 h-2 rounded-full" style={{ width: `${sentiment.negative}%` }}></div>
-              </div>
-              <span className="text-sm font-medium text-gray-900">{sentiment.negative}%</span>
-            </div>
-          </div>
-        </div>
-
-
-      </div>
-    </div>
-  );
-}
-
 // AI Visibility Score Component
 function AIVisibilityScoreCard({ score, industry, metrics }: { 
   score: number, 
   industry?: string, 
   metrics?: any 
 }) {
-  // Validate and convert score from 0-10 scale to 0-100 scale for display
   const validateScore = (rawScore: number): number => {
-    // Ensure score is within valid range (0-10)
     const clampedScore = Math.max(0, Math.min(10, rawScore));
-    // Convert to 0-100 scale
     return Math.round(clampedScore * 10);
   };
   
   const displayScore = validateScore(score);
   
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 80) return 'text-blue-600';
+    if (score >= 60) return 'text-blue-500';
+    if (score >= 40) return 'text-gray-600';
+    return 'text-gray-500';
   };
 
   const getProgressColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
+    if (score >= 80) return 'bg-blue-600';
     if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 40) return 'bg-gray-500';
+    return 'bg-gray-400';
   };
 
   const getScoreLabel = (score: number) => {
@@ -274,8 +86,6 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
           {getScoreLabel(displayScore)}
         </div>
         
-        {/* Detailed metrics removed for cleaner UI */}
-        
         <div className="w-full bg-gray-200 rounded-full h-3">
           <div 
             className={`h-3 rounded-full ${getProgressColor(displayScore)} transition-all duration-500`}
@@ -287,83 +97,7 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
   );
 }
 
-// LLM Presence Component
-function LLMPresenceCard({ serviceStatus, aiScores }: { 
-  serviceStatus: any, 
-  aiScores?: any
-}) {
-  const llmServices = [
-    { name: 'ChatGPT', key: 'chatgpt', icon: <CheckCircle className="w-4 h-4" /> },
-    { name: 'Gemini', key: 'gemini', icon: <CheckCircle className="w-4 h-4" /> },
-    { name: 'Perplexity', key: 'perplexity', icon: <CheckCircle className="w-4 h-4" /> },
-    { name: 'Claude', key: 'claude', icon: <CheckCircle className="w-4 h-4" /> },
-  ];
-
-  // Determine availability based ONLY on actual AI scores from backend
-  const getLLMAvailability = () => {
-    const availability: Record<string, boolean> = {
-      chatgpt: false,
-      gemini: false,
-      perplexity: false,
-      claude: false
-    };
-
-    if (aiScores) {
-      // Only mark as available if there's a real score > 0
-      // No fallback to serviceStatus - only real data counts
-      availability.chatgpt = aiScores.chatgpt !== undefined && aiScores.chatgpt > 0;
-      availability.gemini = aiScores.gemini !== undefined && aiScores.gemini > 0;
-      availability.perplexity = aiScores.perplexity !== undefined && aiScores.perplexity > 0;
-      availability.claude = aiScores.claude !== undefined && aiScores.claude > 0;
-    }
-    // Removed fallback to serviceStatus - if no aiScores, all are false
-
-    return availability;
-  };
-
-  const currentStatus = getLLMAvailability();
-  
-  // Count available services
-  const availableServices = llmServices.filter(service => currentStatus[service.key]).length;
-  const totalServices = llmServices.length;
-
-  return (
-    <DashboardCard
-      title="LLM Presence"
-      icon={<Bot className="w-5 h-5 text-white" />}
-      iconBgColor="bg-blue-500"
-    >
-      <div className="space-y-3">
-        {llmServices.map((service) => {
-          const isAvailable = currentStatus[service.key];
-          
-          return (
-            <div key={service.key} className="flex items-center justify-between">
-              <span className="text-gray-700">{service.name}</span>
-              <div className={`flex items-center ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
-                {isAvailable ? (
-                  <>
-                    {service.icon}
-                    <span className="ml-1 text-sm">Available</span>
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-4 h-4" />
-                    <span className="ml-1 text-sm">Not Available</span>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        
-
-      </div>
-    </DashboardCard>
-  );
-}
-
-// Share of AI Voice KPI Card
+// Share of AI Voice Card
 function ShareOfAIVoiceCard({ result }: { result: any }) {
   const computeShare = (analysisResult: any): number => {
     try {
@@ -408,130 +142,99 @@ function ShareOfAIVoiceCard({ result }: { result: any }) {
   );
 }
 
-// Top Performing Products KPI Card
-function TopProductsKpiCard({ result }: { result: any }) {
-  type NormalizedProduct = {
-    sku: string;
-    category: string;
-    visibility: number; // 0..1
-    conversion: number | null; // 0..1 or null
-    composite: number; // visibility * (conversion || 1)
-  };
+// LLM Presence Card
+function LLMPresenceCard({ serviceStatus, aiScores }: { 
+  serviceStatus: any, 
+  aiScores?: any
+}) {
+  const llmServices = [
+    { name: 'ChatGPT', key: 'chatgpt', icon: <CheckCircle className="w-4 h-4" /> },
+    { name: 'Gemini', key: 'gemini', icon: <CheckCircle className="w-4 h-4" /> },
+    { name: 'Perplexity', key: 'perplexity', icon: <CheckCircle className="w-4 h-4" /> },
+    { name: 'Claude', key: 'claude', icon: <CheckCircle className="w-4 h-4" /> },
+  ];
 
-  const normalize01 = (raw: unknown): number | null => {
-    const v = Number(raw);
-    if (isNaN(v)) return null;
-    if (v <= 0) return 0;
-    if (v <= 1) return Math.min(1, v);
-    if (v <= 10) return Math.min(1, v / 10);
-    if (v <= 100) return Math.min(1, v / 100);
-    return 1;
-  };
+  const getLLMAvailability = () => {
+    const availability: Record<string, boolean> = {
+      chatgpt: false,
+      gemini: false,
+      perplexity: false,
+      claude: false
+    };
 
-  const getProducts = (): NormalizedProduct[] => {
-    try {
-      const source = (result?.products || result?.productPerformance || []) as any[];
-      if (!Array.isArray(source) || source.length === 0) return [];
-
-      const mapped = source.map((p: any) => {
-        const sku = String(p?.sku || p?.id || p?.SKU || 'Unknown');
-        const category = String(p?.category || (Array.isArray(p?.categories) ? p.categories[0] : '') || '—');
-        const visibility = normalize01(
-          p?.visibilityScore ?? p?.aiVisibilityScore ?? p?.score ?? p?.totalScore ?? null
-        ) ?? 0;
-        const conversion = normalize01(
-          p?.conversionRate ?? p?.conversion ?? p?.cv ?? p?.performance?.conversionRate ?? null
-        );
-        const composite = visibility * (conversion ?? 1);
-        return { sku, category, visibility, conversion: conversion ?? null, composite } as NormalizedProduct;
-      });
-
-      return mapped
-        .sort((a, b) => b.composite - a.composite)
-        .slice(0, 5);
-    } catch {
-      return [];
+    if (aiScores) {
+      availability.chatgpt = aiScores.chatgpt !== undefined && aiScores.chatgpt > 0;
+      availability.gemini = aiScores.gemini !== undefined && aiScores.gemini > 0;
+      availability.perplexity = aiScores.perplexity !== undefined && aiScores.perplexity > 0;
+      availability.claude = aiScores.claude !== undefined && aiScores.claude > 0;
     }
+
+    return availability;
   };
 
-  const products = getProducts();
+  const currentStatus = getLLMAvailability();
 
   return (
     <DashboardCard
-      title="Top Performing Products"
-      icon={<Award className="w-5 h-5 text-white" />}
-      iconBgColor="bg-orange-500"
+      title="LLM Presence"
+      icon={<Bot className="w-5 h-5 text-white" />}
+      iconBgColor="bg-blue-500"
     >
-      {products.length === 0 ? (
-        <div className="text-sm text-gray-600 text-center">No product performance data available</div>
-      ) : (
-        <div className="space-y-3">
-          {products.map((p, idx) => {
-            const visPct = Math.round(p.visibility * 1000) / 10;
-            const convPct = p.conversion === null ? null : Math.round(p.conversion * 1000) / 10;
-            const compPct = Math.round(p.composite * 1000) / 10;
-            return (
-              <div key={`${p.sku}-${idx}`} className="flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-800 text-sm font-semibold flex items-center justify-center">{idx + 1}</div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-gray-900 truncate" title={p.sku}>{p.sku}</div>
-                    <div className="text-xs text-gray-600 truncate" title={p.category}>{p.category}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-xs text-gray-500">Visibility</div>
-                    <div className="text-sm font-medium text-gray-900">{visPct}%</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-500">Conversion</div>
-                    <div className="text-sm font-medium text-gray-900">{convPct === null ? 'N/A' : `${convPct}%`}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-500">Score</div>
-                    <div className="text-sm font-semibold text-gray-900">{compPct}%</div>
-                  </div>
-                </div>
+      <div className="space-y-3">
+        {llmServices.map((service) => {
+          const isAvailable = currentStatus[service.key];
+          
+          return (
+            <div key={service.key} className="flex items-center justify-between">
+              <span className="text-gray-700">{service.name}</span>
+              <div className={`flex items-center ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
+                {isAvailable ? (
+                  <>
+                    {service.icon}
+                    <span className="ml-1 text-sm">Available</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span className="ml-1 text-sm">Not Available</span>
+                  </>
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
     </DashboardCard>
   );
 }
 
-// Competitor Benchmark Component
-function CompetitorBenchmarkCard({ competitors, industry }: { competitors: any[], industry?: string }) {
+// Competitor Benchmark Card
+function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
   const getBenchmarkStatus = (competitors: any[]) => {
-    if (!competitors || competitors.length === 0) return { status: 'No Data', rank: 'N/A', color: 'text-gray-500', score: 0, rawScore: 0 };
+    if (!competitors || competitors.length === 0) return { status: 'No Data', color: 'text-gray-500', score: 0 };
     
-    // Calculate average score (scores are on 0-10 scale, convert to 0-100 for display)
     const avgScore = competitors.reduce((sum, comp) => sum + (comp.totalScore || 0), 0) / competitors.length;
     const displayScore = Math.round(avgScore * 10);
     
-    if (displayScore >= 80) return { status: 'Excellent', rank: 'Top 10%', color: 'text-purple-600', score: displayScore, rawScore: avgScore };
-    if (displayScore >= 70) return { status: 'Above Average', rank: 'Top 25%', color: 'text-blue-600', score: displayScore, rawScore: avgScore };
-    if (displayScore >= 60) return { status: 'Average', rank: 'Top 50%', color: 'text-yellow-600', score: displayScore, rawScore: avgScore };
-    if (displayScore >= 50) return { status: 'Below Average', rank: 'Bottom 50%', color: 'text-orange-600', score: displayScore, rawScore: avgScore };
-    return { status: 'Poor', rank: 'Bottom 25%', color: 'text-red-600', score: displayScore, rawScore: avgScore };
+    if (displayScore >= 80) return { status: 'Excellent', color: 'text-blue-600', score: displayScore };
+    if (displayScore >= 70) return { status: 'Above Average', color: 'text-blue-500', score: displayScore };
+    if (displayScore >= 60) return { status: 'Average', color: 'text-gray-600', score: displayScore };
+    if (displayScore >= 50) return { status: 'Below Average', color: 'text-gray-500', score: displayScore };
+    return { status: 'Poor', color: 'text-gray-400', score: displayScore };
   };
 
   const benchmark = getBenchmarkStatus(competitors);
-  const filledBars = Math.min(5, Math.max(1, Math.ceil((competitors?.length || 0) / 2)));
 
   return (
     <DashboardCard
       title="Competitor Benchmark"
       icon={<BarChartIcon className="w-5 h-5 text-white" />}
-      iconBgColor="bg-purple-500"
+      iconBgColor="bg-blue-500"
     >
       <div className="text-center">
         <div className={`text-2xl font-bold ${benchmark.color} mb-2`}>
           {benchmark.status}
         </div>
-        
         <div className="text-lg font-semibold text-gray-700 mb-3">
           Score: {benchmark.score}/100
         </div>
@@ -540,15 +243,1084 @@ function CompetitorBenchmarkCard({ competitors, industry }: { competitors: any[]
   );
 }
 
+// Sentiment Analysis Card
+function SentimentAnalysisCard({ competitors }: { competitors: any[] }) {
+  const calculateSentiment = () => {
+    if (!competitors || competitors.length === 0) {
+      return { positive: 0, neutral: 0, negative: 0 };
+    }
+
+    let totalMentions = 0;
+    let positiveMentions = 0;
+    let neutralMentions = 0;
+    let negativeMentions = 0;
+
+    competitors.forEach((competitor: any) => {
+      const breakdowns = competitor.breakdowns || {};
+      const geminiBreakdown = breakdowns.gemini || {};
+      
+      const mentions = geminiBreakdown.mentionsScore || 0;
+      const sentiment = geminiBreakdown.sentimentScore || 0.5;
+      
+      totalMentions += mentions;
+      
+      if (sentiment < 0.3) {
+        negativeMentions += mentions;
+      } else if (sentiment > 0.7) {
+        positiveMentions += mentions;
+      } else {
+        neutralMentions += mentions;
+      }
+    });
+
+    let positivePercent = totalMentions > 0 ? (positiveMentions / totalMentions) * 100 : 0;
+    let neutralPercent = totalMentions > 0 ? (neutralMentions / totalMentions) * 100 : 0;
+    let negativePercent = totalMentions > 0 ? (negativeMentions / totalMentions) * 100 : 0;
+
+    if (negativePercent === 100) {
+      neutralPercent = 80;
+      negativePercent = 20;
+      positivePercent = 0;
+    }
+
+    return {
+      positive: Math.round(positivePercent * 100) / 100,
+      neutral: Math.round(neutralPercent * 100) / 100,
+      negative: Math.round(negativePercent * 100) / 100
+    };
+  };
+
+  const sentiment = calculateSentiment();
+  const dominantSentiment = sentiment.neutral > sentiment.positive && sentiment.neutral > sentiment.negative ? 'Neutral' :
+                           sentiment.positive > sentiment.negative ? 'Positive' : 'Negative';
+  const sentimentColor = dominantSentiment === 'Positive' ? 'text-blue-600' : 
+                        dominantSentiment === 'Negative' ? 'text-gray-500' : 'text-gray-600';
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
+        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+      </div>
+      
+      <div className="space-y-4">
+        <div className="text-center">
+          <div className={`text-2xl font-bold ${sentimentColor}`}>
+            {dominantSentiment}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {[
+            { label: 'Positive', value: sentiment.positive, color: 'bg-blue-600' },
+            { label: 'Neutral', value: sentiment.neutral, color: 'bg-gray-500' },
+            { label: 'Negative', value: sentiment.negative, color: 'bg-gray-400' }
+          ].map(({ label, value, color }) => (
+            <div key={label} className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">{label}</span>
+              <div className="flex items-center space-x-2">
+                <div className="w-20 bg-gray-200 rounded-full h-2">
+                  <div className={`${color} h-2 rounded-full`} style={{ width: `${value}%` }}></div>
+                </div>
+                <span className="text-sm font-medium text-gray-900">{value}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Top Products Card
+function TopProductsKpiCard() {
+  return (
+    <DashboardCard
+      title="Top Performing Products"
+      icon={<Award className="w-5 h-5 text-white" />}
+      iconBgColor="bg-orange-500"
+    >
+      <div className="text-sm text-gray-600 text-center">No product performance data available</div>
+    </DashboardCard>
+  );
+}
+
+// Modal Components
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}
+
+function Modal({ isOpen, onClose, children }: ModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose}></div>
+        
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+        
+        <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Shopify Connect Modal
+interface ShopifyConnectModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
+  const [mode, setMode] = useState<'oauth' | 'public' | 'storefront' | 'byo'>('storefront');
+  const [shopDomain, setShopDomain] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  // BYO creds
+  const [creds, setCreds] = useState({ name: '', apiKey: '', apiSecret: '', redirectUri: '' });
+  const [credsList, setCredsList] = useState<any[]>([]);
+  const [credsId, setCredsId] = useState('');
+  // Storefront
+  const [sfToken, setSfToken] = useState('');
+  const [sfSaving, setSfSaving] = useState(false);
+  const [sfSavedMsg, setSfSavedMsg] = useState<string | null>(null);
+  const [connections, setConnections] = useState<any[]>([]);
+  const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
+  const [authIssue, setAuthIssue] = useState<boolean>(false);
+  const [devMode, setDevMode] = useState<boolean>(false);
+
+  const reload = async () => {
+    let apiWorking = false;
+    let hasAuthIssue = false;
+    
+    // Load connections from localStorage first (for client-side connections)
+    try {
+      const localConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+      setConnections(localConnections);
+    } catch (error) {
+      console.warn('[Shopify Modal] Failed to load local connections:', error);
+    }
+    
+    // Try to load from backend API
+    try {
+      const c = await apiService.listShopifyConnections();
+      setConnections(prev => [...prev, ...(c?.shops || [])]);
+      apiWorking = true;
+    } catch (error: any) {
+      console.warn('[Shopify Modal] Failed to load connections from API:', error);
+      
+      // Check if it's an auth error
+      if (error?.message?.includes('Session expired') || error?.message?.includes('Invalid token')) {
+        console.log('[Shopify Modal] Authentication issue detected');
+        hasAuthIssue = true;
+      }
+    }
+    
+    try {
+      const cl = await apiService.listShopifyCreds();
+      setCredsList(cl?.items || []);
+      apiWorking = true;
+    } catch (error: any) {
+      console.warn('[Shopify Modal] Failed to load credentials:', error);
+      setCredsList([]);
+      
+      // Check if it's an auth error
+      if (error?.message?.includes('Session expired') || error?.message?.includes('Invalid token')) {
+        console.log('[Shopify Modal] Authentication issue detected');
+        hasAuthIssue = true;
+      }
+    }
+    
+    setAuthIssue(hasAuthIssue);
+    setApiAvailable(apiWorking);
+  };
+
+  React.useEffect(() => { 
+    if (isOpen) {
+      reload(); 
+    }
+  }, [isOpen]);
+
+  const toDomain = (raw: string) => {
+    let s = (raw || '').trim().toLowerCase();
+    // strip protocol and path
+    s = s.replace(/^https?:\/\//, '').replace(/\/.*/, '');
+    // fix accidental 'shopify.com.myshopify.com'
+    s = s.replace('shopify.com.myshopify.com', 'myshopify.com');
+    // convert 'sub.shopify.com' -> 'sub.myshopify.com'
+    if (s.endsWith('.shopify.com') && !s.endsWith('.myshopify.com')) {
+      s = s.replace(/\.shopify\.com$/, '.myshopify.com');
+    }
+    // append if only subdomain provided
+    if (!s.endsWith('.myshopify.com')) {
+      if (!s.includes('.')) s = `${s}.myshopify.com`;
+    }
+    return s;
+  };
+
+  const startConnectOAuth = () => {
+    if (!shopDomain) return;
+    setConnecting(true);
+    
+    // Development mode simulation
+    if (devMode) {
+      setTimeout(() => {
+        const domain = toDomain(shopDomain.trim());
+        const mockConnection = { shop: domain, type: 'oauth' };
+        setConnections(prev => [...prev.filter(c => c.shop !== mockConnection.shop), mockConnection]);
+        setConnecting(false);
+        alert(`✅ Development Mode: OAuth connection to ${domain} simulated successfully!`);
+      }, 2000);
+      return;
+    }
+
+    // Real OAuth flow
+    const domain = toDomain(shopDomain.trim());
+    const base = credsId ? apiService.getShopifyAuthStartUrlWithCreds(domain, credsId) : apiService.getShopifyAuthStartUrl(domain);
+    const accessToken = localStorage.getItem('accessToken') || '';
+    if (!accessToken) { setConnecting(false); return; }
+    const url = `${base}${base.includes('?') ? '&' : '?'}token=${encodeURIComponent(accessToken)}`;
+    // Open OAuth in a popup so the main app stays in place
+    const w = 640, h = 720;
+    const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
+    const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
+    const popup = window.open(url, 'shopify_oauth', `width=${w},height=${h},left=${left},top=${top}`);
+    const handler = (ev: MessageEvent) => {
+      if (!ev?.data || typeof ev.data !== 'object') return;
+      if ((ev as any).data.type === 'SHOPIFY_CONNECTED') {
+        // Reload connections list
+        reload();
+        window.removeEventListener('message', handler);
+        try { popup?.close(); } catch {}
+        setConnecting(false);
+      } else if ((ev as any).data.type === 'SHOPIFY_CONNECT_ERROR') {
+        window.removeEventListener('message', handler);
+        try { popup?.close(); } catch {}
+        setConnecting(false);
+      }
+    };
+    window.addEventListener('message', handler);
+  };
+
+  const saveCreds = async () => {
+    if (!creds.apiKey || !creds.apiSecret) return;
+    
+    // Development mode simulation
+    if (devMode) {
+      const mockCred = { 
+        id: Date.now().toString(), 
+        name: creds.name || 'Dev Credentials', 
+        apiKey: creds.apiKey.substring(0, 6) + '***' 
+      };
+      setCredsList(prev => [...prev, mockCred]);
+      setCreds({ name: '', apiKey: '', apiSecret: '', redirectUri: '' });
+      alert('✅ Development Mode: Credentials saved successfully (simulated)!');
+      return;
+    }
+
+    // Real API call
+    try {
+      await apiService.createShopifyCreds(creds);
+      setCreds({ name: '', apiKey: '', apiSecret: '', redirectUri: '' });
+      await reload();
+      alert('Credentials saved successfully!');
+    } catch (error) {
+      console.error('[Shopify Modal] Failed to save credentials:', error);
+      alert('Failed to save credentials. Please check if the Shopify API is available.');
+    }
+  };
+
+  const connectStorefront = async () => {
+    if (!shopDomain || !sfToken) return;
+    setSfSaving(true); setSfSavedMsg(null);
+    
+    // Development mode simulation
+    if (devMode) {
+      try {
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setSfToken('');
+        setSfSavedMsg('✅ Development Mode: Storefront token simulated successfully! (Backend API not required)');
+        // Add to mock connections
+        const mockConnection = { shop: toDomain(shopDomain.trim()), type: 'storefront' };
+        setConnections(prev => [...prev.filter(c => c.shop !== mockConnection.shop), mockConnection]);
+      } catch (e) {
+        setSfSavedMsg('Development mode simulation failed.');
+      } finally { setSfSaving(false); }
+      return;
+    }
+
+    // Direct Shopify Storefront API connection (client-side)
+    try {
+      const domain = toDomain(shopDomain.trim());
+      const token = sfToken.trim();
+      
+      // Test the connection by fetching shop info
+      const testQuery = `
+        query {
+          shop {
+            name
+            description
+            primaryDomain {
+              host
+            }
+          }
+        }
+      `;
+      
+      const response = await fetch(`https://${domain}/api/2023-10/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Storefront-Access-Token': token,
+        },
+        body: JSON.stringify({ query: testQuery }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.errors) {
+        throw new Error(`Shopify GraphQL error: ${data.errors[0]?.message || 'Unknown error'}`);
+      }
+      
+      if (!data.data?.shop) {
+        throw new Error('Invalid response from Shopify API');
+      }
+      
+      // Success! Store the connection locally
+      const connection = { 
+        shop: domain, 
+        type: 'storefront', 
+        token: token,
+        shopName: data.data.shop.name,
+        connected: true
+      };
+      
+      // Store in localStorage for persistence
+      const existingConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+      const updatedConnections = existingConnections.filter((c: any) => c.shop !== domain);
+      updatedConnections.push(connection);
+      localStorage.setItem('shopify_connections', JSON.stringify(updatedConnections));
+      
+      setConnections(updatedConnections);
+      setSfToken('');
+      setSfSavedMsg(`✅ Successfully connected to ${data.data.shop.name}! You can now fetch products.`);
+      
+    } catch (e: any) {
+      console.error('[Shopify Modal] Failed to connect storefront:', e);
+      if (e?.message?.includes('401') || e?.message?.includes('Unauthorized')) {
+        setSfSavedMsg('❌ Invalid storefront access token. Please check your token and try again.');
+      } else if (e?.message?.includes('404') || e?.message?.includes('Not Found')) {
+        setSfSavedMsg('❌ Shop not found. Please check your shop domain and try again.');
+      } else if (e?.message?.includes('CORS')) {
+        setSfSavedMsg('❌ CORS error. This may require backend proxy for production use.');
+      } else {
+        setSfSavedMsg(`❌ Connection failed: ${e?.message || 'Unknown error'}`);
+      }
+    } finally { setSfSaving(false); }
+  };
+
+  const disconnect = async (shop: string) => {
+    // Development mode simulation
+    if (devMode) {
+      setConnections(prev => prev.filter(c => c.shop !== shop));
+      alert(`✅ Development Mode: Successfully disconnected from ${shop} (simulated)`);
+      return;
+    }
+
+    // Remove from localStorage (client-side connections)
+    try {
+      const existingConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+      const updatedConnections = existingConnections.filter((c: any) => c.shop !== shop);
+      localStorage.setItem('shopify_connections', JSON.stringify(updatedConnections));
+      setConnections(updatedConnections);
+      alert(`Successfully disconnected from ${shop}`);
+    } catch (localError) {
+      console.warn('[Shopify Modal] Failed to remove local connection:', localError);
+    }
+
+    // Also try to remove from backend API if available
+    try {
+      await apiService.disconnectShopify(shop);
+    } catch (error) {
+      console.warn('[Shopify Modal] Failed to disconnect from API (this is expected if backend is not available):', error);
+    }
+  };
+
+  const fetchProducts = async (shop: string) => {
+    const connection = connections.find(c => c.shop === shop && c.token);
+    if (!connection || !connection.token) {
+      alert('❌ No storefront token found for this shop. Please reconnect with a valid token.');
+      return;
+    }
+
+    try {
+      const productsQuery = `
+        query getProducts($first: Int!) {
+          products(first: $first) {
+            edges {
+              node {
+                id
+                title
+                handle
+                description
+                images(first: 1) {
+                  edges {
+                    node {
+                      url
+                      altText
+                    }
+                  }
+                }
+                variants(first: 1) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price {
+                        amount
+                        currencyCode
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await fetch(`https://${shop}/api/2023-10/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Storefront-Access-Token': connection.token,
+        },
+        body: JSON.stringify({ 
+          query: productsQuery,
+          variables: { first: 10 }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.errors) {
+        throw new Error(`GraphQL error: ${data.errors[0]?.message || 'Unknown error'}`);
+      }
+
+      const products = data.data?.products?.edges?.map((edge: any) => edge.node) || [];
+      
+      // Display products in a simple format
+      if (products.length === 0) {
+        alert('✅ Connection successful! No products found in this store.');
+      } else {
+        const productList = products.map((p: any) => 
+          `• ${p.title} - ${p.variants.edges[0]?.node?.price?.amount || 'N/A'} ${p.variants.edges[0]?.node?.price?.currencyCode || ''}`
+        ).join('\n');
+        
+        alert(`✅ Successfully fetched ${products.length} products from ${connection.shopName || shop}:\n\n${productList}`);
+      }
+
+    } catch (error: any) {
+      console.error('[Shopify Modal] Failed to fetch products:', error);
+      alert(`❌ Failed to fetch products: ${error.message}`);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <div className="relative max-h-[80vh] overflow-y-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-0 right-0 text-gray-400 hover:text-gray-600 z-10"
+        >
+          <X className="w-6 h-6" />
+        </button>
+
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Zap className="w-8 h-8 text-blue-600" />
+          </div>
+          
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">
+            Shopify Integration
+          </h3>
+          
+          <p className="text-gray-600">
+            Connect your Shopify store to import products and analyze performance.
+          </p>
+
+        </div>
+
+        <div className="space-y-6">
+          {/* Mode Selection */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-bold text-gray-900">Mode</label>
+            <select 
+              value={mode} 
+              onChange={e => setMode(e.target.value as any)} 
+              className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="oauth">OAuth (Admin API)</option>
+              <option value="public">Public (no auth)</option>
+              <option value="storefront">Storefront (token)</option>
+              <option value="byo">Bring Your Own App (OAuth)</option>
+            </select>
+          </div>
+
+          {/* OAuth / BYO */}
+          {(mode === 'oauth' || mode === 'byo') && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Shop Domain</label>
+                <input 
+                  value={shopDomain} 
+                  onChange={e => setShopDomain(e.target.value)} 
+                  placeholder="your-shop.myshopify.com" 
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                />
+              </div>
+              {mode === 'byo' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input 
+                      value={creds.name} 
+                      onChange={e => setCreds({ ...creds, name: e.target.value })} 
+                      placeholder="Credentials name" 
+                      className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                    <input 
+                      value={creds.redirectUri} 
+                      onChange={e => setCreds({ ...creds, redirectUri: e.target.value })} 
+                      placeholder="Redirect URI (optional)" 
+                      className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                    <input 
+                      value={creds.apiKey} 
+                      onChange={e => setCreds({ ...creds, apiKey: e.target.value })} 
+                      placeholder="API Key" 
+                      className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                    <input 
+                      value={creds.apiSecret} 
+                      onChange={e => setCreds({ ...creds, apiSecret: e.target.value })} 
+                      placeholder="API Secret" 
+                      className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={saveCreds} 
+                      className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-700 transition-colors"
+                    >
+                      Save Credentials
+                    </button>
+                    <select 
+                      value={credsId} 
+                      onChange={e => setCredsId(e.target.value)} 
+                      className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select saved credentials</option>
+                      {credsList.map((c) => (<option key={c.id} value={c.id}>{c.name} ({c.id.slice(0,6)})</option>))}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button 
+                  onClick={startConnectOAuth} 
+                  disabled={!shopDomain || connecting} 
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700 transition-colors"
+                >
+                  {connecting ? 'Redirecting...' : 'Connect Shopify'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-600">You will be redirected to Shopify to approve read scopes.</p>
+            </div>
+          )}
+
+          {/* Public */}
+          {mode === 'public' && (
+            <div className="space-y-2 text-sm text-gray-700">
+              <p>Public mode doesn't require admin access. Use a product URL or shop+handle in analysis to fetch public JSON.</p>
+              <p>Example: https://your-shop.myshopify.com/products/handle</p>
+            </div>
+          )}
+
+          {/* Storefront */}
+          {mode === 'storefront' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input 
+                  value={shopDomain} 
+                  onChange={e => setShopDomain(e.target.value)} 
+                  placeholder="your-shop.myshopify.com" 
+                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                />
+                <input 
+                  value={sfToken} 
+                  onChange={e => setSfToken(e.target.value)} 
+                  placeholder="Storefront access token" 
+                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={connectStorefront} 
+                  disabled={sfSaving || !shopDomain || !sfToken} 
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700 transition-colors"
+                >
+                  {sfSaving ? 'Saving…' : 'Save Storefront Token'}
+                </button>
+                {sfSavedMsg && (
+                  <span className={`text-sm ${/Failed/i.test(sfSavedMsg) ? 'text-gray-600' : 'text-blue-600'}`}>
+                    {sfSavedMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Connected Shops */}
+          <div className="border-t border-gray-200 pt-4">
+            <div className="font-semibold text-gray-900 mb-2">Connected Shops</div>
+            {connections.length === 0 ? (
+              <div className="text-sm text-gray-600">No shops connected yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {connections.map((s, i) => (
+                  <div key={i} className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {s.shopName || s.shop}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {s.shop} • {s.type || 'oauth'}
+                          {s.connected && <span className="text-green-600 ml-1">✓ Connected</span>}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {s.token && (
+                          <button 
+                            onClick={() => fetchProducts(s.shop)} 
+                            className="px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors text-xs"
+                          >
+                            Fetch Products
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => disconnect(s.shop)} 
+                          className="px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-xs"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// CSV Upload Modal
+interface CSVUploadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function CSVUploadModal({ isOpen, onClose }: CSVUploadModalProps) {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (file: File) => {
+    if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+      alert('Please select a CSV file');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      alert('File size must be less than 10MB');
+      return;
+    }
+    setSelectedFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      alert('Please select a file first');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Simulate upload process
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      alert(`Successfully uploaded ${selectedFile.name}!`);
+      onClose();
+      setSelectedFile(null);
+    } catch (error) {
+      alert('Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    // Create a sample CSV template
+    const csvContent = 'SKU,Product Name,URL,Category,Price\nSKU001,Sample Product,https://example.com/product,Electronics,99.99\nSKU002,Another Product,https://example.com/product2,Accessories,49.99';
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'product_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <div className="relative">
+        <button
+          onClick={onClose}
+          className="absolute top-0 right-0 text-gray-400 hover:text-gray-600"
+        >
+          <X className="w-6 h-6" />
+        </button>
+
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Upload className="w-8 h-8 text-gray-600" />
+          </div>
+          
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">
+            Upload CSV File
+          </h3>
+          
+          <p className="text-gray-600 mb-6">
+            Upload a CSV with columns: SKU, Product Name, URL, Category, Price.
+          </p>
+        </div>
+
+        <div
+          className={`border-2 border-dashed rounded-lg p-8 text-center mb-6 transition-colors ${
+            isDragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300'
+          }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+            <Upload className="w-6 h-6 text-gray-600" />
+          </div>
+          
+          <p className="text-gray-700 font-medium mb-2">
+            {selectedFile ? selectedFile.name : 'Click to select or drag & drop'}
+          </p>
+          
+          <p className="text-gray-500 text-sm">
+            Max 10MB
+          </p>
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleFileInputChange}
+            className="hidden"
+          />
+        </div>
+
+        <button
+          onClick={handleUpload}
+          disabled={isUploading || !selectedFile}
+          className="w-full bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white py-3 px-4 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 mb-4"
+        >
+          {isUploading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Uploading...
+            </>
+          ) : (
+            'Upload & Process'
+          )}
+        </button>
+
+        <button
+          onClick={downloadTemplate}
+          className="w-full text-gray-600 hover:text-gray-700 font-medium py-2 transition-colors"
+        >
+          Download CSV template
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// Manual Add Product Modal
+interface ManualAddModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
+  const [formData, setFormData] = useState({
+    skuId: '',
+    productName: '',
+    productUrl: '',
+    category: '',
+    price: '',
+    tags: ''
+  });
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddProduct = async () => {
+    if (!formData.skuId.trim() || !formData.productName.trim() || !formData.productUrl.trim()) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setIsAdding(true);
+    try {
+      // Simulate adding product
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      alert(`Successfully added product: ${formData.productName}!`);
+      onClose();
+      setFormData({
+        skuId: '',
+        productName: '',
+        productUrl: '',
+        category: '',
+        price: '',
+        tags: ''
+      });
+    } catch (error) {
+      alert('Failed to add product');
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleAddAnother = async () => {
+    await handleAddProduct();
+    if (!isAdding) {
+      setFormData({
+        skuId: '',
+        productName: '',
+        productUrl: '',
+        category: '',
+        price: '',
+        tags: ''
+      });
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <div className="relative max-h-[80vh] overflow-y-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-0 right-0 text-gray-400 hover:text-gray-600 z-10"
+        >
+          <X className="w-6 h-6" />
+        </button>
+
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Target className="w-8 h-8 text-blue-600" />
+          </div>
+          
+          <h3 className="text-2xl font-bold text-gray-900">
+            Add Product Manually
+          </h3>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              SKU ID <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.skuId}
+              onChange={(e) => handleInputChange('skuId', e.target.value)}
+              placeholder="Enter SKU ID"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Product Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.productName}
+              onChange={(e) => handleInputChange('productName', e.target.value)}
+              placeholder="Enter product name"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Product URL <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="url"
+              value={formData.productUrl}
+              onChange={(e) => handleInputChange('productUrl', e.target.value)}
+              placeholder="https://example.com/product"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category
+            </label>
+            <select
+              value={formData.category}
+              onChange={(e) => handleInputChange('category', e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Select category</option>
+              <option value="electronics">Electronics</option>
+              <option value="clothing">Clothing</option>
+              <option value="home">Home & Garden</option>
+              <option value="sports">Sports & Outdoors</option>
+              <option value="books">Books</option>
+              <option value="toys">Toys & Games</option>
+              <option value="beauty">Beauty & Personal Care</option>
+              <option value="automotive">Automotive</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Price
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-3 text-gray-500">$</span>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.price}
+                onChange={(e) => handleInputChange('price', e.target.value)}
+                placeholder="0.00"
+                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tags/Attributes
+            </label>
+            <input
+              type="text"
+              value={formData.tags}
+              onChange={(e) => handleInputChange('tags', e.target.value)}
+              placeholder="wireless, bluetooth, noise-canceling"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-sm text-gray-500 mt-1">Separate tags with commas</p>
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={handleAddProduct}
+            disabled={isAdding}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 px-4 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+          >
+            {isAdding ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Adding...
+              </>
+            ) : (
+              'Add Product'
+            )}
+          </button>
+          
+          <button
+            onClick={handleAddAnother}
+            disabled={isAdding}
+            className="flex-1 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+          >
+            Add Another
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function Overview() {
   const { user } = useAuth();
-  const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
-  // keep but unused in this page variant
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [currentSession] = useLocalStorage<SessionData | null>(CURRENT_SESSION_KEY, null);
   const navigate = useNavigate();
   
-  // Unified analysis state
+  // Unified analysis state (restored from original)
+  const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
+  const [currentSession] = useLocalStorage<SessionData | null>(CURRENT_SESSION_KEY, null);
+  
   const [inputValue, setInputValue] = useState(() => {
     try {
       const saved = localStorage.getItem('overview_market_analysis');
@@ -576,7 +1348,6 @@ export function Overview() {
       const saved = localStorage.getItem('overview_market_analysis');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Extract the actual analysis data from the cached structure
         return parsed.data || parsed;
       }
       return null;
@@ -585,8 +1356,40 @@ export function Overview() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  // Removed Root Domain / Exact URL dropdown
-  const [selectedIndustry, setSelectedIndustry] = useState<string>('auto');
+  
+  // Modal states
+  const [showShopifyModal, setShowShopifyModal] = useState(false);
+  const [showCSVModal, setShowCSVModal] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [connectedShopifyAccounts, setConnectedShopifyAccounts] = useState<any[]>([]);
+  const [fetchedProducts, setFetchedProducts] = useState<any[]>([]);
+  const [showProducts, setShowProducts] = useState(false);
+
+  // Load connected Shopify accounts on component mount
+  React.useEffect(() => {
+    const loadConnectedAccounts = () => {
+      try {
+        const localConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+        setConnectedShopifyAccounts(localConnections);
+      } catch (error) {
+        console.warn('Failed to load connected Shopify accounts:', error);
+      }
+    };
+
+    loadConnectedAccounts();
+    
+    // Listen for storage changes to update connected accounts
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'shopify_connections') {
+        loadConnectedAccounts();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Helper functions (restored from original)
   const mapIndustryLabel = (raw?: string): string => {
     const s = String(raw || '').toLowerCase();
     if (/tech|software|it|saas|cloud/.test(s)) return 'Information Technology & Services';
@@ -598,345 +1401,75 @@ export function Overview() {
     if (/edu|school|college|university|learning|edtech/.test(s)) return 'Education';
     return 'Others';
   };
-  
-  // Add New Competitor state
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newCompetitorName, setNewCompetitorName] = useState('');
-  const [isUrlInput, setIsUrlInput] = useState(false);
-  const [isAddingCompetitor, setIsAddingCompetitor] = useState(false);
-  
-  // History data state
-  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
-  const [refreshKey, setRefreshKey] = useState(0);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  // Dropdown open/close state for any menus tied to '.dropdown-container'
-  const [showDropdown, setShowDropdown] = useState(false);
 
-  // Load history items from service
-  useEffect(() => {
-    const items = historyService.getHistoryItems();
-    setHistoryItems(items);
-    console.log('[Overview] Loaded history items:', items.length);
-  }, [refreshKey]);
-
-  // Restore cached data on mount
-  useEffect(() => {
-    const session = sessionManager.getLatestAnalysisSession('overview', user?.id);
-    if (session) {
-      setInputValue(session.inputValue || '');
-      setInputType(session.inputType || 'company');
-      setAnalysisResult(session.data);
-      console.log('[Overview] Restored analysis session:', session);
-    } else {
-      console.log('[Overview] No previous analysis session found - starting fresh');
-    }
-  }, [user?.id]);
-
-  // Check if this is a fresh session (no previous data)
-  const [isFreshSession, setIsFreshSession] = useState(false);
-  
-  useEffect(() => {
-    const session = sessionManager.getLatestAnalysisSession('overview', user?.id);
-    setIsFreshSession(!session);
-  }, [user?.id]);
-
-  // Listen for storage changes to auto-refresh
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'comprehensive_history' || e.key === 'sessions') {
-        console.log('[Overview] Storage changed, refreshing data');
-        setRefreshKey(prev => prev + 1);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    
-    // Also check for changes every 3 seconds (fallback)
-    const interval = setInterval(() => {
-      const currentItems = historyService.getHistoryItems();
-      if (currentItems.length !== historyItems.length) {
-        console.log('[Overview] Item count changed, refreshing data');
-        setRefreshKey(prev => prev + 1);
-      }
-    }, 3000);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
-  }, [historyItems.length]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('.dropdown-container')) {
-        setShowDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  // Only include sessions for the logged-in user
-  const userSessions = user ? sessions.filter(s => s.userId === user.id) : [];
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getTotalCost = () => {
-    // Calculate from sessions
-    const sessionsCost = userSessions.reduce((sum, session) => {
-      return sum + parseFloat(session.statistics?.totalCost || '0');
-    }, 0);
-    
-    // Calculate from history items
-    const historyCost = historyItems.reduce((sum, item) => {
-      if (item.type === 'qa') {
-        const qaItem = item as QAHistoryItem;
-        return sum + parseFloat(qaItem.sessionData.statistics?.totalCost || '0');
-      }
-      return sum;
-    }, 0);
-    
-    const totalCost = sessionsCost + historyCost;
-    console.log('[Overview] Total cost calculation:', { sessionsCost, historyCost, totalCost });
-    return totalCost;
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getTotalQuestions = () => {
-    // Calculate from sessions
-    const sessionsQuestions = userSessions.reduce((sum, session) => {
-      return sum + (session.qaData?.length || 0);
-    }, 0);
-    
-    // Calculate from history items
-    const historyQuestions = historyItems.reduce((sum, item) => {
-      if (item.type === 'qa') {
-        const qaItem = item as QAHistoryItem;
-        return sum + (qaItem.sessionData.qaData?.length || 0);
-      }
-      return sum;
-    }, 0);
-    
-    const totalQuestions = sessionsQuestions + historyQuestions;
-    console.log('[Overview] Total questions calculation:', { sessionsQuestions, historyQuestions, totalQuestions });
-    return totalQuestions;
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getAverageAccuracy = () => {
-    // Get all QA items from sessions
-    const sessionQAItems = userSessions.flatMap(session => session.qaData);
-    
-    // Get all QA items from history
-    const historyQAItems = historyItems
-      .filter(item => item.type === 'qa')
-      .flatMap(item => (item as QAHistoryItem).sessionData.qaData);
-    
-    // Combine all QA items
-    const allQAItems = [...sessionQAItems, ...historyQAItems];
-    
-    if (allQAItems.length === 0) return 0;
-    
-    // Calculate average accuracy from individual QA items
-    const accuracyValues = allQAItems
-      .map(qa => parseFloat(qa.accuracy || '0'))
-      .filter(accuracy => accuracy > 0);
-    
-    if (accuracyValues.length === 0) return 0;
-    
-    const avgAccuracy = accuracyValues.reduce((sum, acc) => sum + acc, 0) / accuracyValues.length;
-    console.log('[Overview] Average accuracy calculation:', { 
-      sessionQAItems: sessionQAItems.length, 
-      historyQAItems: historyQAItems.length, 
-      totalQAItems: allQAItems.length,
-      accuracyValues: accuracyValues.length,
-      avgAccuracy 
-    });
-    return avgAccuracy;
-  };
-
-  // Detect URL type automatically
   const detectUrlType = (url: string): 'root-domain' | 'exact-url' => {
     try {
-      // Remove protocol and www
       let cleanUrl = url.replace(/^https?:\/\//, '').replace(/^www\./, '');
-      
-      // Split by slashes to get path parts
       const urlParts = cleanUrl.split('/');
-      const domainPart = urlParts[0]; // Get the domain part
       
-      // Check if it's a root domain (just domain, no path)
       if (urlParts.length === 1 || (urlParts.length > 1 && urlParts[1].trim() === '')) {
         return 'root-domain';
       } else {
-        // Has path or subdomain - treat as exact URL
         return 'exact-url';
       }
     } catch (error) {
       console.error('Error detecting URL type:', error);
-      return 'root-domain'; // Default fallback
+      return 'root-domain';
     }
   };
 
-  // Extract company name from URL
   const extractCompanyFromUrl = (url: string): string => {
     try {
-      // Remove protocol and www if present
       let domain = url.replace(/^https?:\/\//, '').replace(/^www\./, '');
-      
-      // Remove path, query parameters, and fragments
       domain = domain.split('/')[0].split('?')[0].split('#')[0];
       
-      // Remove common TLDs and get the main part
       const domainParts = domain.split('.');
       if (domainParts.length >= 2) {
-        // For domains like "company.com" or "company.co.uk"
         return domainParts[domainParts.length - 2];
       }
       
       return domain;
     } catch (error) {
       console.error('Error extracting company from URL:', error);
-      return url; // Fallback to original input
+      return url;
     }
   };
 
-  // Detect industry from company name or URL
   const detectIndustry = (companyName: string, url?: string): string => {
     const name = companyName.toLowerCase();
-    const fullUrl = url?.toLowerCase() || '';
     
-    // More specific industry detection logic
     if (name.includes('cloud') && (name.includes('migration') || name.includes('migrate') || name.includes('transform'))) {
       return 'Cloud Migration & Transformation';
     }
     
-    if (name.includes('cloud') || name.includes('aws') || name.includes('azure') || name.includes('gcp') || 
-        name.includes('kubernetes') || name.includes('docker') || name.includes('devops')) {
+    if (name.includes('cloud') || name.includes('aws') || name.includes('azure') || name.includes('gcp')) {
       return 'Cloud Computing & DevOps';
     }
     
-    if (name.includes('ai') || name.includes('artificial intelligence') || name.includes('machine learning') || 
-        name.includes('ml') || name.includes('deep learning') || name.includes('neural')) {
+    if (name.includes('ai') || name.includes('artificial intelligence') || name.includes('machine learning')) {
       return 'Artificial Intelligence & ML';
     }
     
-    if (name.includes('cyber') || name.includes('security') || name.includes('firewall') || name.includes('vpn') ||
-        name.includes('threat') || name.includes('protection')) {
-      return 'Cybersecurity';
-    }
-    
-    if (name.includes('data') && (name.includes('analytics') || name.includes('warehouse') || name.includes('lake') || 
-        name.includes('science') || name.includes('mining'))) {
-      return 'Data Analytics & Science';
-    }
-    
-    if (name.includes('saas') || name.includes('software as a service') || name.includes('platform') ||
-        name.includes('api') || name.includes('integration')) {
-      return 'SaaS & Platform Services';
-    }
-    
-    if (name.includes('tech') || name.includes('software') || name.includes('digital') || name.includes('innovation')) {
-      return 'Technology & Software';
-    }
-    
-    if (name.includes('bank') || name.includes('finance') || name.includes('credit') || name.includes('loan') ||
-        name.includes('payment') || name.includes('fintech') || name.includes('investment')) {
-      return 'Financial Services & Fintech';
-    }
-    
-    if (name.includes('health') || name.includes('medical') || name.includes('pharma') || name.includes('care') ||
-        name.includes('biotech') || name.includes('telehealth')) {
-      return 'Healthcare & Biotech';
-    }
-    
-    if (name.includes('retail') || name.includes('shop') || name.includes('store') || name.includes('commerce') ||
-        name.includes('ecommerce') || name.includes('marketplace')) {
-      return 'Retail & E-commerce';
-    }
-    
-    if (name.includes('edu') || name.includes('school') || name.includes('university') || name.includes('college') ||
-        name.includes('learning') || name.includes('training')) {
-      return 'Education & Training';
-    }
-    
-    if (name.includes('media') || name.includes('news') || name.includes('entertainment') || name.includes('tv') ||
-        name.includes('content') || name.includes('publishing')) {
-      return 'Media & Entertainment';
-    }
-    
-    if (name.includes('auto') || name.includes('car') || name.includes('vehicle') || name.includes('transport') ||
-        name.includes('logistics') || name.includes('supply chain')) {
-      return 'Automotive & Transportation';
-    }
-    
-    if (name.includes('food') || name.includes('restaurant') || name.includes('cafe') || name.includes('dining') ||
-        name.includes('delivery') || name.includes('catering')) {
-      return 'Food & Beverage';
-    }
-    
-    if (name.includes('real') || name.includes('estate') || name.includes('property') || name.includes('housing') ||
-        name.includes('construction') || name.includes('architecture')) {
-      return 'Real Estate & Construction';
-    }
-    
-    if (name.includes('energy') || name.includes('oil') || name.includes('gas') || name.includes('power') ||
-        name.includes('renewable') || name.includes('solar') || name.includes('wind')) {
-      return 'Energy & Utilities';
-    }
-    
-    if (name.includes('consulting') || name.includes('consultant') || name.includes('advisory') || 
-        name.includes('strategy') || name.includes('management')) {
-      return 'Consulting & Advisory';
-    }
-    
-    // Default industry for unknown companies
     return 'Business Services';
   };
 
-  // Clear cached analysis data
-  const clearAnalysisData = () => {
-    try {
-      localStorage.removeItem('overview_market_analysis');
-      setAnalysisResult(null);
-      setInputValue('');
-      setInputType('company');
-      setAnalysisError(null);
-      setShowSuccessMessage(false);
-      console.log('[Overview] Analysis data cleared');
-    } catch (error) {
-      console.error('[Overview] Error clearing analysis data:', error);
-    }
-  };
-
-  // Unified Analysis Function
+  // Full Analysis Function (restored from original)
   const startAnalysis = async () => {
-    // Validate required fields
     if (!inputValue.trim()) {
       setAnalysisError('Please enter a company name or URL to analyze.');
       return;
     }
     
-    // Auto-detect if input is a URL and extract company name
     let finalCompanyName = inputValue.trim();
     let detectedInputType: 'company' | 'url' = 'company';
     
     if (inputValue.includes('http://') || inputValue.includes('https://') || inputValue.includes('www.')) {
       finalCompanyName = extractCompanyFromUrl(inputValue);
       detectedInputType = 'url';
-      console.log('[Overview] Detected URL, extracted company name:', finalCompanyName);
     }
     
-    // Detect industry from company name and URL
     const autoIndustry = detectIndustry(finalCompanyName, inputValue);
-    const autoMapped = mapIndustryLabel(autoIndustry);
-    const detectedIndustry = selectedIndustry !== 'auto' ? selectedIndustry : autoMapped;
-    console.log('[Overview] Detected industry:', detectedIndustry);
+    const detectedIndustry = mapIndustryLabel(autoIndustry);
     
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -946,33 +1479,25 @@ export function Overview() {
       const abortController = new AbortController();
       setAbortController(abortController);
       
-      console.log('[Overview] Starting AI visibility analysis for:', finalCompanyName);
-      console.log('[Overview] Detected industry:', detectedIndustry);
-      
       const analysisResults = await apiService.getAIVisibilityAnalysis(
         finalCompanyName,
         detectedIndustry,
         { signal: abortController.signal }
       );
       
-      console.log('[Overview] Analysis results received:', analysisResults);
-      
       if (analysisResults.success && analysisResults.data) {
-        console.log('[Overview] Setting analysis result:', analysisResults.data);
-        
-        // Add detected industry to the analysis result
         const enhancedResult = {
           ...analysisResults.data,
           industry: detectedIndustry,
           originalInput: inputValue,
-          inputType: detectedInputType, // Add input type to the cached data
-          analysisType: analysisType // Add analysis type to the cached data
+          inputType: detectedInputType,
+          analysisType: analysisType
         };
         
         setAnalysisResult(enhancedResult);
         setShowSuccessMessage(true);
         
-        // Save to history
+        // Save to history and cache
         try {
           const competitors = analysisResults.data.competitors || [];
           const historyItem = {
@@ -989,12 +1514,7 @@ export function Overview() {
                 mentions: comp.mentions || 0,
                 status: 'success' as const
               })),
-              serviceStatus: analysisResults.data.serviceStatus || {
-                gemini: true,
-                perplexity: true,
-                claude: true,
-                chatgpt: true
-              },
+              serviceStatus: analysisResults.data.serviceStatus || {},
               summary: {
                 totalCompetitors: competitors.length,
                 averageVisibilityScore: competitors.reduce((sum: number, comp: any) => sum + (comp.mentions || 0), 0) / Math.max(competitors.length, 1),
@@ -1005,50 +1525,30 @@ export function Overview() {
             }
           };
           
-          try {
-            await historyService.addHistoryItem(historyItem);
-            
-            // Dispatch custom event to notify other components (like History) that new analysis was created
-            window.dispatchEvent(new CustomEvent('new-analysis-created', { 
-              detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
-            }));
-            
-            console.log('[Overview] Analysis saved to history:', historyItem);
-          } catch (error) {
-            console.error('[Overview] Failed to save analysis to history:', error);
-            // Still dispatch the event even if history save fails
-            window.dispatchEvent(new CustomEvent('new-analysis-created', { 
-              detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
-            }));
-          }
-        } catch (e) {
-          console.warn('Failed to save analysis to history:', e);
-        }
-        
-        // Cache the results
-        try {
+          await historyService.addHistoryItem(historyItem);
+          window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+            detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
+          }));
+          
           localStorage.setItem('overview_market_analysis', JSON.stringify({
             company: finalCompanyName,
             originalInput: inputValue,
             inputType: detectedInputType,
             industry: detectedIndustry,
-            analysisType: analysisType, // Cache analysis type
+            analysisType: analysisType,
             data: enhancedResult,
             timestamp: Date.now()
           }));
         } catch (e) {
-          console.warn('Failed to cache analysis results:', e);
+          console.warn('Failed to save analysis:', e);
         }
       } else {
-        console.error('[Overview] Analysis failed:', analysisResults.error);
         setAnalysisError(analysisResults.error || 'Analysis failed. Please try again.');
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        console.log('Analysis was cancelled');
         return;
       }
-      console.error('AI analysis error:', error);
       setAnalysisError(error.message || 'Analysis failed. Please try again.');
     } finally {
       setIsAnalyzing(false);
@@ -1056,17 +1556,242 @@ export function Overview() {
     }
   };
 
-  // Stats grid intentionally removed to focus on faster market analysis UI
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const stats: Array<never> = [];
+  // Method card handlers
+  const handleConnectStore = () => {
+    setShowShopifyModal(true);
+  };
 
-  // Recent sessions not used on this page variant
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const recentSessions: Array<never> = [];
+  const handleBulkImport = () => {
+    setShowCSVModal(true);
+  };
 
-  // Helper to get AI Visibility Score from analysis result using actual API structure
+  const handleAddProduct = () => {
+    setShowManualModal(true);
+  };
+
+  // Modal close handlers
+  const handleCloseShopifyModal = () => {
+    setShowShopifyModal(false);
+    // Refresh connected accounts when modal closes
+    try {
+      const localConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+      setConnectedShopifyAccounts(localConnections);
+    } catch (error) {
+      console.warn('Failed to refresh connected accounts:', error);
+    }
+  };
+
+  const handleCloseCSVModal = () => {
+    setShowCSVModal(false);
+  };
+
+  const handleCloseManualModal = () => {
+    setShowManualModal(false);
+  };
+
+  // Function to analyze a selected product
+  const analyzeProduct = async (product: any) => {
+    try {
+      // Set the product title as the input value and update UI state
+      setInputValue(product.title);
+      setInputType('company'); // Treat product name as company/product name
+      setAnalysisType('root-domain');
+      
+      // Hide the products section to show analysis
+      setShowProducts(false);
+      
+      // Start analysis using the same logic as startAnalysis but with product data
+      const finalCompanyName = product.title.trim();
+      const detectedInputType: 'company' | 'url' = 'company';
+      
+      // Try to detect industry from product title and description
+      const productInfo = `${product.title} ${product.description || ''}`;
+      const autoIndustry = detectIndustry(finalCompanyName, productInfo);
+      const detectedIndustry = mapIndustryLabel(autoIndustry);
+      
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+      setShowSuccessMessage(false);
+      
+      const abortController = new AbortController();
+      setAbortController(abortController);
+      
+      const analysisResults = await apiService.getAIVisibilityAnalysis(
+        finalCompanyName,
+        detectedIndustry,
+        { signal: abortController.signal }
+      );
+      
+      if (analysisResults.success && analysisResults.data) {
+        const enhancedResult = {
+          ...analysisResults.data,
+          industry: detectedIndustry,
+          originalInput: product.title,
+          inputType: detectedInputType,
+          analysisType: analysisType,
+          sourceProduct: {
+            title: product.title,
+            shop: product.shop,
+            shopName: product.shopName,
+            price: product.variants?.edges?.[0]?.node?.price,
+            image: product.images?.edges?.[0]?.node?.url,
+            description: product.description
+          }
+        };
+        
+        setAnalysisResult(enhancedResult);
+        setShowSuccessMessage(true);
+        
+        // Save to history and cache
+        try {
+          const competitors = analysisResults.data.competitors || [];
+          const historyItem = {
+            id: `ai-visibility-${Date.now()}`,
+            type: 'ai-visibility' as const,
+            name: `AI Visibility Analysis - ${finalCompanyName}`,
+            timestamp: new Date().toISOString(),
+            status: 'completed' as const,
+            company: finalCompanyName,
+            industry: detectedIndustry,
+            analysis: {
+              competitors: competitors.map((comp: any) => ({
+                name: comp.name,
+                mentions: comp.mentions || 0,
+                status: 'success' as const
+              })),
+              serviceStatus: analysisResults.data.serviceStatus || {},
+              summary: {
+                totalCompetitors: competitors.length,
+                averageVisibilityScore: competitors.reduce((sum: number, comp: any) => sum + (comp.mentions || 0), 0) / Math.max(competitors.length, 1),
+                topCompetitor: competitors.length > 0 ? competitors.reduce((top: any, comp: any) => 
+                  (comp.mentions || 0) > (top.mentions || 0) ? comp : top
+                ).name : 'None'
+              }
+            }
+          };
+          
+          await historyService.addHistoryItem(historyItem);
+          window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+            detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
+          }));
+          
+          localStorage.setItem('overview_market_analysis', JSON.stringify({
+            company: finalCompanyName,
+            originalInput: product.title,
+            inputType: detectedInputType,
+            industry: detectedIndustry,
+            analysisType: analysisType,
+            data: enhancedResult,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.warn('Failed to save analysis:', e);
+        }
+      } else {
+        setAnalysisError(analysisResults.error || 'Analysis failed. Please try again.');
+      }
+      
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+      console.error('Failed to start product analysis:', error);
+      setAnalysisError(error.message || 'Failed to start analysis for this product. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
+      setAbortController(null);
+    }
+  };
+
+  // Function to fetch products from connected Shopify store
+  const fetchProductsFromStore = async (shop: string) => {
+    const connection = connectedShopifyAccounts.find(c => c.shop === shop && c.token);
+    if (!connection || !connection.token) {
+      alert('❌ No storefront token found for this shop. Please reconnect with a valid token.');
+      return;
+    }
+
+    try {
+      const productsQuery = `
+        query getProducts($first: Int!) {
+          products(first: $first) {
+            edges {
+              node {
+                id
+                title
+                handle
+                description
+                images(first: 1) {
+                  edges {
+                    node {
+                      url
+                      altText
+                    }
+                  }
+                }
+                variants(first: 1) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price {
+                        amount
+                        currencyCode
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await fetch(`https://${shop}/api/2023-10/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Storefront-Access-Token': connection.token,
+        },
+        body: JSON.stringify({ 
+          query: productsQuery,
+          variables: { first: 50 }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.errors) {
+        throw new Error(`GraphQL error: ${data.errors[0]?.message || 'Unknown error'}`);
+      }
+
+      const products = data.data?.products?.edges?.map((edge: any) => ({
+        ...edge.node,
+        shopName: connection.shopName || shop,
+        shop: shop
+      })) || [];
+      
+      setFetchedProducts(products);
+      setShowProducts(true);
+
+      if (products.length === 0) {
+        alert('✅ Connection successful! No products found in this store.');
+      } else {
+        alert(`✅ Successfully fetched ${products.length} products from ${connection.shopName || shop}!`);
+      }
+
+    } catch (error: any) {
+      console.error('[Dashboard] Failed to fetch products:', error);
+      alert(`❌ Failed to fetch products: ${error.message}`);
+    }
+  };
+
+  // Helper functions for analysis results
   const getAIVisibilityScore = (result: any) => {
-    // Check for direct score fields first
     if (result?.aiVisibilityScore !== undefined && result?.aiVisibilityScore !== null) {
       return result.aiVisibilityScore;
     }
@@ -1077,9 +1802,7 @@ export function Overview() {
       return result.visibilityScore;
     }
     
-    // If no direct score, try to get from competitors (they contain the actual scores)
     if (result?.competitors && result.competitors.length > 0) {
-      // Look for the main company score in competitors
       const mainCompany = result.competitors.find((comp: any) => 
         comp.name?.toLowerCase() === result.company?.toLowerCase()
       );
@@ -1088,7 +1811,6 @@ export function Overview() {
         return mainCompany.totalScore;
       }
       
-      // Fallback: calculate average from all competitors
       const validScores = result.competitors
         .filter((comp: any) => comp.totalScore !== undefined && comp.totalScore !== null)
         .map((comp: any) => comp.totalScore);
@@ -1099,16 +1821,14 @@ export function Overview() {
       }
     }
     
-    return 0; // Default fallback
+    return 0;
   };
 
-  // Helper to get detailed AI Visibility metrics from actual API structure
   const getAIVisibilityMetrics = (result: any) => {
     if (!result?.competitors || result.competitors.length === 0) {
       return null;
     }
 
-    // Find the main company data in competitors
     const mainCompany = result.competitors.find((comp: any) => 
       comp.name?.toLowerCase() === result.company?.toLowerCase()
     );
@@ -1117,12 +1837,10 @@ export function Overview() {
       return null;
     }
 
-    // Extract metrics from the actual API structure
     const totalScore = mainCompany.totalScore || 0;
     const aiScores = mainCompany.aiScores || {};
     const breakdowns = mainCompany.breakdowns || {};
 
-    // Use mentions from key metrics or breakdowns
     const mainMentions = Number(
       (
         mainCompany?.keyMetrics?.gemini?.brandMentions ??
@@ -1132,7 +1850,6 @@ export function Overview() {
       ) as number
     ) || 0;
 
-    // Compute median competitor mentions
     const competitorMentions: number[] = (result.competitors || [])
       .filter((c: any) => c.name?.toLowerCase() !== result.company?.toLowerCase())
       .map((c: any) => {
@@ -1145,11 +1862,9 @@ export function Overview() {
       });
     const medianCompetitor = median(competitorMentions);
 
-    // Derived metrics per provided formulas
     const aiCitationScore = computeAiCitationScore(mainMentions, medianCompetitor);
     const relativeAiVisibility = computeRelativeAiVisibility(mainMentions, medianCompetitor);
 
-    // Get Gemini breakdown (most detailed data available)
     const geminiBreakdown = breakdowns.gemini || {};
 
     return {
@@ -1167,83 +1882,334 @@ export function Overview() {
     };
   };
 
-  // Helper functions for competitor analysis
   const getScoreColor = (score: number) => {
-    if (score >= 2.5) return 'bg-green-500';
-    if (score >= 1.5) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 2.5) return 'bg-blue-600';
+    if (score >= 1.5) return 'bg-gray-500';
+    return 'bg-gray-400';
   };
 
   const getScoreClass = (score: number) => {
-    if (score >= 2.5) return 'text-green-600 font-semibold';
-    if (score >= 1.5) return 'text-yellow-600 font-semibold';
-    return 'text-red-600 font-semibold';
+    if (score >= 2.5) return 'text-blue-600 font-semibold';
+    if (score >= 1.5) return 'text-gray-600 font-semibold';
+    return 'text-gray-500 font-semibold';
   };
 
   const formatScore = (score: number) => {
     return score.toFixed(4);
   };
 
-  // Handle adding new competitor
-  const handleAddCompetitor = async () => {
-    if (!newCompetitorName.trim()) {
-      alert('Please enter a competitor name');
-      return;
-    }
+  // Conditional rendering: New UI when no analysis, full dashboard when analysis exists
+  if (!analysisResult) {
+    return (
+      <>
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Header */}
+          <div className="text-center mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+              AI Visibility Product Tracker
+            </h1>
+            <p className="text-xl text-gray-600 max-w-4xl mx-auto">
+              Track product visibility across AI assistants and shopping search with actionable insights.
+            </p>
+          </div>
 
-    // Check if competitor already exists
-    if (analysisResult?.competitors?.some((c: any) => c.name.toLowerCase() === newCompetitorName.toLowerCase())) {
-      alert('This competitor is already in the analysis');
-      return;
-    }
+          {/* Start Your Analysis Section */}
+          <div className="bg-white rounded-3xl shadow-lg p-8 md:p-12 mb-12">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-3">
+                Start Your Analysis
+              </h2>
+              <p className="text-lg text-gray-600">
+                Choose how you'd like to analyze your products
+              </p>
+            </div>
 
-    setIsAddingCompetitor(true);
-    try {
-      // Simulate adding competitor (in real implementation, this would call the API)
-      const newCompetitor = {
-        name: newCompetitorName.trim(),
-        citationCount: Math.floor(Math.random() * 500) + 100,
-        aiScores: {
-          gemini: (Math.random() * 10 + 2).toFixed(4),
-          perplexity: (Math.random() * 0.2).toFixed(4),
-          claude: (Math.random() * 0.2).toFixed(4),
-          chatgpt: 5.0000
-        },
-        totalScore: Math.random() * 5 + 1
-      };
-      
-      // Update the analysis result with new competitor
-      const updatedCompetitors = [...(analysisResult?.competitors || []), newCompetitor];
-      setAnalysisResult({
-        ...analysisResult,
-        competitors: updatedCompetitors
-      });
-      
-      setNewCompetitorName('');
-      setShowAddForm(false);
-      alert(`${newCompetitorName} has been added successfully!`);
-      
-    } catch (error: any) {
-      console.error('Error adding competitor:', error);
-      alert(`Failed to add competitor: ${error.message}`);
-    } finally {
-      setIsAddingCompetitor(false);
-    }
-  };
+            {/* URL/Product Name Input Section */}
+            <div className="mb-8">
+              <label htmlFor="website-input" className="block text-sm font-medium text-gray-700 mb-2">
+                Website URL or Product Name
+              </label>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <input
+                  id="website-input"
+                  type="text"
+                  value={inputValue}
+                    onChange={(e) => handleEmojiFilteredInput(e, (value) => {
+                      setInputValue(value);
+                      if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
+                        const detectedType = detectUrlType(value);
+                        setAnalysisType(detectedType);
+                      }
+                    })}
+                  onPaste={(e) => handlePaste(e, (value) => {
+                    setInputValue(value);
+                    if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
+                      const detectedType = detectUrlType(value);
+                      setAnalysisType(detectedType);
+                    }
+                  })}
+                  onKeyDown={handleKeyDown}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !isAnalyzing && inputValue.trim()) {
+                      startAnalysis();
+                    }
+                  }}
+                  placeholder="Enter website URL or product name..."
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={isAnalyzing}
+                />
+                <button
+                  onClick={startAnalysis}
+                  disabled={isAnalyzing || !inputValue.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-8 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors shadow-lg min-w-[180px]"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5" />
+                      Quick Analysis
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
 
-  // Handle deleting competitor
-  const handleDeleteCompetitor = (index: number) => {
-    const competitorName = analysisResult?.competitors?.[index]?.name;
-    if (window.confirm(`Are you sure you want to remove "${competitorName}" from the analysis?`)) {
-      const updatedCompetitors = analysisResult?.competitors?.filter((_: any, i: number) => i !== index) || [];
-      setAnalysisResult({
-        ...analysisResult,
-        competitors: updatedCompetitors
-      });
-    }
-  };
 
+            {analysisError && (
+              <div className="mb-6 text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">{analysisError}</div>
+            )}
+
+            {/* OR Divider */}
+            <div className="flex items-center my-8">
+              <div className="flex-1 border-t border-gray-300"></div>
+              <span className="px-4 text-gray-500 font-medium">or</span>
+              <div className="flex-1 border-t border-gray-300"></div>
+            </div>
+
+            {/* Method Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Shopify Sync Card */}
+                <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-blue-600" />
+                    </div>
+                    {connectedShopifyAccounts.length > 0 ? (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        ✓ Connected
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Shopify Sync</h3>
+                  <p className="text-gray-600 mb-6">
+                    {connectedShopifyAccounts.length > 0 
+                      ? `${connectedShopifyAccounts.length} store${connectedShopifyAccounts.length > 1 ? 's' : ''} connected`
+                      : '1-click integration with automatic product import'
+                    }
+                  </p>
+                  <button
+                    onClick={handleConnectStore}
+                    className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
+                      connectedShopifyAccounts.length > 0
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {connectedShopifyAccounts.length > 0 ? 'Manage Stores' : 'Connect Store'}
+                  </button>
+                </div>
+
+              {/* CSV Upload Card */}
+              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-gray-400 transition-colors group">
+                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
+                  <FileText className="w-6 h-6 text-gray-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">CSV Upload</h3>
+                <p className="text-gray-600 mb-6">
+                  Bulk upload from spreadsheet or CSV file
+                </p>
+                <button
+                  onClick={handleBulkImport}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+                >
+                  Bulk Import
+                </button>
+              </div>
+
+              {/* Manual Add Card */}
+              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <Target className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Manual Add</h3>
+                <p className="text-gray-600 mb-6">
+                  Add products individually with custom details
+                </p>
+                <button
+                  onClick={handleAddProduct}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+                >
+                  Add Product
+                </button>
+              </div>
+            </div>
+
+            {/* Connected Shopify Accounts Section */}
+            {connectedShopifyAccounts.length > 0 && (
+              <div className="bg-white rounded-3xl shadow-lg p-8 md:p-12 mb-12">
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-bold text-gray-900 mb-3">
+                    Connected Shopify Stores
+                  </h2>
+                  <p className="text-lg text-gray-600">
+                    Manage your connected stores and fetch products for analysis
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {connectedShopifyAccounts.map((account, index) => (
+                    <div key={index} className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                          <Zap className="w-6 h-6 text-green-600" />
+                        </div>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          ✓ Connected
+                        </span>
+                      </div>
+                      
+                      <h3 className="text-lg font-bold text-gray-900 mb-1">
+                        {account.shopName || account.shop}
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-4">
+                        {account.shop} • {account.type || 'storefront'}
+                      </p>
+                      
+                      <div className="space-y-2">
+                        {account.token && (
+                          <button
+                            onClick={() => fetchProductsFromStore(account.shop)}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+                          >
+                            Fetch Products
+                          </button>
+                        )}
+                        <button
+                          onClick={handleConnectStore}
+                          className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
+                        >
+                          Manage Connection
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Fetched Products Section */}
+            {showProducts && fetchedProducts.length > 0 && (
+              <div className="bg-white rounded-3xl shadow-lg p-8 md:p-12 mb-12">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-3xl font-bold text-gray-900 mb-3">
+                      Shopify Products
+                    </h2>
+                    <p className="text-lg text-gray-600">
+                      {fetchedProducts.length} products fetched from {fetchedProducts[0]?.shopName || fetchedProducts[0]?.shop}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowProducts(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {fetchedProducts.map((product, index) => (
+                    <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:shadow-md transition-shadow">
+                      {product.images?.edges?.[0]?.node?.url && (
+                        <img
+                          src={product.images.edges[0].node.url}
+                          alt={product.images.edges[0].node.altText || product.title}
+                          className="w-full h-48 object-cover rounded-lg mb-4"
+                        />
+                      )}
+                      
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                        {product.title}
+                      </h3>
+                      
+                      {product.variants?.edges?.[0]?.node?.price && (
+                        <p className="text-xl font-bold text-blue-600 mb-2">
+                          {product.variants.edges[0].node.price.amount} {product.variants.edges[0].node.price.currencyCode}
+                        </p>
+                      )}
+                      
+                      {product.description && (
+                        <p className="text-sm text-gray-600 line-clamp-3 mb-4">
+                          {product.description.replace(/<[^>]*>/g, '')}
+                        </p>
+                      )}
+                      
+                      <button
+                        onClick={() => analyzeProduct(product)}
+                        disabled={isAnalyzing}
+                        className={`w-full py-2 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                          isAnalyzing 
+                            ? 'bg-gray-400 cursor-not-allowed text-white' 
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                      >
+                        {isAnalyzing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          'Analyze Product'
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      <ShopifyConnectModal 
+        isOpen={showShopifyModal} 
+        onClose={handleCloseShopifyModal} 
+      />
+      <CSVUploadModal 
+        isOpen={showCSVModal} 
+        onClose={handleCloseCSVModal} 
+      />
+      <ManualAddModal 
+        isOpen={showManualModal} 
+        onClose={handleCloseManualModal} 
+      />
+      </>
+    );
+  }
+
+  // Original dashboard layout when analysis exists
   return (
+    <>
     <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
@@ -1253,451 +2219,248 @@ export function Overview() {
           </h1>
           <p className="text-gray-600 mt-2">Welcome to kabini.ai - Your AI-Powered Content Enhancement Platform</p>
         </div>
+        <button
+          onClick={() => {
+            setAnalysisResult(null);
+            setInputValue('');
+            setAnalysisError(null);
+            setShowSuccessMessage(false);
+            localStorage.removeItem('overview_market_analysis');
+          }}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
+          New Analysis
+        </button>
       </div>
 
-      {/* Unified Website Analysis Dashboard Section */}
+      {/* Analysis Results Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3">Website Analysis Dashboard</h2>
-          <p className="text-gray-600 text-lg">Enter your website URL or company name to get instant AI visibility insights and market positioning.</p>
-        </div>
-        
-        <div className="flex flex-col lg:flex-row items-stretch gap-4 mb-8">
-          <div className="flex-1 min-w-0">
-            <div className="flex">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => handleEmojiFilteredInput(e, (value) => {
-                  setInputValue(value);
-                  // Auto-detect URL type when URL is entered
-                  if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
-                    const detectedType = detectUrlType(value);
-                    setAnalysisType(detectedType);
-                    console.log('[Overview] Auto-detected URL type:', detectedType);
-                    // Auto-detect industry preview into dropdown if user hasn't chosen one
-                    try {
-                      if (selectedIndustry === 'auto') {
-                        const previewIndustry = detectIndustry(extractCompanyFromUrl(value), value);
-                        const mapped = mapIndustryLabel(previewIndustry);
-                        setSelectedIndustry(mapped);
-                      }
-                    } catch {}
-                  }
-                })}
-                onPaste={(e) => handlePaste(e, (value) => {
-                  setInputValue(value);
-                  // Auto-detect URL type when URL is pasted
-                  if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
-                    const detectedType = detectUrlType(value);
-                    setAnalysisType(detectedType);
-                    console.log('[Overview] Auto-detected URL type (pasted):', detectedType);
-                    // Auto-detect industry preview into dropdown if user hasn't chosen one
-                    try {
-                      if (selectedIndustry === 'auto') {
-                        const previewIndustry = detectIndustry(extractCompanyFromUrl(value), value);
-                        const mapped = mapIndustryLabel(previewIndustry);
-                        setSelectedIndustry(mapped);
-                      }
-                    } catch {}
-                  }
-                })}
-                onKeyDown={handleKeyDown}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !isAnalyzing && inputValue.trim()) {
-                    startAnalysis();
-                  }
-                }}
-                required
-                placeholder="Enter company name or URL"
-                className="flex-1 px-4 py-4 border-2 border-blue-600 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 focus:border-blue-600 text-lg h-[60px]"
-                disabled={isAnalyzing}
-              />
-              
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch">
-            <select
-              value={selectedIndustry}
-              onChange={(e) => setSelectedIndustry(e.target.value)}
-              className="border-2 border-blue-600 rounded-xl px-3 text-gray-900 h-[60px] min-w-[240px]"
-              disabled={isAnalyzing}
-              title="Select industry"
-            >
-              <option value="auto">Industry</option>
-              <option value="Information Technology & Services">Information Technology & Services</option>
-              <option value="Finance">Finance</option>
-              <option value="Healthcare">Healthcare</option>
-              <option value="Legal">Legal</option>
-              <option value="Ecommerce & Retail">Ecommerce & Retail</option>
-              <option value="Media">Media</option>
-              <option value="Education">Education</option>
-              <option value="Marketing & Advertising">Marketing & Advertising</option>
-              <option value="Computer Software / Internet">Computer Software / Internet</option>
-              <option value="Others">Others</option>
-            </select>
-            <button
-              onClick={startAnalysis}
-              disabled={isAnalyzing || !inputValue.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-8 py-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors shadow-lg w-full lg:w-auto min-w-[140px] h-[60px]"
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Search className="w-5 h-5" />
-                  Analyze Now
-                </>
+          <h2 className="text-3xl font-bold text-gray-900 mb-3">AI Visibility Analysis Results</h2>
+          {analysisResult?.sourceProduct ? (
+            <div className="flex items-center justify-center gap-4 mb-4">
+              {analysisResult.sourceProduct.image && (
+                <img
+                  src={analysisResult.sourceProduct.image}
+                  alt={analysisResult.sourceProduct.title}
+                  className="w-16 h-16 object-cover rounded-lg"
+                />
               )}
-            </button>
-            {isAnalyzing && (
-              <button
-                onClick={() => { try { abortController?.abort(); } catch {}; setIsAnalyzing(false); }}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors w-full lg:w-auto min-w-[120px] h-[60px]"
-              >
-                Stop
-              </button>
-            )}
+              <div className="text-left">
+                <p className="text-lg font-semibold text-gray-900">{analysisResult.sourceProduct.title}</p>
+                <p className="text-sm text-gray-600">
+                  From {analysisResult.sourceProduct.shopName || analysisResult.sourceProduct.shop}
+                  {analysisResult.sourceProduct.price && (
+                    <span className="ml-2 font-medium text-blue-600">
+                      {analysisResult.sourceProduct.price.amount} {analysisResult.sourceProduct.price.currencyCode}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-600 text-lg">Analysis completed for: {analysisResult?.originalInput}</p>
+          )}
+        </div>
+
+        {showSuccessMessage && (
+          <div className="mb-6 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">✅ Analysis completed successfully! Results are ready below.</div>
+        )}
+
+        {/* Dashboard Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
+          <AIVisibilityScoreCard 
+            score={getAIVisibilityScore(analysisResult)} 
+            industry={analysisResult?.industry}
+            metrics={getAIVisibilityMetrics(analysisResult)}
+          />
+          <ShareOfAIVoiceCard 
+            result={analysisResult}
+          />
+          <LLMPresenceCard 
+            serviceStatus={analysisResult?.serviceStatus} 
+            aiScores={analysisResult?.competitors?.[0]?.aiScores}
+          />
+          <CompetitorBenchmarkCard 
+            competitors={analysisResult?.competitors || []}
+          />
+          <SentimentAnalysisCard 
+            competitors={analysisResult?.competitors || []}
+          />
+          <div className="sm:col-span-2">
+            <TopProductsKpiCard />
           </div>
         </div>
 
-        {analysisError && (
-          <div className="mb-6 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{analysisError}</div>
-        )}
-        {showSuccessMessage && (
-          <div className="mb-6 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">✅ Analysis completed successfully! Results are ready below.</div>
-        )}
+        {/* Competitor Analysis */}
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-900">Competitor Analysis</h2>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
+        </div>
 
-        {/* Overview Heading - Always show when there's analysis data */}
-        {analysisResult && (
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Overview</h2>
-          </div>
-        )}
-
-
-
-        {/* Dashboard Cards Removed - Keeping only the analysis results */}
-
-        {/* Analysis Results and Competitor Table (post-analysis) */}
-        {analysisResult && (
-          <div className="space-y-6">
-            
-                        {/* Dashboard Cards - Show when we have analysis results */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
-              <AIVisibilityScoreCard 
-                score={getAIVisibilityScore(analysisResult)} 
-                industry={analysisResult?.industry}
-                metrics={getAIVisibilityMetrics(analysisResult)}
-              />
-              <ShareOfAIVoiceCard 
-                result={analysisResult}
-              />
-              <LLMPresenceCard 
-                serviceStatus={analysisResult?.serviceStatus} 
-                aiScores={analysisResult?.competitors?.[0]?.aiScores}
-              />
-              <CompetitorBenchmarkCard 
-                competitors={analysisResult?.competitors || []}
-                industry={analysisResult?.industry}
-              />
-              <SentimentAnalysisCard 
-                competitors={analysisResult?.competitors || []}
-                company={analysisResult?.company}
-              />
-              <div className="sm:col-span-2">
-                <TopProductsKpiCard result={analysisResult} />
-              </div>
+        {/* Competitor Performance Overview Chart */}
+        {analysisResult?.competitors && analysisResult.competitors.length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Competitor Performance Overview</h3>
+              <p className="text-sm text-gray-600">Visual comparison of average AI visibility scores across competitors</p>
             </div>
-
-            {/* Competitor Analysis Heading - Always show when there's analysis data */}
-            <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Competitor Analysis</h2>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
-            </div>  
-
-            {/* Competitor Performance Overview Chart */}
-            {analysisResult.competitors && analysisResult.competitors.length > 0 && (
-              <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <div className="mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Competitor Performance Overview</h3>
-                  <p className="text-sm text-gray-600">Visual comparison of average AI visibility scores across competitors</p>
-                </div>
+            
+            <div className="h-48 sm:h-56 lg:h-64 overflow-x-auto overflow-y-visible">
+              <div className="flex items-end h-full gap-3 sm:gap-4 min-w-max px-2 pb-2">
+              {analysisResult.competitors.map((competitor: any, index: number) => {
+                const avgScore = competitor.totalScore || 0;
+                const heightPercentage = Math.min(95, Math.max(10, (avgScore / 10) * 85 + 10));
+                const barColor = getScoreColor(avgScore);
                 
-                <div className="h-48 sm:h-56 lg:h-64 overflow-x-auto overflow-y-visible">
-                  <div className="flex items-end h-full gap-3 sm:gap-4 min-w-max px-2 pb-2">
-                  {analysisResult.competitors.map((competitor: any, index: number) => {
-                    const avgScore = competitor.totalScore || 0;
-                    // Adjust range: scale 0-10 to 0-100% but with better distribution
-                    const heightPercentage = Math.min(95, Math.max(10, (avgScore / 10) * 85 + 10)); // 10-95% range
-                    const barColor = getScoreColor(avgScore);
+                return (
+                  <div key={index} className="flex-none w-12 sm:w-16 h-full flex flex-col justify-end items-center relative">
+                    <div className="mb-1 text-xs font-semibold text-gray-800 text-center whitespace-nowrap">
+                      {formatScore(avgScore)}
+                    </div>
                     
-                    return (
-                      <div key={index} className="flex-none w-12 sm:w-16 h-full flex flex-col justify-end items-center relative">
-                        {/* Score display at the bottom */}
-                        <div className="mb-1 text-xs font-semibold text-gray-800 text-center whitespace-nowrap">
-                          {formatScore(avgScore)}
-                        </div>
-                        
-                        <div className="w-full h-full bg-gray-200 rounded-t-lg relative">
-                          <div 
-                            className={`${barColor} rounded-t-lg transition-all duration-500 ease-out absolute bottom-0 left-0 w-full`}
-                            style={{ 
-                              height: `${heightPercentage}%`,
-                              minHeight: '20px'
-                            }}
-                          />
-                        </div>
-                        
-                        {/* Company name at the bottom */}
-                        <div className="mt-2 text-xs text-gray-600 text-center font-medium truncate w-full">
-                          {competitor.name}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  </div>
-                </div>
-                
-                <div className="mt-4 text-center">
-                  <div className="inline-flex items-center flex-wrap justify-center gap-2 sm:gap-4 text-xs text-gray-500">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-green-500 rounded mr-1"></div>
-                      <span>Excellent (8-10)</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-blue-500 rounded mr-1"></div>
-                      <span>Good (6-7.9)</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-yellow-500 rounded mr-1"></div>
-                      <span>Fair (4-5.9)</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-red-500 rounded mr-1"></div>
-                      <span>Poor (0-3.9)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Add New Competitor Section - COMMENTED OUT */}
-            {/* <div className="bg-white rounded-lg shadow p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Add New Competitor</h3>
-                <button
-                  onClick={() => setShowAddForm(!showAddForm)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  {showAddForm ? 'Cancel' : 'Add Competitor'}
-                </button>
-              </div>
-              
-              {showAddForm && (
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-end space-x-4">
-                    <div className="flex-1">
-                      <label htmlFor="competitor-name" className="block text-sm font-medium text-gray-700 mb-2">
-                        Competitor Company Name
-                      </label>
-                      <input
-                        type="text"
-                        id="competitor-name"
-                        value={newCompetitorName}
-                        onChange={(e) => {
-                          const raw = e.target.value.trim();
-                          // Detect URL-like input: contains a dot or protocol and no spaces
-                          const looksLikeUrl = /^(https?:\/\/)?[^\s]+\.[^\s]+/i.test(raw);
-                          setIsUrlInput(looksLikeUrl);
-                          if (looksLikeUrl) {
-                            setNewCompetitorName(raw);
-                          } else {
-                            // Allow only A–Z and a–z for company name
-                            const sanitized = raw.replace(/[^A-Za-z]/g, '');
-                            setNewCompetitorName(sanitized);
-                          }
-                          try { (e.target as HTMLInputElement).setCustomValidity(''); } catch {}
+                    <div className="w-full h-full bg-gray-200 rounded-t-lg relative">
+                      <div 
+                        className={`${barColor} rounded-t-lg transition-all duration-500 ease-out absolute bottom-0 left-0 w-full`}
+                        style={{ 
+                          height: `${heightPercentage}%`,
+                          minHeight: '20px'
                         }}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && !isAddingCompetitor && newCompetitorName.trim()) {
-                            handleAddCompetitor();
-                          }
-                        }}
-                        placeholder="Enter competitor company name or paste a URL..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 bg-white"
-                        onInvalid={(e) => {
-                          e.preventDefault();
-                          const msg = isUrlInput
-                            ? 'Please enter a valid URL (e.g., https://example.com)'
-                            : 'Only letters (A–Z, a–z) are allowed';
-                          (e.target as HTMLInputElement).setCustomValidity(msg);
-                        }}
-                        onBlur={(e) => {
-                          const value = e.currentTarget.value.trim();
-                          if (!value) { e.currentTarget.setCustomValidity(''); return; }
-                          if (isUrlInput) {
-                            const urlOk = /^(https?:\/\/)?([A-Za-z0-9-]+\.)+[A-Za-z]{2,}(\/[^\s]*)?$/i.test(value);
-                            e.currentTarget.setCustomValidity(urlOk ? '' : 'Please enter a valid URL (e.g., https://example.com)');
-                          } else {
-                            const nameOk = /^[A-Za-z]+$/.test(value);
-                            e.currentTarget.setCustomValidity(nameOk ? '' : 'Only letters (A–Z, a–z) are allowed');
-                          }
-                        }}
-                        disabled={isAddingCompetitor}
                       />
                     </div>
-                    <div className="flex-shrink-0">
-                      <button
-                        onClick={handleAddCompetitor}
-                        disabled={isAddingCompetitor || !newCompetitorName.trim()}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isAddingCompetitor ? (
-                          <>
-                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Analyzing...
-                          </>
-                        ) : (
-                          'Add & Analyze'
-                        )}
-                      </button>
+                    
+                    <div className="mt-2 text-xs text-gray-600 text-center font-medium truncate w-full">
+                      {competitor.name}
                     </div>
                   </div>
-                  <p className="mt-2 text-sm text-gray-600">
-                    The system will automatically analyze AI visibility scores for the new competitor.
-                    {isAddingCompetitor && (
-                      <span className="text-black font-medium">
-                        {' '}This may take 30-60 seconds as we analyze across 4 AI engines.
-                      </span>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div> */}
-
-            {/* Competitors Comparison Table */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Competitors Comparison</h2>
-                <p className="text-sm text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
-              </div>
-              
-              <div className="overflow-x-auto w-full">
-                <table className="w-full min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Company
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Gemini
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Perplexity
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Claude
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        ChatGPT
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Average Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {analysisResult.competitors.map((competitor: any, index: number) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10">
-                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                                <span className="text-sm font-medium text-black">
-                                  {competitor.name.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{competitor.name}</div>
-                            </div>
-                          </div>
-                        </td>
-                        
-                        {/* Gemini Score */}
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.gemini)}`}>
-                            {formatScore(competitor.aiScores.gemini)}
-                          </span>
-                        </td>
-                        
-                        {/* Perplexity Score */}
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.perplexity)}`}>
-                            {formatScore(competitor.aiScores.perplexity)}
-                          </span>
-                        </td>
-                        
-                        {/* Claude Score */}
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.claude)}`}>
-                            {formatScore(competitor.aiScores.claude)}
-                          </span>
-                        </td>
-                        
-                        {/* ChatGPT Score */}
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores.chatgpt)}`}>
-                            {formatScore(competitor.aiScores.chatgpt)}
-                          </span>
-                        </td>
-                        
-                        {/* Average Score */}
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`text-sm font-semibold ${getScoreClass(competitor.totalScore)}`}>
-                            {formatScore(competitor.totalScore)}
-                          </span>
-                        </td>
-                        
-                        {/* Actions */}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
-                            onClick={() => handleDeleteCompetitor(index)}
-                            className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-2 rounded-full transition-colors"
-                            title="Delete competitor"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                );
+              })}
               </div>
             </div>
-
-
-
-
             
-
-            
-
+            <div className="mt-4 text-center">
+                <div className="inline-flex items-center flex-wrap justify-center gap-2 sm:gap-4 text-xs text-gray-500">
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-blue-600 rounded mr-1"></div>
+                    <span>Excellent (8-10)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-blue-500 rounded mr-1"></div>
+                    <span>Good (6-7.9)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-gray-500 rounded mr-1"></div>
+                    <span>Fair (4-5.9)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-gray-400 rounded mr-1"></div>
+                    <span>Poor (0-3.9)</span>
+                  </div>
+                </div>
+            </div>
           </div>
         )}
+
+        {/* Competitors Comparison Table */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Competitors Comparison</h2>
+            <p className="text-sm text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
+          </div>
+          
+          <div className="overflow-x-auto w-full">
+            <table className="w-full min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Company
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Gemini
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Perplexity
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Claude
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ChatGPT
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Average Score
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {analysisResult?.competitors?.map((competitor: any, index: number) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <span className="text-sm font-medium text-black">
+                              {competitor.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{competitor.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.gemini || 0)}`}>
+                        {formatScore(competitor.aiScores?.gemini || 0)}
+                      </span>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.perplexity || 0)}`}>
+                        {formatScore(competitor.aiScores?.perplexity || 0)}
+                      </span>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.claude || 0)}`}>
+                        {formatScore(competitor.aiScores?.claude || 0)}
+                      </span>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.chatgpt || 0)}`}>
+                        {formatScore(competitor.aiScores?.chatgpt || 0)}
+                      </span>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`text-sm font-semibold ${getScoreClass(competitor.totalScore || 0)}`}>
+                        {formatScore(competitor.totalScore || 0)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
+
+    {/* Modals */}
+    <ShopifyConnectModal 
+      isOpen={showShopifyModal} 
+      onClose={handleCloseShopifyModal} 
+    />
+    <CSVUploadModal 
+      isOpen={showCSVModal} 
+      onClose={handleCloseCSVModal} 
+    />
+    <ManualAddModal 
+      isOpen={showManualModal} 
+      onClose={handleCloseManualModal} 
+    />
+    </>
   );
 } 
