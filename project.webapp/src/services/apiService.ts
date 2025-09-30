@@ -843,12 +843,11 @@ class ApiService {
   async getAIVisibilityAnalysis(
     company: string,
     industry?: string,
-    options?: { fast?: boolean; signal?: AbortSignal },
+    options?: { signal?: AbortSignal },
     extra?: { productName?: string; productCategory?: string; competitorName?: string; country?: string }
   ): Promise<any> {
     const searchParams = new URLSearchParams();
     if (industry) searchParams.append('industry', industry);
-    if (options?.fast) searchParams.append('fast', 'true');
     if (extra?.productName) searchParams.append('product', extra.productName);
     if (extra?.productCategory) searchParams.append('category', extra.productCategory);
     if (extra?.competitorName) searchParams.append('competitor', extra.competitorName);
