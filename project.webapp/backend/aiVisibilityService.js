@@ -1,3 +1,4 @@
+require('dotenv').config();
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { LLMService } = require('./llmService');
@@ -139,11 +140,11 @@ async function fetchModelSnippetsFull(competitorName, modelKey) {
   } catch { return []; }
 }
 
-async function computePerModelRawMetrics(competitorName, isFast) {
+async function computePerModelRawMetrics(competitorName) {
   const modelKeys = Object.keys(MODEL_KEYWORDS);
   const byModel = {};
   await Promise.all(modelKeys.map(async (m) => {
-    const results = await (isFast ? fetchModelSnippetsFast(competitorName, m) : fetchModelSnippetsFull(competitorName, m));
+    const results = await fetchModelSnippetsFull(competitorName, m);
     let mentions = 0;
     let prominenceSum = 0;
     let posCount = 0;
@@ -348,8 +349,15 @@ async function callModelSimple(modelKey, prompt) {
       }
       console.log(`   📞 [callModelSimple] Calling Gemini API...`);
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const res = await model.generateContent(prompt);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+      let res;
+      try {
+        res = await withTimeout(
+          model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }]}] }),
+          10000,
+          { response: { candidates: [] } }
+        );
+      } catch { res = { response: { candidates: [] } }; }
       const response = res?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       console.log(`   ✅ [callModelSimple] Gemini response: ${response.length} characters`);
       return response;
@@ -411,11 +419,11 @@ async function callModelSimple(modelKey, prompt) {
   }
 }
 
-async function computeAiTrafficShares(competitorNames, industry, isFast, opts = {}) {
+async function computeAiTrafficShares(competitorNames, industry, opts = {}) {
   console.log('\n🚦 [computeAiTrafficShares] Starting AI Traffic Share calculation...');
   console.log(`   Competitors: ${competitorNames.join(', ')}`);
   console.log(`   Industry: ${industry}`);
-  console.log(`   Fast mode: ${isFast}`);
+  console.log(`   Full analysis mode enabled`);
   
   // Use only the four prompts provided; no additional banks
   const queries = [
@@ -470,7 +478,7 @@ async function computeAiTrafficShares(competitorNames, industry, isFast, opts = 
   const responses = await Promise.all(allCalls.map(async (call) => {
     try {
       console.log(`   📞 [${call.model}] Query ${call.queryIndex + 1}: "${call.query}"`);
-      const text = await withTimeout(callModelSimple(call.model, call.prompt), isFast ? 8000 : 12000, '').catch(() => '');
+      const text = await withTimeout(callModelSimple(call.model, call.prompt), 12000, '').catch(() => '');
       console.log(`   ✅ [${call.model}] Response: ${text ? text.length : 0} characters`);
       return {
         model: call.model,
@@ -986,12 +994,12 @@ function textIncludesNear(text, term, keywords) {
   } catch { return false; }
 }
 
-async function computeShoppingVisibilityCounts(competitorNames, product, country, isFast) {
+async function computeShoppingVisibilityCounts(competitorNames, product, country) {
   console.log('\n🛍️ [computeShoppingVisibilityCounts] Starting transactional mentions calculation...');
   console.log(`   Competitors: ${competitorNames.join(', ')}`);
   console.log(`   Product: ${product || '(none)'}`);
   console.log(`   Country: ${country || '(none)'}`);
-  console.log(`   Fast mode: ${isFast}`);
+  console.log(`   Full analysis mode enabled`);
 
   const queries = getTransactionalPromptBank(product, country);
   console.log(`   Queries to process: ${queries.length}`);
@@ -1025,7 +1033,7 @@ async function computeShoppingVisibilityCounts(competitorNames, product, country
   const responses = await Promise.all(allCalls.map(async (call) => {
     try {
       console.log(`   📞 [${call.model}] Q${call.queryIndex + 1}: "${call.query}"`);
-      const text = await withTimeout(callModelSimple(call.model, call.prompt), isFast ? 8000 : 12000, '').catch(() => '');
+      const text = await withTimeout(callModelSimple(call.model, call.prompt), 12000, '').catch(() => '');
       const ok = !!(text && String(text).trim());
       console.log(`   ✅ [${call.model}] Q${call.queryIndex + 1}: ${ok ? (String(text).length + ' chars') : 'empty'}`);
       return { model: call.model, queryIndex: call.queryIndex, text: text || '', success: ok };
@@ -1114,13 +1122,13 @@ function rankCompetitorsInText(text, competitorNames, aliasMap) {
   }
 }
 
-async function computeCitationMetrics(competitorNames, industry, isFast, opts = {}) {
+async function computeCitationMetrics(competitorNames, industry, opts = {}) {
   console.log('\n🔍 [computeCitationMetrics] Starting citation metrics calculation...');
   console.log(`   Competitors: ${competitorNames.join(', ')}`);
   console.log(`   Industry: ${industry}`);
-  console.log(`   Fast mode: ${isFast}`);
+  console.log(`   Full analysis mode enabled`);
   
-  const queries = getDefaultQueryPool(industry, opts.geo || null, opts.companyName || '', opts.product || '').slice(0, isFast ? 6 : 12);
+  const queries = getDefaultQueryPool(industry, opts.geo || null, opts.companyName || '', opts.product || '').slice(0, 12);
   console.log(`   Queries to process: ${queries.length} (${queries.join(', ')})`);
   
   const modelKeys = getConfiguredModelKeys();
@@ -1162,7 +1170,7 @@ async function computeCitationMetrics(competitorNames, industry, isFast, opts = 
   const responses = await Promise.all(allCalls.map(async (call) => {
     try {
       console.log(`   📞 [${call.model}] Query ${call.queryIndex + 1}: "${call.query}"`);
-      const text = await withTimeout(callModelSimple(call.model, call.prompt), isFast ? 8000 : 12000, '').catch(() => '');
+      const text = await withTimeout(callModelSimple(call.model, call.prompt), 12000, '').catch(() => '');
       console.log(`   ✅ [${call.model}] Response: ${text ? text.length : 0} characters`);
       return {
         model: call.model,
@@ -1435,7 +1443,7 @@ async function extractAudienceProfileWithGemini(competitorName, snippets) {
   if (!GEMINI_API_KEY) return null;
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
     const prompt = `From the following text snippets about ${competitorName}, extract the target audience (roles, industries, B2B/B2C) and demographics (region, company size, industry focus).\nReturn ONLY JSON with keys: audience[], demographics { region, companySize, industryFocus }.\nSnippets:\n${snippets.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\nExample JSON:\n{\n  "audience": ["Enterprise IT", "Developers"],\n  "demographics": {"region": "North America", "companySize": "SMB", "industryFocus": "Healthcare"}\n}`;
     const result = await model.generateContent(prompt);
     let text = result.response.candidates[0]?.content?.parts?.[0]?.text || '';
@@ -1531,21 +1539,25 @@ async function detectIndustryAndProduct(companyName) {
     
     // Use AI to analyze search results and extract industry/product
     const analysisPrompt = `Analyze these search results about "${companyName}" and determine:
-1. The primary industry/sector this company operates in
-2. The main products/services they offer
+1. The primary industry/sector this company operates in (be specific: e.g., "ecommerce", "retail", "fashion", "technology", "healthcare", "finance", etc.)
+2. The main products/services they offer (be specific about their core offerings)
+3. The target market/customers they serve
+4. The business model they use (B2B, B2C, marketplace, SaaS, etc.)
 
 Search results:
 ${allSearchResults.map(item => `${item.name}: ${item.snippet}`).join('\n\n')}
 
 Return ONLY a JSON object with this format:
 {
-  "industry": "the primary industry",
-  "product": "the main product or service"
+  "industry": "the primary industry (be specific)",
+  "product": "the main product or service",
+  "targetMarket": "primary target customers",
+  "businessModel": "B2B/B2C/marketplace/SaaS/etc"
 }`;
     
     if (GEMINI_API_KEY) {
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
       
       const result = await model.generateContent(analysisPrompt);
       const response = result.response.candidates[0]?.content?.parts[0]?.text || '';
@@ -1615,8 +1627,12 @@ Snippets:\n${results.map(x => `- ${x.snippet}`).join('\n')}
 Return ONLY JSON: { "product": "..." }`;
     if (GEMINI_API_KEY) {
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const out = await model.generateContent(prompt);
+       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+       const out = await withTimeout(
+         model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }]}] }),
+         8000,
+         { response: { candidates: [] } }
+       );
       const text = out.response.candidates[0]?.content?.parts[0]?.text || '';
       try {
         const clean = text.replace(/```json\s*/g,'').replace(/```/g,'').trim();
@@ -1636,27 +1652,27 @@ function getEnhancedPrompts(company, industry = '', product = '') {
   
   return {
     chatgpt: [
-      `Which companies are leading in ${industryContext}?`,
-      `What are the top companies offering ${productContext} in ${industryContext}?`,
-      `Compare ${company} with other companies in the ${industryContext}.`,
-      `How does ${company} leverage AI in ${industryContext}?`
+      `Analyze the market visibility and competitive positioning of "${company}" in the ${industryContext} industry. Focus on their brand recognition, market share, and how they compare to other leading companies in this space.`,
+      `What are the key strengths and competitive advantages of "${company}" in the ${industryContext} market? How do they differentiate themselves from competitors?`,
+      `Evaluate "${company}"'s presence and performance in ${industryContext}. What is their current market position and how visible are they compared to industry leaders?`,
+      `How does "${company}" leverage technology and innovation in the ${industryContext} sector? What makes them stand out in this competitive landscape?`
     ],
     gemini: [
-      `Which companies are leading in ${industryContext}?`,
-      `What are the top companies offering ${productContext} in ${industryContext}?`,
-      `Compare ${company} with other companies in the ${industryContext}.`,
-      `How does ${company} leverage AI in ${industryContext}?`
+      `Conduct a comprehensive analysis of "${company}"'s market visibility in the ${industryContext} industry. Assess their brand recognition, competitive positioning, and market presence compared to other companies in this sector.`,
+      `What are the primary products and services offered by "${company}" in the ${industryContext} market? How do these offerings compare to competitors?`,
+      `Analyze "${company}"'s competitive landscape in ${industryContext}. Who are their main competitors and how does "${company}" position itself against them?`,
+      `Evaluate "${company}"'s market performance and visibility in the ${industryContext} sector. What factors contribute to their success or challenges in this market?`
     ],
     perplexity: [
-      `Analyze the brand and market visibility of "${company}" in ${industryContext}. Write a narrative analysis that repeatedly references the exact company name "${company}" throughout the text. Include its position versus competitors, sentiment indicators, and notable strengths or gaps. Ensure the company name "${company}" appears naturally multiple times (at least 6) in the explanation.`,
-      `Provide a competitor visibility comparison centered on "${company}" in ${industryContext}. Explicitly mention "${company}" many times while discussing mentions, positioning, and notable references in the market. Keep the tone analytical and informative.`,
-      `Summarize how "${company}" is perceived in ${industryContext}, including brand mentions, relative positioning, and sentiment cues. Make sure to include the exact string "${company}" frequently across the response so the narrative clearly ties every point back to "${company}".`
+      `Analyze the brand and market visibility of "${company}" in ${industryContext}. Write a comprehensive narrative analysis that repeatedly references the exact company name "${company}" throughout the text. Include their position versus competitors, sentiment indicators, market share, recent developments, and notable strengths or gaps. Ensure the company name "${company}" appears naturally multiple times (at least 8) in the explanation.`,
+      `Provide a detailed competitor visibility comparison centered on "${company}" in ${industryContext}. Explicitly mention "${company}" many times while discussing mentions, positioning, market references, competitive advantages, and industry recognition. Keep the tone analytical and informative while highlighting "${company}"'s unique value proposition.`,
+      `Summarize how "${company}" is perceived in the ${industryContext} market, including brand mentions, relative positioning, customer sentiment, market trends, and competitive analysis. Make sure to include the exact string "${company}" frequently across the response so the narrative clearly ties every point back to "${company}" and their market position.`
     ],
     claude: [
-      `Which companies are leading in ${industryContext}?`,
-      `What are the top companies offering ${productContext} in ${industryContext}?`,
-      `Compare ${company} with other companies in the ${industryContext}.`,
-      `How does ${company} leverage AI in ${industryContext}?`
+      `Provide a deep analysis of "${company}"'s competitive positioning in the ${industryContext} industry. Focus on their market visibility, brand strength, and how they compare to industry leaders.`,
+      `What are the key market dynamics affecting "${company}" in the ${industryContext} sector? How do they navigate competitive challenges and opportunities?`,
+      `Analyze "${company}"'s strategic positioning in ${industryContext}. What are their core competencies and how do they differentiate from competitors?`,
+      `Evaluate "${company}"'s market presence and performance in the ${industryContext} industry. What factors drive their success and what challenges do they face?`
     ]
   };
 }
@@ -1720,13 +1736,16 @@ async function searchIndustryNewsCompetitors(companyName) {
   try {
     console.log(`   📰 Method 1: Industry news search for "${companyName}"`);
     
-    // Multiple industry news search queries
+    // Multiple industry news search queries - more specific for actual competitors
     const searchQueries = [
-      `${companyName} vs competitors`,
-      `${companyName} market analysis`,
-      `${companyName} industry report`,
-      `top companies like ${companyName}`,
-      `${companyName} competitive landscape`
+      `"${companyName}" competitors direct rivals`,
+      `"${companyName}" vs competitors market share`,
+      `companies competing with "${companyName}"`,
+      `"${companyName}" alternative brands`,
+      `"${companyName}" market competitors analysis`,
+      `"${companyName}" business rivals industry`,
+      `"${companyName}" similar companies same market`,
+      `"${companyName}" competitive landscape`
     ];
     
     console.log(`   🚀 Running ${searchQueries.length} industry news queries in parallel...`);
@@ -1766,12 +1785,12 @@ async function searchPublicCompanyDatabase(companyName) {
   try {
     console.log(`   🏢 Method 2: Public company database search for "${companyName}"`);
     
-    // Multiple public database search queries
+    // Multiple public database search queries - more specific for actual competitors
     const searchQueries = [
-      `${companyName} company profile`,
-      `${companyName} competitors list`,
-      `${companyName} industry competitors`,
-      `${companyName} market competitors`
+      `"${companyName}" direct competitors business rivals`,
+      `"${companyName}" vs competitors market analysis`,
+      `companies like "${companyName}" same industry`,
+      `"${companyName}" competitive landscape rivals`
     ];
     
     console.log(`   🚀 Running ${searchQueries.length} public database queries in parallel...`);
@@ -1829,12 +1848,12 @@ async function searchWikipediaCompetitors(companyName) {
   try {
     console.log(`   📚 Method 4: Wikipedia-based search for "${companyName}"`);
     
-    // Multiple Wikipedia search queries
+    // Multiple Wikipedia search queries - more specific for actual competitors
     const searchQueries = [
-      `${companyName} company profile`,
-      `${companyName} competitors list`,
-      `${companyName} industry competitors`,
-      `${companyName} market competitors`
+      `"${companyName}" Wikipedia competitors section`,
+      `"${companyName}" Wikipedia competitive landscape`,
+      `"${companyName}" Wikipedia rivals competitors`,
+      `"${companyName}" Wikipedia market competition`
     ];
     
     console.log(`   🚀 Running ${searchQueries.length} Wikipedia queries in parallel...`);
@@ -1960,55 +1979,134 @@ async function extractCompetitorNames(companyName, searchResults) {
   }
   
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
   
-  const searchText = searchResults.map(item => item.name).join('\n');
+  // Build richer context using title + snippet + link
+  const searchText = searchResults.map(item => {
+    const title = String(item?.name || '').trim();
+    const snippet = String(item?.snippet || '').trim();
+    const link = String(item?.link || '').trim();
+    return `${title}${snippet ? ` — ${snippet}` : ''}${link ? ` (${link})` : ''}`;
+  }).join('\n');
+  
+  console.log(`[DEBUG] Search results being sent to Gemini (${searchResults.length} items):`);
+  searchResults.forEach((item, index) => {
+    console.log(`  ${index + 1}. ${item.name} - ${item.snippet} - ${item.link}`);
+  });
   
   // Enhanced prompt for better competitor extraction
-  const prompt = `Analyze these search results and extract ONLY the competitor company names for "${companyName}".
+  const prompt = `Analyze these search results and extract ONLY direct competitor NAMES for "${companyName}".
 
-Instructions:
-1. Focus on companies that compete directly with ${companyName}
-2. Exclude ${companyName} itself from the results
-3. Exclude generic terms like "competitors", "companies", "businesses"
-4. Return ONLY a JSON array of company names
-5. No explanations, no markdown formatting
+STRICT RULES FOR ACCURACY:
+1) ONLY include companies that are DIRECT competitors to ${companyName} (same industry, similar products/services, same target customers)
+2) Exclude ${companyName} itself
+3) Exclude generic terms like "competitors", "companies", "businesses", "alternatives", "list"
+4) Exclude news websites, blogs, or informational sites (e.g., "Reuters", "Forbes", "TechCrunch")
+5) Exclude job sites, review sites, or directory sites (e.g., "Indeed", "Glassdoor", "LinkedIn")
+6) Exclude government or educational institutions unless they directly compete
+7) Only include actual business competitors that customers would choose between
+8) Deduplicate and normalize brand names (e.g., "amazon.com" → "Amazon")
+9) Focus on companies with similar business models and target markets
+10) Return ONLY a JSON array (no extra text), target 5-8 high-quality competitors
 
-Search results:
+Search results (title — snippet (link)):
 ${searchText}
 
-Return format: ["Company1", "Company2", "Company3"]`;
+Return JSON array only, e.g.: ["Company1", "Company2", "Company3"]`;
 
   console.log(`   🤖 Extracting competitors using AI for "${companyName}"`);
   console.log(`   📄 Analyzing ${searchResults.length} search results`);
   
-  const result = await model.generateContent(prompt);
+  let result;
+  try {
+    result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }]}],
+        generationConfig: { 
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+          maxOutputTokens: 1000
+        }
+      }),
+      15000, // Increased timeout
+      { response: { candidates: [] } }
+    );
+  } catch (error) {
+    console.log(`[DEBUG] Gemini API error:`, error.message);
+    // Try without JSON mode as fallback
+    try {
+      result = await withTimeout(
+        model.generateContent(prompt),
+        10000,
+        { response: { candidates: [] } }
+      );
+    } catch (fallbackError) {
+      console.log(`[DEBUG] Gemini fallback also failed:`, fallbackError.message);
+      result = { response: { candidates: [] } };
+    }
+  }
   const response = result.response.candidates[0]?.content?.parts[0]?.text || '';
+  console.log(`[DEBUG] Raw Gemini response:`, response);
   
   try {
-    // Clean the response to remove markdown formatting
-    let cleanedResponse = response.trim();
+    const clean = response.replace(/```json\s*/g, '').replace(/```/g, '').trim();
+    const jsonMatch = clean.match(/\[[\s\S]*\]/);
+    const raw = jsonMatch ? jsonMatch[0] : clean;
+    const competitors = JSON.parse(raw);
     
-    // Remove markdown code blocks
-    cleanedResponse = cleanedResponse.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-    cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
-    
-    // Try to extract JSON array
-    const jsonMatch = cleanedResponse.match(/\[.*\]/s);
-    if (jsonMatch) {
-      cleanedResponse = jsonMatch[0];
-    }
-    
-    let competitors = JSON.parse(cleanedResponse);
-    // Normalize and dedupe immediately
-    competitors = cleanCompetitorNames(competitors);
-    const validCompetitors = Array.isArray(competitors) ? competitors : [];
+    if (Array.isArray(competitors) && competitors.length > 0) {
+      const validCompetitors = competitors
+        .filter(name => name && typeof name === 'string' && name.trim().length > 0)
+        .map(name => name.trim())
+        .filter(name => name.toLowerCase() !== companyName.toLowerCase());
     
     console.log(`   ✅ AI extracted ${validCompetitors.length} competitors`);
-    return validCompetitors;
+      if (validCompetitors.length > 0) return validCompetitors;
+      // Fall back to heuristic extraction below if AI returned empty
+    }
   } catch (error) {
     console.error('❌ Failed to parse competitor names:', error.message);
     console.error('Raw response:', response);
+    // Continue to heuristic extraction
+  }
+
+  // Heuristic extraction: infer brand names from result links and titles
+  try {
+    const domainToBrand = (url) => {
+      try {
+        const u = new URL(url);
+        const host = u.hostname.replace(/^www\./, '').toLowerCase();
+        const sld = host.split('.').slice(-2, -1)[0] || host.split('.')[0];
+        if (!sld) return '';
+        // Map a few common marketplaces explicitly
+        const map = { amazon: 'Amazon', ebay: 'eBay', walmart: 'Walmart', target: 'Target', etsy: 'Etsy', asos: 'ASOS', uniqlo: 'Uniqlo', bestbuy: 'Best Buy', aliexpress: 'AliExpress' };
+        return map[sld] || sld.replace(/[-_]/g, ' ').replace(/\b(\w)/g, (m, c) => c.toUpperCase());
+      } catch { return ''; }
+    };
+    const fromDomains = new Set();
+    (searchResults || []).forEach(item => {
+      const b = domainToBrand(item?.link || '');
+      if (b) fromDomains.add(b);
+    });
+    // Also split titles on common "vs" / list patterns
+    const fromTitles = new Set();
+    (searchResults || []).forEach(item => {
+      const t = String(item?.name || '');
+      const parts = t.split(/\bvs\.?|,|\/|\band\b|\bor\b/i).map(s => s.trim());
+      parts.forEach(p => {
+        if (!p) return;
+        // Keep short brand-like tokens
+        const cleaned = p.replace(/[^A-Za-z0-9 &'-]/g, '').trim();
+        if (cleaned && cleaned.length <= 20 && !/competitor|alternative|list|best|top|guide/i.test(cleaned)) {
+          fromTitles.add(cleaned);
+        }
+      });
+    });
+    let heuristic = cleanCompetitorNames([ ...fromDomains, ...fromTitles ]);
+    heuristic = heuristic.filter(n => n.toLowerCase() !== String(companyName).toLowerCase()).slice(0, 10);
+    console.log(`   🔎 Heuristic extracted ${heuristic.length} competitors`);
+    return heuristic;
+  } catch {
     return [];
   }
 }
@@ -2023,18 +2121,48 @@ async function validateCompetitors(companyName, competitorNames, searchResults) 
   console.log(`   🤖 Validating ${competitorNames.length} competitors for "${companyName}" in parallel...`);
   
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
   
   // Process all competitors truly in parallel without delays
   const validationPromises = competitorNames.map(async (competitor, index) => {
     try {
       console.log(`   [DEBUG] Starting validation for competitor ${index + 1}/${competitorNames.length}: ${competitor}`);
       
-      const scoringPrompt = `You are a business analyst. Rate how likely it is that ${competitor} is a direct competitor to ${companyName} on a scale of 0-100. Consider factors like:
-- Same industry/market
-- Similar products/services
-- Target customers
-- Business model
+      const scoringPrompt = `You are a business analyst. Rate how likely it is that "${competitor}" is a DIRECT competitor to "${companyName}" on a scale of 0-100.
+
+STRICT EVALUATION CRITERIA:
+1. Industry/Market Alignment (30%):
+   - Must operate in the SAME industry as ${companyName}
+   - Must serve the SAME market segment
+   - Must be in the SAME business category
+
+2. Product/Service Similarity (30%):
+   - Must offer SIMILAR products or services
+   - Must solve the SAME customer problems
+   - Must be in the SAME product category
+
+3. Target Customer Overlap (25%):
+   - Must target the SAME customer demographics
+   - Must compete for the SAME customer base
+   - Must have similar customer profiles
+
+4. Business Model Compatibility (15%):
+   - Must use similar business models
+   - Must compete in the SAME sales channels
+
+EXCLUSION RULES - AUTOMATIC 0 SCORE:
+- News websites (Forbes, Reuters, TechCrunch, etc.)
+- Job sites (Indeed, Glassdoor, LinkedIn, etc.)
+- Educational sites (Wikipedia, Quizlet, etc.)
+- Social platforms (Reddit, Quora, etc.)
+- Technology platforms (Shopify, WordPress, etc.)
+- Generic business services (Mailchimp, etc.)
+
+Rate 0-100 where:
+- 90-100: Direct competitor (same industry, similar products, same customers)
+- 70-89: Strong competitor (related industry, overlapping products/customers)
+- 50-69: Moderate competitor (some overlap in market or products)
+- 0-49: Not a competitor (different industry/market or excluded category)
 
 Return only a number between 0-100.`;
       
@@ -2045,12 +2173,12 @@ Return only a number between 0-100.`;
       const scoreMatch = response.match(/(\d+)/);
       const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
       
-      console.log(`   [DEBUG] ${competitor} scored ${score}/100 - ${score >= 50 ? 'VALID' : 'REJECTED'}`);
+      console.log(`   [DEBUG] ${competitor} scored ${score}/100 - ${score >= 60 ? 'VALID' : 'REJECTED'}`);
       
       return {
         competitor,
         score,
-        isValid: score >= 50,
+        isValid: score >= 60, // Balanced threshold for accuracy and coverage
         error: null
       };
       
@@ -2070,11 +2198,21 @@ Return only a number between 0-100.`;
   const validationResults = await Promise.all(validationPromises);
   
   // Filter valid competitors
-  const validatedCompetitors = validationResults
+  let validatedCompetitors = validationResults
     .filter(result => result.isValid)
     .map(result => result.competitor);
   
   console.log(`   ✅ Parallel validation complete: ${validatedCompetitors.length} valid competitors out of ${competitorNames.length}`);
+  console.log(`[DEBUG] Validation results:`, validationResults.map(r => `${r.competitor}:${r.score}(${r.isValid ? 'VALID' : 'REJECTED'})`));
+  console.log(`[DEBUG] Valid competitors after filtering:`, validatedCompetitors);
+  
+  // Quality over quantity: only return validated competitors
+  if (validatedCompetitors.length === 0) {
+    console.log(`   ⚠️ No competitors passed validation. This may indicate the search results don't contain relevant competitors for "${companyName}".`);
+    console.log(`   💡 Consider trying different search terms or checking if the company name is correct.`);
+  } else if (validatedCompetitors.length < 3) {
+    console.log(`   ⚠️ Only ${validatedCompetitors.length} competitors passed validation. Quality over quantity - returning only validated competitors.`);
+  }
   
   // Log validation summary
   validationResults.forEach(result => {
@@ -2089,7 +2227,7 @@ Return only a number between 0-100.`;
 }
 
 // Multi-method competitor detection with parallel processing
-async function detectCompetitors(companyName, searchResults) {
+async function detectCompetitors(companyName, searchResults, industry = '') {
   console.log('\n🔍 Starting parallel competitor detection...');
   const allCompetitors = new Map();
   const methodResults = {};
@@ -2189,6 +2327,33 @@ async function detectCompetitors(companyName, searchResults) {
         console.error(`   ❌ Geo-intent prompt bank search failed:`, error.message);
         return { method: 'geoPromptBank', competitors: [] };
       }
+    })(),
+    
+    // Method 6: Query expansion (alternatives / vs / like)
+    (async () => {
+      console.log('🧠 Method 6: Query expansion (alternatives / vs / like)...');
+      try {
+        const qx = [
+          `"${companyName}" direct competitors business rivals`,
+          `"${companyName}" vs competitors market analysis`,
+          `companies like "${companyName}" same industry`,
+          `"${companyName}" alternative brands competitors`,
+          `"${companyName}" market competitors analysis`,
+          `"${companyName}" competitive landscape rivals`,
+          `"${companyName}" business competitors direct`,
+          `"${companyName}" industry rivals competitors`
+        ];
+        const queryResults = await Promise.all(qx.map(q => queryCustomSearchAPI(q).catch(() => [])));
+        const flat = queryResults.flat();
+        console.log(`   📄 Query expansion total results: ${flat.length}`);
+        const extracted = await withTimeout(extractCompetitorNames(companyName, flat), 10000, []).catch(() => []);
+        const cleaned = cleanCompetitorNames(extracted);
+        console.log(`   ✅ Query expansion extracted ${cleaned.length} competitors`);
+        return { method: 'queryExpansion', competitors: cleaned };
+      } catch (error) {
+        console.error('   ❌ Query expansion failed:', error.message);
+        return { method: 'queryExpansion', competitors: [] };
+      }
     })()
   ];
   
@@ -2199,6 +2364,7 @@ async function detectCompetitors(companyName, searchResults) {
   // Consolidate results from all methods
   console.log('\n📊 Consolidating results from all detection methods...');
   detectionResults.forEach(result => {
+    console.log(`[DEBUG] Method ${result.method} returned ${result.competitors?.length || 0} competitors:`, result.competitors);
     if (result.competitors && result.competitors.length > 0) {
       result.competitors.forEach(rawComp => {
         const key = normalizeBrandKey(rawComp);
@@ -2220,15 +2386,183 @@ async function detectCompetitors(companyName, searchResults) {
     console.log(`   ${index + 1}. ${comp.name} (found ${comp.frequency} times)`);
   });
   
-  const competitorNames = rankedCompetitors.map(c => c.name);
+  let competitorNames = rankedCompetitors.map(c => c.name);
   console.log('   [DEDUP] Final ranked (name,key,freq):', rankedCompetitors);
   
-  // Validate competitors with parallel processing
-  console.log('\n✅ Validating competitors with AI in parallel...');
-  const validatedCompetitors = await validateCompetitors(companyName, competitorNames, searchResults);
-  console.log(`🎯 Final validated competitors:`, validatedCompetitors);
+  // Only use fallback seeding if primary detection completely failed
+  if (!competitorNames || competitorNames.length < 2) {
+    console.log(`   ⚠️ Primary detection found only ${competitorNames?.length || 0} competitors, using intelligent fallback...`);
+    
+    // Industry-specific competitor suggestions (fallback only)
+    const industryCompetitors = {
+      'fashion': ['H&M', 'Uniqlo', 'Gap', 'Forever 21', 'ASOS', 'Shein', 'Mango', 'Zara'],
+      'ecommerce': ['Amazon', 'eBay', 'Walmart', 'Target', 'Best Buy'],
+      'retail': ['Amazon', 'Walmart', 'Target', 'Best Buy'],
+      'automotive': ['Tesla', 'BMW', 'Mercedes', 'Toyota', 'Honda', 'Ford', 'Nissan'],
+      'tech': ['Apple', 'Google', 'Microsoft', 'Samsung', 'Meta', 'Amazon'],
+      'streaming': ['Netflix', 'Disney+', 'Hulu', 'Amazon Prime', 'HBO Max', 'Paramount+'],
+      'media': ['Reuters', 'CNN', 'BBC', 'New York Times', 'Wall Street Journal', 'Bloomberg', 'Associated Press'],
+      'social': ['Facebook', 'Twitter', 'Instagram', 'TikTok', 'Snapchat', 'Pinterest', 'Discord', 'Telegram'],
+      'professional': ['Indeed', 'Glassdoor', 'Monster', 'ZipRecruiter', 'CareerBuilder', 'LinkedIn', 'AngelList']
+    };
+    
+    // Better industry detection based on company name, provided industry, and context
+    let detectedIndustry = 'ecommerce'; // default
+    
+    // First, try to use the provided industry parameter
+    if (industry && industry.trim().length > 0) {
+      const industryLower = industry.toLowerCase();
+      if (industryLower.includes('media') || industryLower.includes('news') || industryLower.includes('journalism')) {
+        detectedIndustry = 'media';
+      } else if (industryLower.includes('social') || industryLower.includes('community')) {
+        detectedIndustry = 'social';
+      } else if (industryLower.includes('professional') || industryLower.includes('job') || industryLower.includes('career')) {
+        detectedIndustry = 'professional';
+      } else if (industryLower.includes('fashion') || industryLower.includes('clothing') || industryLower.includes('apparel')) {
+        detectedIndustry = 'fashion';
+      } else if (industryLower.includes('automotive') || industryLower.includes('car') || industryLower.includes('vehicle')) {
+        detectedIndustry = 'automotive';
+      } else if (industryLower.includes('tech') || industryLower.includes('technology') || industryLower.includes('software')) {
+        detectedIndustry = 'tech';
+      } else if (industryLower.includes('streaming') || industryLower.includes('entertainment') || industryLower.includes('video')) {
+        detectedIndustry = 'streaming';
+      }
+    }
+    
+    // If no industry provided or not recognized, try company name detection
+    if (detectedIndustry === 'ecommerce') {
+      if (companyName.toLowerCase().includes('fashion') || companyName.toLowerCase().includes('zara') || 
+          companyName.toLowerCase().includes('h&m') || companyName.toLowerCase().includes('uniqlo') ||
+          companyName.toLowerCase().includes('gap') || companyName.toLowerCase().includes('asos')) {
+        detectedIndustry = 'fashion';
+      } else if (companyName.toLowerCase().includes('tesla') || companyName.toLowerCase().includes('bmw') ||
+                 companyName.toLowerCase().includes('mercedes') || companyName.toLowerCase().includes('toyota')) {
+        detectedIndustry = 'automotive';
+      } else if (companyName.toLowerCase().includes('apple') || companyName.toLowerCase().includes('google') ||
+                 companyName.toLowerCase().includes('microsoft') || companyName.toLowerCase().includes('samsung')) {
+        detectedIndustry = 'tech';
+      } else if (companyName.toLowerCase().includes('netflix') || companyName.toLowerCase().includes('disney') ||
+                 companyName.toLowerCase().includes('hulu') || companyName.toLowerCase().includes('spotify')) {
+        detectedIndustry = 'streaming';
+      } else if (companyName.toLowerCase().includes('forbes') || companyName.toLowerCase().includes('reuters') ||
+                 companyName.toLowerCase().includes('cnn') || companyName.toLowerCase().includes('bbc')) {
+        detectedIndustry = 'media';
+      } else if (companyName.toLowerCase().includes('reddit') || companyName.toLowerCase().includes('facebook') ||
+                 companyName.toLowerCase().includes('twitter') || companyName.toLowerCase().includes('instagram')) {
+        detectedIndustry = 'social';
+      } else if (companyName.toLowerCase().includes('linkedin') || companyName.toLowerCase().includes('indeed') ||
+                 companyName.toLowerCase().includes('glassdoor') || companyName.toLowerCase().includes('monster')) {
+        detectedIndustry = 'professional';
+      }
+    }
+    
+    console.log(`   🎯 Fallback industry detection: ${detectedIndustry} (from industry param: ${industry})`);
+    
+    const suggestions = industryCompetitors[detectedIndustry] || industryCompetitors['ecommerce'];
+    
+    const normMain = String(companyName || '').toLowerCase();
+    const filteredSuggestions = suggestions.filter(s => s.toLowerCase() !== normMain);
+    
+    // Add fallback suggestions only if primary detection failed
+    competitorNames = [...competitorNames, ...filteredSuggestions].slice(0, 8);
+    console.log(`   🔧 Added ${detectedIndustry} fallback suggestions. Count: ${competitorNames.length}`);
+  } else {
+    console.log(`   ✅ Primary detection successful with ${competitorNames.length} competitors - no fallback needed`);
+  }
   
-  return validatedCompetitors;
+  // Pre-filter obvious non-competitors before AI validation
+  // NOTE: Only filter competitors, not the main company being analyzed
+  console.log('\n🔍 Pre-filtering obvious non-competitors...');
+  const excludedPatterns = [
+    /forbes|reuters|techcrunch|bloomberg|cnn|bbc|nytimes|vox|medium/i,
+    /indeed|glassdoor|linkedin|monster|ziprecruiter/i,
+    /wikipedia|quizlet|khan|edx|coursera|sciencedirect|academic/i,
+    /reddit|quora|stackoverflow|medium|substack|fandom|scribd/i,
+    /shopify|wordpress|squarespace|wix|webflow|platform/i,
+    /mailchimp|hubspot|salesforce|zendesk|slack|business/i,
+    /google|microsoft|apple|amazon|meta|twitter|tech/i,
+    /youtube|tiktok|instagram|facebook|snapchat|social/i,
+    /netflix|disney|hulu|spotify|pandora|entertainment/i,
+    /investopedia|thestrategystory|productmint|scmglobe|rankandstyle/i,
+    /stylebysavina|theeleganceedit|thredup|ethicalconsumer|ecoclub/i,
+    /goodonyou|fredericetiemble|adammendler|gittemary|zarahighend/i,
+    /ecdb|direct|zubiaga|iksurfmag|thewaltdisneycompany|ijirset/i,
+    /micro1|captiv8|strategies|start|shsconferences|nielseniq/i,
+    /conquest|scrapehero|unl|martinroll|ecostylist|heuritech/i
+  ];
+  
+  const filteredCompetitors = competitorNames.filter(competitor => {
+    // Don't filter out the main company being analyzed
+    if (competitor.toLowerCase() === companyName.toLowerCase()) {
+      console.log(`   ✅ Keeping main company: ${competitor}`);
+      return true;
+    }
+    
+    const isExcluded = excludedPatterns.some(pattern => pattern.test(competitor));
+    if (isExcluded) {
+      console.log(`   ❌ Pre-filtered out: ${competitor} (matches exclusion pattern)`);
+      return false;
+    }
+    return true;
+  });
+  
+  console.log(`   📊 Pre-filtering: ${competitorNames.length} → ${filteredCompetitors.length} competitors`);
+  console.log(`   ✅ Remaining competitors:`, filteredCompetitors);
+
+  // Validate remaining competitors with AI
+  console.log('\n✅ Validating remaining competitors with AI...');
+  const validatedCompetitors = await validateCompetitors(companyName, filteredCompetitors, searchResults);
+  console.log(`🎯 AI validated competitors:`, validatedCompetitors);
+  
+  // Final post-processing: ensure only the most relevant competitors
+  console.log('\n🔍 Final post-processing for maximum accuracy...');
+  const finalCompetitors = validatedCompetitors.filter(competitor => {
+    const compLower = competitor.toLowerCase();
+    
+    // Always keep the main company being analyzed
+    if (compLower === companyName.toLowerCase()) {
+      console.log(`   ✅ Keeping main company: ${competitor}`);
+      return true;
+    }
+    
+    // Industry-aware brand filtering
+    const knownBrands = [
+      // Fashion
+      'h&m', 'uniqlo', 'gap', 'forever 21', 'asos', 'shein', 'mango', 'cos', 
+      'massimo dutti', 'bershka', 'pull&bear', 'stradivarius', 'zara',
+      // Sports
+      'nike', 'adidas', 'puma', 'reebok', 'under armour', 'new balance',
+      // Retail/E-commerce
+      'amazon', 'ebay', 'walmart', 'target', 'best buy',
+      // Media
+      'reuters', 'cnn', 'bbc', 'new york times', 'wall street journal', 'bloomberg',
+      // Social
+      'facebook', 'twitter', 'instagram', 'tiktok', 'snapchat', 'pinterest',
+      // Professional
+      'indeed', 'glassdoor', 'monster', 'ziprecruiter', 'careerbuilder', 'linkedin',
+      // Tech
+      'apple', 'google', 'microsoft', 'samsung',
+      // Streaming
+      'netflix', 'disney', 'hulu', 'spotify', 'pandora',
+      // Automotive
+      'tesla', 'bmw', 'mercedes', 'toyota', 'honda'
+    ];
+    
+    const isKnownBrand = knownBrands.some(brand => compLower.includes(brand));
+    
+    if (isKnownBrand) {
+      console.log(`   ✅ Keeping known brand: ${competitor}`);
+      return true;
+    } else {
+      console.log(`   ❌ Filtering out unknown brand: ${competitor}`);
+      return false;
+    }
+  });
+  
+  console.log(`🎯 Final competitors after post-processing:`, finalCompetitors);
+  console.log(`📊 Final count: ${finalCompetitors.length} high-quality competitors`);
+  
+  return finalCompetitors;
 }
 
 // Web scraping functionality
@@ -2386,7 +2720,7 @@ async function quickDetectCompetitors(input) {
       }
     } catch {}
 
-    const query = `${company} competitors`;
+    const query = `"${company}" direct competitors business rivals`;
     const searchResults = await withTimeout(queryCustomSearchAPI(query), 6000, []);
     const extracted = await withTimeout(extractCompetitorNames(company, searchResults), 6000, []);
     const cleaned = cleanCompetitorNames(extracted).slice(0, 10);
@@ -2721,7 +3055,7 @@ async function withTimeout(promise, ms, fallbackValue) {
 
 // Main AI visibility analysis function - now optimized by default
 // New parallel LLM analysis function
-async function analyzeCompanyWithAllModels(companyName, industry, product, prompts, isFast) {
+async function analyzeCompanyWithAllModels(companyName, industry, product, prompts) {
   console.log(`\n🚀 [analyzeCompanyWithAllModels] Starting parallel analysis for ${companyName}`);
   
   const modelKeys = getConfiguredModelKeys();
@@ -2760,7 +3094,7 @@ async function analyzeCompanyWithAllModels(companyName, industry, product, promp
       model: 'gemini',
       promise: withTimeout(
         queryGeminiVisibility(companyName, industry, [prompts.gemini[0]]),
-        isFast ? 12000 : 15000,
+        15000,
         { analysis: 'Timed out', visibilityScore: 0, keyMetrics: {}, breakdown: {} }
       ).catch(() => ({ analysis: 'Error', visibilityScore: 0, keyMetrics: {}, breakdown: {} }))
     });
@@ -2771,7 +3105,7 @@ async function analyzeCompanyWithAllModels(companyName, industry, product, promp
       model: 'perplexity',
       promise: withTimeout(
         queryPerplexity(companyName, industry, [prompts.perplexity[0]]),
-        isFast ? 12000 : 15000,
+        15000,
         { analysis: 'Timed out', visibilityScore: 0, keyMetrics: {}, breakdown: {} }
       ).catch(() => ({ analysis: 'Error', visibilityScore: 0, keyMetrics: {}, breakdown: {} }))
     });
@@ -2782,7 +3116,7 @@ async function analyzeCompanyWithAllModels(companyName, industry, product, promp
       model: 'claude',
       promise: withTimeout(
         queryClaude(companyName, industry, [prompts.claude[0]]),
-        isFast ? 12000 : 15000,
+        15000,
         { analysis: 'Timed out', visibilityScore: 0, keyMetrics: {}, breakdown: {} }
       ).catch(() => ({ analysis: 'Error', visibilityScore: 0, keyMetrics: {}, breakdown: {} }))
     });
@@ -2793,7 +3127,7 @@ async function analyzeCompanyWithAllModels(companyName, industry, product, promp
       model: 'chatgpt',
       promise: withTimeout(
         queryChatGPT(companyName, industry, [prompts.chatgpt[0]]),
-        isFast ? 12000 : 15000,
+        15000,
         { analysis: 'Timed out', visibilityScore: 0, keyMetrics: {}, breakdown: {} }
       ).catch(() => ({ analysis: 'Error', visibilityScore: 0, keyMetrics: {}, breakdown: {} }))
     });
@@ -2839,9 +3173,9 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
   console.log('🚀 Starting Optimized AI Visibility Analysis for:', companyName);
   console.log('📊 Industry context:', industry || 'Not specified');
   
-  // Default to fast mode for better performance
-  const isFast = options && options.fast !== false; // Changed: fast mode is now default
-  if (isFast) console.log('⚡ Optimized mode enabled: maximizing speed while maintaining accuracy');
+  // Always run full analysis mode for comprehensive results
+  const isFast = false; // Disabled fast mode - always run full analysis
+  console.log('🔍 Full analysis mode enabled: comprehensive competitor detection and AI analysis');
   
   try {
     // Automatic industry and product detection if not provided (optimized in fast mode)
@@ -2852,32 +3186,12 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     const parallelTasks = [];
     
     if (!industry) {
-      if (isFast) {
-        console.log('🔍 Optimized mode: starting industry detection and search in parallel...');
-        // Start industry detection in parallel
-        parallelTasks.push(
-          withTimeout(detectIndustryAndProduct(companyName), 8000, { industry: '', product: '' })
-            .then(detection => {
-              detectedIndustry = detection.industry;
-              detectedProduct = detection.product || inferProductFromCompanyName(companyName);
-              console.log(`📊 Quick detected industry: ${detectedIndustry || 'Unknown'}`);
-              return { type: 'industry', data: detection };
-            })
-            .catch(error => {
-              console.log('🔍 Quick detection failed, proceeding without industry context');
-              detectedIndustry = '';
-              detectedProduct = inferProductFromCompanyName(companyName);
-              return { type: 'industry', data: { industry: '', product: '' } };
-            })
-        );
-      } else {
         console.log('🔍 No industry specified, detecting automatically...');
         const detection = await detectIndustryAndProduct(companyName);
         detectedIndustry = detection.industry;
         detectedProduct = detection.product || inferProductFromCompanyName(companyName);
         console.log(`📊 Detected industry: ${detectedIndustry || 'Unknown'}`);
         console.log(`📊 Detected product: ${detectedProduct || 'Unknown'}`);
-      }
     }
     
     // If product still missing, kick off a quick product-only detection in parallel
@@ -2888,37 +3202,31 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     }
 
     // Get search results for competitors (start in parallel with industry detection)
-    const searchQuery = `${companyName} competitors ${detectedIndustry}`.trim();
+    let searchQuery = `"${companyName}" direct competitors business rivals ${detectedIndustry}`.trim();
+    
+    // Make search query more industry-specific
+    if (detectedIndustry === 'media') {
+      searchQuery = `"${companyName}" competitors media news journalism ${detectedIndustry}`;
+    } else if (detectedIndustry === 'social') {
+      searchQuery = `"${companyName}" competitors social media platforms ${detectedIndustry}`;
+    } else if (detectedIndustry === 'professional') {
+      searchQuery = `"${companyName}" competitors job sites professional networks ${detectedIndustry}`;
+    } else if (detectedIndustry === 'fashion') {
+      searchQuery = `"${companyName}" competitors fashion clothing brands ${detectedIndustry}`;
+    } else if (detectedIndustry === 'tech') {
+      searchQuery = `"${companyName}" competitors technology companies ${detectedIndustry}`;
+    } else if (detectedIndustry === 'streaming') {
+      searchQuery = `"${companyName}" competitors streaming entertainment platforms ${detectedIndustry}`;
+    } else if (detectedIndustry === 'automotive') {
+      searchQuery = `"${companyName}" competitors car manufacturers automotive ${detectedIndustry}`;
+    }
+    
     console.log('🔍 Search query:', searchQuery);
     
     let searchResults = [];
     try {
-      if (isFast) {
-        // Start search in parallel with industry detection
-        parallelTasks.push(
-          withTimeout(queryCustomSearchAPI(searchQuery), 8000, [])
-            .then(results => {
-              searchResults = results;
-              console.log('📈 Found', results.length, 'search results');
-              return { type: 'search', data: results };
-            })
-            .catch(error => {
-              console.error('❌ Search API error:', error.message);
-              console.log('⚠️ Using empty search results, will rely on competitor detection');
-              searchResults = [];
-              return { type: 'search', data: [] };
-            })
-        );
-        
-        // Wait for both industry detection and search to complete
-        if (parallelTasks.length > 0) {
-          console.log('⏳ Waiting for parallel tasks (industry detection + search) to complete...');
-          await Promise.all(parallelTasks);
-        }
-      } else {
         searchResults = await queryCustomSearchAPI(searchQuery);
         console.log('📈 Found', searchResults.length, 'search results');
-      }
     } catch (error) {
       console.error('❌ Search API error:', error.message);
       console.log('⚠️ Using empty search results, will rely on competitor detection');
@@ -2935,58 +3243,108 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     }
     console.log(`⏱️ Search and detections completed in ${searchTime - startTime}ms (product=${detectedProduct || 'Unknown'})`);
     
-    // Detect competitors (optimized detection)
-    console.log('🎯 Starting parallel competitor detection...');
+    // Detect competitors (comprehensive detection)
+    console.log('🎯 Starting comprehensive competitor detection...');
     const competitorStartTime = Date.now();
     let competitors = [];
-    if (isFast) {
-      try {
-        // Use our parallel competitor detection directly for maximum speed
-        console.log('🚀 Using parallel competitor detection for maximum speed...');
-        competitors = await withTimeout(detectCompetitors(companyName, searchResults), 20000, []);
-        
-        if (competitors.length === 0) {
-          console.log('⚠️ Parallel detection returned no competitors, using quick extraction fallback');
-          // Fallback to quick extraction
-          const extracted = await withTimeout(extractCompetitorNames(companyName, searchResults), 8000, []);
-          competitors = cleanCompetitorNames(extracted).slice(0, 10);
-        }
-        console.log('✅ Parallel competitor detection complete:', competitors);
-      } catch (e) {
-        console.log('⚠️ Parallel detection failed, using quick extraction fallback');
+    
+    // Always use comprehensive detection for full analysis
+    console.log('🔍 Using comprehensive competitor detection for full analysis...');
+    console.log(`[DEBUG] searchResults length: ${searchResults?.length || 0}`);
+    console.log(`[DEBUG] searchResults sample:`, searchResults?.slice(0, 3) || []);
         try {
-          const extracted = await withTimeout(extractCompetitorNames(companyName, searchResults), 8000, []);
-          competitors = cleanCompetitorNames(extracted).slice(0, 10);
-        } catch (fallbackError) {
-          console.log('⚠️ Quick extraction failed, returning empty competitors');
+          competitors = await detectCompetitors(companyName, searchResults, detectedIndustry);
+      console.log('✅ Comprehensive competitor detection complete. Found', competitors.length, 'competitors:', competitors);
+    } catch (error) {
+      console.error('❌ Comprehensive competitor detection failed:', error.message);
           competitors = [];
         }
-      }
-    } else {
-      try {
-        const { detectCompetitorsEnhanced } = require('./enhancedCompetitorDetection');
-        competitors = await detectCompetitorsEnhanced(companyName, industry);
-        console.log('✅ Enhanced competitor detection complete. Found', competitors.length, 'competitors:', competitors);
-      } catch (error) {
-        console.error('❌ Enhanced competitor detection failed:', error.message);
-        console.log('🔄 Falling back to original competitor detection...');
-        try {
-          competitors = await detectCompetitors(companyName, searchResults);
-          console.log('✅ Original competitor detection complete. Found', competitors.length, 'competitors:', competitors);
-        } catch (fallbackError) {
-          console.error('❌ Original competitor detection also failed:', fallbackError.message);
-          competitors = [];
-        }
-      }
-    }
     
     const competitorTime = Date.now();
     console.log(`⏱️ Competitor detection completed in ${competitorTime - competitorStartTime}ms`);
     
-    // No fallback competitors - only use detected competitors
-    if (competitors.length === 0) {
-      console.log('⚠️ No competitors detected - proceeding with empty competitor list');
+  // Only use fallback seeding if primary detection completely failed
+  if (competitors.length < 2) {
+    console.log(`⚠️ Primary detection found only ${competitors.length} competitors, using intelligent fallback...`);
+    
+    // Industry-specific competitor suggestions (fallback only)
+    const industryCompetitors = {
+      'fashion': ['H&M', 'Uniqlo', 'Gap', 'Forever 21', 'ASOS', 'Shein', 'Mango', 'Zara'],
+      'ecommerce': ['Amazon', 'eBay', 'Walmart', 'Target', 'Best Buy'],
+      'retail': ['Amazon', 'Walmart', 'Target', 'Best Buy'],
+      'automotive': ['Tesla', 'BMW', 'Mercedes', 'Toyota', 'Honda', 'Ford', 'Nissan'],
+      'tech': ['Apple', 'Google', 'Microsoft', 'Samsung', 'Meta', 'Amazon'],
+      'streaming': ['Netflix', 'Disney+', 'Hulu', 'Amazon Prime', 'HBO Max', 'Paramount+'],
+      'media': ['Reuters', 'CNN', 'BBC', 'New York Times', 'Wall Street Journal', 'Bloomberg', 'Associated Press'],
+      'social': ['Facebook', 'Twitter', 'Instagram', 'TikTok', 'Snapchat', 'Pinterest', 'Discord', 'Telegram'],
+      'professional': ['Indeed', 'Glassdoor', 'Monster', 'ZipRecruiter', 'CareerBuilder', 'LinkedIn', 'AngelList']
+    };
+    
+    // Better industry detection based on company name, provided industry, and context
+    let detectedIndustryType = 'ecommerce'; // default
+    
+    // First, try to use the provided industry parameter
+    if (detectedIndustry && detectedIndustry.trim().length > 0) {
+      const industryLower = detectedIndustry.toLowerCase();
+      if (industryLower.includes('media') || industryLower.includes('news') || industryLower.includes('journalism')) {
+        detectedIndustryType = 'media';
+      } else if (industryLower.includes('social') || industryLower.includes('community')) {
+        detectedIndustryType = 'social';
+      } else if (industryLower.includes('professional') || industryLower.includes('job') || industryLower.includes('career')) {
+        detectedIndustryType = 'professional';
+      } else if (industryLower.includes('fashion') || industryLower.includes('clothing') || industryLower.includes('apparel')) {
+        detectedIndustryType = 'fashion';
+      } else if (industryLower.includes('automotive') || industryLower.includes('car') || industryLower.includes('vehicle')) {
+        detectedIndustryType = 'automotive';
+      } else if (industryLower.includes('tech') || industryLower.includes('technology') || industryLower.includes('software')) {
+        detectedIndustryType = 'tech';
+      } else if (industryLower.includes('streaming') || industryLower.includes('entertainment') || industryLower.includes('video')) {
+        detectedIndustryType = 'streaming';
+      }
     }
+    
+    // If no industry provided or not recognized, try company name detection
+    if (detectedIndustryType === 'ecommerce') {
+      if (companyName.toLowerCase().includes('fashion') || companyName.toLowerCase().includes('zara') || 
+          companyName.toLowerCase().includes('h&m') || companyName.toLowerCase().includes('uniqlo') ||
+          companyName.toLowerCase().includes('gap') || companyName.toLowerCase().includes('asos')) {
+        detectedIndustryType = 'fashion';
+      } else if (companyName.toLowerCase().includes('tesla') || companyName.toLowerCase().includes('bmw') ||
+                 companyName.toLowerCase().includes('mercedes') || companyName.toLowerCase().includes('toyota')) {
+        detectedIndustryType = 'automotive';
+      } else if (companyName.toLowerCase().includes('apple') || companyName.toLowerCase().includes('google') ||
+                 companyName.toLowerCase().includes('microsoft') || companyName.toLowerCase().includes('samsung')) {
+        detectedIndustryType = 'tech';
+      } else if (companyName.toLowerCase().includes('netflix') || companyName.toLowerCase().includes('disney') ||
+                 companyName.toLowerCase().includes('hulu') || companyName.toLowerCase().includes('spotify')) {
+        detectedIndustryType = 'streaming';
+      } else if (companyName.toLowerCase().includes('forbes') || companyName.toLowerCase().includes('reuters') ||
+                 companyName.toLowerCase().includes('cnn') || companyName.toLowerCase().includes('bbc')) {
+        detectedIndustryType = 'media';
+      } else if (companyName.toLowerCase().includes('reddit') || companyName.toLowerCase().includes('facebook') ||
+                 companyName.toLowerCase().includes('twitter') || companyName.toLowerCase().includes('instagram')) {
+        detectedIndustryType = 'social';
+      } else if (companyName.toLowerCase().includes('linkedin') || companyName.toLowerCase().includes('indeed') ||
+                 companyName.toLowerCase().includes('glassdoor') || companyName.toLowerCase().includes('monster')) {
+        detectedIndustryType = 'professional';
+      }
+    }
+    
+    console.log(`🎯 Fallback industry detection: ${detectedIndustryType} (from industry param: ${detectedIndustry})`);
+    
+    const suggestions = industryCompetitors[detectedIndustryType] || industryCompetitors['ecommerce'];
+    
+    const normMain = String(companyName || '').toLowerCase();
+    const filteredSuggestions = suggestions.filter(s => s.toLowerCase() !== normMain);
+    
+    // Add fallback suggestions only if primary detection failed
+    competitors = [...competitors, ...filteredSuggestions].slice(0, 8);
+    console.log(`✅ Added ${detectedIndustryType} fallback suggestions. Final competitors:`, competitors);
+  } else {
+    console.log(`✅ Primary detection successful with ${competitors.length} competitors - no fallback needed`);
+  }
+    
+    // No legacy competitor fallback — proceed only with detected competitors
     
     // Analyze AI visibility across models (optimized: use all models but with timeouts)
     console.log('🤖 Starting parallel AI analysis...');
@@ -2995,14 +3353,17 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     // Include the main company in analysis
     const allCompanies = [companyName, ...competitors];
     console.log('📋 Companies to analyze:', allCompanies);
+    console.log(`[DEBUG] Total companies for analysis: ${allCompanies.length}`);
+    console.log(`[DEBUG] Main company: ${companyName}`);
+    console.log(`[DEBUG] Competitors:`, competitors);
     
     // Process all companies in parallel for maximum speed
     const analysisPromises = allCompanies.map(async (competitorName) => {
       console.log(`🎯 Starting analysis for: ${competitorName}`);
       
-      // Skip scraping in fast mode for speed
+      // Always perform website scraping for comprehensive analysis
       let scrapedData = null;
-      if (!isFast) {
+      {
         try {
           const searchResult = searchResults.find(item => 
             item.name.toLowerCase().includes(competitorName.toLowerCase())
@@ -3024,49 +3385,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       // Use enhanced prompts with detected industry and product
       const enhancedPrompts = getEnhancedPrompts(competitorName, detectedIndustry, detectedProduct);
       
-      if (isFast) {
-        // Use the new parallel analysis function
-        const [
-          parallelAnalysis,
-          audienceProfile,
-          rawModelMetrics
-        ] = await Promise.all([
-          analyzeCompanyWithAllModels(competitorName, detectedIndustry, detectedProduct, enhancedPrompts, isFast),
-          // Audience profile in parallel with a tight timeout to avoid slowing main flow
-          withTimeout(getAudienceProfile(competitorName), 9000, null).catch(() => null),
-          withTimeout(computePerModelRawMetrics(competitorName, true), 9000, { chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }).catch(() => ({ chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }))
-        ]);
-        
-        // Extract individual responses from parallel analysis
-        const geminiResponse = parallelAnalysis.breakdowns.gemini || { analysis: 'No analysis', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
-        const perplexityResponse = parallelAnalysis.breakdowns.perplexity || { analysis: 'No analysis', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
-        const claudeResponse = parallelAnalysis.breakdowns.claude || { analysis: 'No analysis', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
-        const chatgptResponse = parallelAnalysis.breakdowns.chatgpt || { analysis: 'No analysis', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
-        
-        // Use scores from parallel analysis
-        const scores = parallelAnalysis.aiScores;
-        const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / 4;
-        return {
-          name: competitorName,
-          citationCount: Math.floor(totalScore * 100),
-          aiScores: scores,
-          totalScore: Number(totalScore.toFixed(4)),
-          breakdowns: parallelAnalysis.breakdowns,
-          keyMetrics: parallelAnalysis.keyMetrics,
-          scrapedData,
-          analysis: parallelAnalysis.analysis,
-          audienceProfile: audienceProfile || null,
-          rawModels: rawModelMetrics,
-          snippets: {
-            gemini: (parallelAnalysis.analysis.gemini || '').slice(0, 300),
-            chatgpt: (parallelAnalysis.analysis.chatgpt || '').slice(0, 300),
-            claude: (parallelAnalysis.analysis.claude || '').slice(0, 300),
-            perplexity: (parallelAnalysis.analysis.perplexity || '').slice(0, 300)
-          }
-        };
-      }
-
-      // Query all AI models in parallel for this competitor with enhanced error handling (full mode)
+      // Query all AI models in parallel for this competitor with enhanced error handling (full analysis mode)
       const [
         geminiResponse, perplexityResponse, 
         claudeResponse, chatgptResponse,
@@ -3209,9 +3528,13 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     // Wait for all analyses to complete
     console.log('⏳ Waiting for all parallel analyses to complete...');
     let analysisResults = await Promise.all(analysisPromises);
+    console.log(`[DEBUG] Raw analysisResults count after Promise.all: ${analysisResults.length}`);
+    console.log(`[DEBUG] Raw analysisResults names:`, analysisResults.map(r => r.name));
     // Compute normalized per-model scores from rawModels across all competitors
     const enriched = analysisResults.map(r => ({ name: r.name, rawModels: r.rawModels || { chatgpt: {}, gemini: {}, perplexity: {}, claude: {} } }));
+    console.log(`[DEBUG] Enriched count: ${enriched.length}`);
     const normalized = normalizeAndScoreModels(enriched);
+    console.log(`[DEBUG] Normalized count: ${normalized.length}`);
     // Ensure modelKeys is available in this scope for filtering
     const configuredModelKeys = getConfiguredModelKeys();
     const scoreByName = new Map(normalized.map(n => [n.name, n.aiScores]));
@@ -3232,11 +3555,11 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     console.log('\n🚀 Starting AI Traffic Share and Citation Metrics calculation...');
     console.log(`   Companies: ${allCompanies.join(', ')}`);
     console.log(`   Industry: ${detectedIndustry}`);
-    console.log(`   Fast mode: ${isFast}`);
+    console.log(`   Full analysis mode enabled`);
     
     try {
       console.log('📊 Calling computeAiTrafficShares...');
-      const trafficPromise = computeAiTrafficShares(allCompanies, detectedIndustry, isFast, { companyName, product: detectedProduct })
+      const trafficPromise = computeAiTrafficShares(allCompanies, detectedIndustry, { companyName, product: detectedProduct })
         .then(result => {
           console.log('✅ AI Traffic (counts) calculation completed successfully');
           if (result && result.countsByCompetitor) {
@@ -3258,7 +3581,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         });
 
       console.log('📈 Calling computeCitationMetrics...');
-      const citationsPromise = computeCitationMetrics(allCompanies, detectedIndustry, isFast, { companyName, product: detectedProduct })
+      const citationsPromise = computeCitationMetrics(allCompanies, detectedIndustry, { companyName, product: detectedProduct })
         .then(result => {
           console.log('✅ AI Citation Metrics calculation completed successfully');
           if (result) {
@@ -3282,7 +3605,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
           return null;
         });
 
-      const shoppingPromise = computeShoppingVisibilityCounts(allCompanies, detectedProduct, (options?.country || ''), isFast)
+      const shoppingPromise = computeShoppingVisibilityCounts(allCompanies, detectedProduct, (options?.country || ''))
         .catch(() => null);
 
       // Run a separate citation-first capture to extract exact domains for source donuts
@@ -3293,11 +3616,11 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         // Mix citation-first and content-style prompts for better style/domain capture
         const stylePrompts = getContentStylePromptBank({ company: companyName, competitorA: allCompanies[1] || '', competitorB: allCompanies[2] || '', industry: detectedIndustry, product: detectedProduct, country: options?.country || '' });
         tools.forEach(tool => {
-          citationPrompts.slice(0, isFast ? 3 : 6).forEach((q, i) => { calls.push({ model: tool, idx: i, prompt: q }); });
-          stylePrompts.slice(0, isFast ? 3 : 6).forEach((q, i) => { calls.push({ model: tool, idx: i + 100, prompt: q }); });
+          citationPrompts.slice(0, 6).forEach((q, i) => { calls.push({ model: tool, idx: i, prompt: q }); });
+          stylePrompts.slice(0, 6).forEach((q, i) => { calls.push({ model: tool, idx: i + 100, prompt: q }); });
         });
         const responses = await Promise.all(calls.map(async c => {
-          const text = await withTimeout(callModelSimple(c.model, c.prompt), isFast ? 9000 : 14000, '').catch(() => '');
+          const text = await withTimeout(callModelSimple(c.model, c.prompt), 14000, '').catch(() => '');
           return { model: c.model, text };
         }));
         // Aggregate by tool
@@ -3332,7 +3655,7 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
           `Recent perception of ${name}: price, delivery, trust. Provide ONE quoted sentence that includes the brand name.
 Answer briefly. Then output a Sources section with 1–3 items as: Category | Domain | URL.`
         ];
-        return base.slice(0, isFast ? 1 : 3);
+        return base.slice(0, 3);
       };
       allCompanies.forEach(name => {
         toolsForSent.forEach(tool => {
@@ -3340,7 +3663,7 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
         });
       });
       const sentResponses = await Promise.all(sentCalls.map(async c => {
-        const text = await withTimeout(callModelSimple(c.model, c.prompt), isFast ? 9000 : 15000, '').catch(() => '');
+        const text = await withTimeout(callModelSimple(c.model, c.prompt), 15000, '').catch(() => '');
         return { model: c.model, name: c.name, text };
       }));
       // Build sentiment rows per competitor from these responses
@@ -3433,9 +3756,11 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
     
     console.log('\n🎉 Optimized AI Visibility Analysis complete!');
     console.log('📋 Final results:');
+    console.log(`[DEBUG] Final analysisResults count: ${analysisResults.length}`);
     analysisResults.forEach(comp => {
       console.log(`   - ${comp.name}: Score ${comp.totalScore}/10`);
     });
+    console.log(`[DEBUG] Final analysisResults names:`, analysisResults.map(r => r.name));
     
     // Fallback: if no competitors found, use legacy discovery
     if (!analysisResults || analysisResults.length === 0) {
