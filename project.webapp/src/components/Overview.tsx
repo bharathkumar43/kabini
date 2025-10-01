@@ -378,9 +378,10 @@ function Modal({ isOpen, onClose, children }: ModalProps) {
 interface ShopifyConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: (message: string) => void;
 }
 
-function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
+function ShopifyConnectModal({ isOpen, onClose, onSuccess }: ShopifyConnectModalProps) {
   const [mode, setMode] = useState<'oauth' | 'public' | 'storefront' | 'byo'>('storefront');
   const [shopDomain, setShopDomain] = useState('');
   const [connecting, setConnecting] = useState(false);
@@ -501,6 +502,8 @@ function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
         window.removeEventListener('message', handler);
         try { popup?.close(); } catch {}
         setConnecting(false);
+        // Auto-close modal after successful connection
+        setTimeout(() => onClose(), 1000);
       } else if ((ev as any).data.type === 'SHOPIFY_CONNECT_ERROR') {
         window.removeEventListener('message', handler);
         try { popup?.close(); } catch {}
@@ -599,7 +602,7 @@ function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
         throw new Error('Invalid response from Shopify API');
       }
       
-      // Success! Store the connection locally
+      // Success! Store the connection locally (only one store allowed)
       const connection = { 
         shop: domain, 
         type: 'storefront', 
@@ -608,15 +611,22 @@ function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
         connected: true
       };
       
-      // Store in localStorage for persistence
-      const existingConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
-      const updatedConnections = existingConnections.filter((c: any) => c.shop !== domain);
-      updatedConnections.push(connection);
-      localStorage.setItem('shopify_connections', JSON.stringify(updatedConnections));
+      // Store only this connection (replace any existing connections)
+      localStorage.setItem('shopify_connections', JSON.stringify([connection]));
       
-      setConnections(updatedConnections);
+      setConnections([connection]);
       setSfToken('');
-      setSfSavedMsg(`✅ Successfully connected to ${data.data.shop.name}! You can now fetch products.`);
+      
+      // Auto-close modal after successful connection
+      setTimeout(() => {
+        onClose();
+        // Show success notification after modal closes
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess(`✅ Successfully connected to ${data.data.shop.name}! Starting website analysis...`);
+          }, 100);
+        }
+      }, 1000);
       
     } catch (e: any) {
       console.error('[Shopify Modal] Failed to connect storefront:', e);
@@ -769,20 +779,6 @@ function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
         </div>
 
         <div className="space-y-6">
-          {/* Mode Selection */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-bold text-gray-900">Mode</label>
-            <select 
-              value={mode} 
-              onChange={e => setMode(e.target.value as any)} 
-              className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="oauth">OAuth (Admin API)</option>
-              <option value="public">Public (no auth)</option>
-              <option value="storefront">Storefront (token)</option>
-              <option value="byo">Bring Your Own App (OAuth)</option>
-            </select>
-          </div>
 
           {/* OAuth / BYO */}
           {(mode === 'oauth' || mode === 'byo') && (
@@ -866,18 +862,18 @@ function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
           {/* Storefront */}
           {mode === 'storefront' && (
             <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <input 
                   value={shopDomain} 
                   onChange={e => setShopDomain(e.target.value)} 
                   placeholder="your-shop.myshopify.com" 
-                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
                 />
                 <input 
                   value={sfToken} 
                   onChange={e => setSfToken(e.target.value)} 
                   placeholder="Storefront access token" 
-                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -888,56 +884,10 @@ function ShopifyConnectModal({ isOpen, onClose }: ShopifyConnectModalProps) {
                 >
                   {sfSaving ? 'Saving…' : 'Save Storefront Token'}
                 </button>
-                {sfSavedMsg && (
-                  <span className={`text-sm ${/Failed/i.test(sfSavedMsg) ? 'text-gray-600' : 'text-blue-600'}`}>
-                    {sfSavedMsg}
-                  </span>
-                )}
               </div>
             </div>
           )}
 
-          {/* Connected Shops */}
-          <div className="border-t border-gray-200 pt-4">
-            <div className="font-semibold text-gray-900 mb-2">Connected Shops</div>
-            {connections.length === 0 ? (
-              <div className="text-sm text-gray-600">No shops connected yet.</div>
-            ) : (
-              <div className="space-y-3">
-                {connections.map((s, i) => (
-                  <div key={i} className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {s.shopName || s.shop}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {s.shop} • {s.type || 'oauth'}
-                          {s.connected && <span className="text-green-600 ml-1">✓ Connected</span>}
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        {s.token && (
-                          <button 
-                            onClick={() => fetchProducts(s.shop)} 
-                            className="px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors text-xs"
-                          >
-                            Fetch Products
-                          </button>
-                        )}
-                        <button 
-                          onClick={() => disconnect(s.shop)} 
-                          className="px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-xs"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </Modal>
@@ -1364,6 +1314,8 @@ export function Overview() {
   const [connectedShopifyAccounts, setConnectedShopifyAccounts] = useState<any[]>([]);
   const [fetchedProducts, setFetchedProducts] = useState<any[]>([]);
   const [showProducts, setShowProducts] = useState(false);
+  const [showConnectionSuccess, setShowConnectionSuccess] = useState(false);
+  const [connectionSuccessMessage, setConnectionSuccessMessage] = useState('');
 
   // Load connected Shopify accounts on component mount
   React.useEffect(() => {
@@ -1437,6 +1389,12 @@ export function Overview() {
 
   const detectIndustry = (companyName: string, url?: string): string => {
     const name = companyName.toLowerCase();
+    const urlLower = (url || '').toLowerCase();
+    
+    // Check for Shopify stores
+    if (urlLower.includes('myshopify.com') || urlLower.includes('shopify')) {
+      return 'E-commerce & Retail';
+    }
     
     if (name.includes('cloud') && (name.includes('migration') || name.includes('migrate') || name.includes('transform'))) {
       return 'Cloud Migration & Transformation';
@@ -1561,6 +1519,30 @@ export function Overview() {
     setShowShopifyModal(true);
   };
 
+  const handleDisconnectStore = async (shop: string) => {
+    try {
+      // Remove from localStorage
+      const existingConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+      const updatedConnections = existingConnections.filter((c: any) => c.shop !== shop);
+      localStorage.setItem('shopify_connections', JSON.stringify(updatedConnections));
+      
+      // Update state
+      setConnectedShopifyAccounts(updatedConnections);
+      
+      // Also try to remove from backend API if available
+      try {
+        await apiService.disconnectShopify(shop);
+      } catch (error) {
+        console.warn('Failed to disconnect from API (this is expected if backend is not available):', error);
+      }
+      
+      alert(`Successfully disconnected from ${shop}`);
+    } catch (error) {
+      console.error('Failed to disconnect store:', error);
+      alert('Failed to disconnect store. Please try again.');
+    }
+  };
+
   const handleBulkImport = () => {
     setShowCSVModal(true);
   };
@@ -1576,8 +1558,70 @@ export function Overview() {
     try {
       const localConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
       setConnectedShopifyAccounts(localConnections);
+      
+      // If a store was just connected, start automatic analysis
+      if (localConnections.length > 0 && !inputValue) {
+        console.log('[Modal Close] Store connected, starting automatic analysis');
+        setTimeout(() => {
+          startAutomaticAnalysis();
+        }, 1000);
+      }
     } catch (error) {
       console.warn('Failed to refresh connected accounts:', error);
+    }
+  };
+
+  const showSuccessNotification = (message: string) => {
+    setConnectionSuccessMessage(message);
+    setShowConnectionSuccess(true);
+    
+    // Start automatic analysis after connection
+    if (message.includes('Starting website analysis')) {
+      setTimeout(() => {
+        startAutomaticAnalysis();
+      }, 1000);
+    }
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      setShowConnectionSuccess(false);
+    }, 5000);
+  };
+
+  const startAutomaticAnalysis = async () => {
+    try {
+      // Get the connected store information
+      const localConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+      if (localConnections.length === 0) {
+        console.log('[Auto Analysis] No connected stores found');
+        return;
+      }
+      
+      const connectedStore = localConnections[0];
+      const storeUrl = `https://${connectedStore.shop}`;
+      
+      console.log('[Auto Analysis] Starting analysis for connected store:', {
+        shop: connectedStore.shop,
+        shopName: connectedStore.shopName,
+        storeUrl: storeUrl,
+        type: connectedStore.type
+      });
+      
+      // Set the input value to the specific store URL
+      setInputValue(storeUrl);
+      
+      // Wait a moment for the input to be set, then start analysis
+      setTimeout(async () => {
+        try {
+          console.log('[Auto Analysis] Starting analysis with URL:', storeUrl);
+          await startAnalysis();
+        } catch (error) {
+          console.error('[Auto Analysis] Failed to start analysis:', error);
+        }
+      }, 500);
+      
+    } catch (error) {
+      console.error('Failed to start automatic analysis:', error);
     }
   };
 
@@ -1994,7 +2038,7 @@ export function Overview() {
             {/* Method Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Shopify Sync Card */}
-                <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group">
+                <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group flex flex-col">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                       <Zap className="w-6 h-6 text-blue-600" />
@@ -2010,10 +2054,10 @@ export function Overview() {
                     )}
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-2">Shopify Sync</h3>
-                  <p className="text-gray-600 mb-6">
+                  <p className="text-gray-600 mb-6 flex-grow">
                     {connectedShopifyAccounts.length > 0 
-                      ? `${connectedShopifyAccounts.length} store${connectedShopifyAccounts.length > 1 ? 's' : ''} connected`
-                      : '1-click integration with automatic product import'
+                      ? 'Connected - Website analysis in progress'
+                      : 'Connect your store for automatic website analysis'
                     }
                   </p>
                   <button
@@ -2024,17 +2068,17 @@ export function Overview() {
                         : 'bg-blue-600 hover:bg-blue-700 text-white'
                     }`}
                   >
-                    {connectedShopifyAccounts.length > 0 ? 'Manage Stores' : 'Connect Store'}
+                    {connectedShopifyAccounts.length > 0 ? 'Reconnect Store' : 'Connect Store'}
                   </button>
                 </div>
 
               {/* CSV Upload Card */}
-              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-gray-400 transition-colors group">
+              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-gray-400 transition-colors group flex flex-col">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
                   <FileText className="w-6 h-6 text-gray-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">CSV Upload</h3>
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-600 mb-6 flex-grow">
                   Bulk upload from spreadsheet or CSV file
                 </p>
                 <button
@@ -2046,12 +2090,12 @@ export function Overview() {
               </div>
 
               {/* Manual Add Card */}
-              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group">
+              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group flex flex-col">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                   <Target className="w-6 h-6 text-blue-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Manual Add</h3>
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-600 mb-6 flex-grow">
                   Add products individually with custom details
                 </p>
                 <button
@@ -2063,58 +2107,6 @@ export function Overview() {
               </div>
             </div>
 
-            {/* Connected Shopify Accounts Section */}
-            {connectedShopifyAccounts.length > 0 && (
-              <div className="bg-white rounded-3xl shadow-lg p-8 md:p-12 mb-12">
-                <div className="text-center mb-8">
-                  <h2 className="text-3xl font-bold text-gray-900 mb-3">
-                    Connected Shopify Stores
-                  </h2>
-                  <p className="text-lg text-gray-600">
-                    Manage your connected stores and fetch products for analysis
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {connectedShopifyAccounts.map((account, index) => (
-                    <div key={index} className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                          <Zap className="w-6 h-6 text-green-600" />
-                        </div>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✓ Connected
-                        </span>
-                      </div>
-                      
-                      <h3 className="text-lg font-bold text-gray-900 mb-1">
-                        {account.shopName || account.shop}
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-4">
-                        {account.shop} • {account.type || 'storefront'}
-                      </p>
-                      
-                      <div className="space-y-2">
-                        {account.token && (
-                          <button
-                            onClick={() => fetchProductsFromStore(account.shop)}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
-                          >
-                            Fetch Products
-                          </button>
-                        )}
-                        <button
-                          onClick={handleConnectStore}
-                          className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
-                        >
-                          Manage Connection
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Fetched Products Section */}
             {showProducts && fetchedProducts.length > 0 && (
@@ -2190,10 +2182,24 @@ export function Overview() {
         </div>
       </div>
 
+      {/* Success Notification */}
+      {showConnectionSuccess && (
+        <div className="fixed top-4 right-4 z-50 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2">
+          <span className="text-sm font-medium">{connectionSuccessMessage}</span>
+          <button
+            onClick={() => setShowConnectionSuccess(false)}
+            className="text-green-500 hover:text-green-700 ml-2"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Modals */}
       <ShopifyConnectModal 
         isOpen={showShopifyModal} 
-        onClose={handleCloseShopifyModal} 
+        onClose={handleCloseShopifyModal}
+        onSuccess={showSuccessNotification}
       />
       <CSVUploadModal 
         isOpen={showCSVModal} 
@@ -2221,11 +2227,21 @@ export function Overview() {
         </div>
         <button
           onClick={() => {
+            // Clear analysis results
             setAnalysisResult(null);
             setInputValue('');
             setAnalysisError(null);
             setShowSuccessMessage(false);
             localStorage.removeItem('overview_market_analysis');
+            
+            // Disconnect any connected Shopify store
+            try {
+              localStorage.removeItem('shopify_connections');
+              setConnectedShopifyAccounts([]);
+              console.log('[New Analysis] Disconnected Shopify store');
+            } catch (error) {
+              console.warn('[New Analysis] Failed to disconnect store:', error);
+            }
           }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
         >
@@ -2448,10 +2464,24 @@ export function Overview() {
       </div>
     </div>
 
+    {/* Success Notification */}
+    {showConnectionSuccess && (
+      <div className="fixed top-4 right-4 z-50 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2">
+        <span className="text-sm font-medium">{connectionSuccessMessage}</span>
+        <button
+          onClick={() => setShowConnectionSuccess(false)}
+          className="text-green-500 hover:text-green-700 ml-2"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    )}
+
     {/* Modals */}
     <ShopifyConnectModal 
       isOpen={showShopifyModal} 
-      onClose={handleCloseShopifyModal} 
+      onClose={handleCloseShopifyModal}
+      onSuccess={showSuccessNotification}
     />
     <CSVUploadModal 
       isOpen={showCSVModal} 
