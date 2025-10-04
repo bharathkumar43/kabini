@@ -295,7 +295,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await authService.logout();
       
       // Clear analysis data for fresh session (but preserve essential app data)
-      performFullCleanup();
+      // This now includes disconnecting all Shopify connections
+      await performFullCleanup();
       
       // Clear user data from localStorage
       try {
@@ -310,6 +311,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.error('Logout error:', error);
       // Still clear the state even if logout fails
       authService.clearTokens();
+      
+      // Try to perform cleanup even on logout failure
+      try {
+        await performFullCleanup();
+      } catch (cleanupError) {
+        console.warn('🔐 AuthContext: Cleanup failed during logout error handling:', cleanupError);
+      }
       
       // Clear user data from localStorage even on logout failure
       try {

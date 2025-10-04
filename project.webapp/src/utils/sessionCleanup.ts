@@ -1,6 +1,8 @@
 // Utility functions to clear all analysis data and session state
 // This ensures fresh pages after login/logout
 
+import { apiService } from '../services/apiService';
+
 export const clearAllAnalysisData = () => {
   console.log('🧹 Clearing analysis data for fresh session...');
   
@@ -31,6 +33,9 @@ export const clearAllAnalysisData = () => {
     
     // Statistics state
     'statistics_state',
+    
+    // Shopify connections - clear on logout
+    'shopify_connections',
     
     // Any other analysis-related keys
     'current_analysis_session',
@@ -131,10 +136,48 @@ export const clearAnalysisState = () => {
   console.log('🧹 Analysis state clearing completed');
 };
 
+// Function to disconnect all Shopify connections
+export const disconnectAllShopifyConnections = async () => {
+  console.log('🔌 Disconnecting all Shopify connections...');
+  
+  try {
+    // Get current Shopify connections from localStorage
+    const connections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+    
+    if (connections.length === 0) {
+      console.log('🔌 No Shopify connections to disconnect');
+      return;
+    }
+    
+    // Disconnect each connection via API
+    const disconnectPromises = connections.map(async (connection: any) => {
+      try {
+        await apiService.disconnectShopify(connection.shop);
+        console.log(`🔌 Successfully disconnected from ${connection.shop}`);
+      } catch (error) {
+        console.warn(`🔌 Failed to disconnect from ${connection.shop} via API:`, error);
+        // Continue with other disconnections even if one fails
+      }
+    });
+    
+    // Wait for all disconnections to complete
+    await Promise.allSettled(disconnectPromises);
+    
+    console.log('🔌 All Shopify connections disconnected');
+  } catch (error) {
+    console.warn('🔌 Error during Shopify disconnection:', error);
+    // Continue with cleanup even if Shopify disconnection fails
+  }
+};
+
 // Main function to call on login/logout
-export const performFullCleanup = (userId?: string) => {
+export const performFullCleanup = async (userId?: string) => {
   console.log('🧹 Performing analysis cleanup for fresh session...');
   
+  // Disconnect Shopify connections first
+  await disconnectAllShopifyConnections();
+  
+  // Clear all other data
   clearAllAnalysisData();
   clearUserSpecificData(userId);
   clearAnalysisState();

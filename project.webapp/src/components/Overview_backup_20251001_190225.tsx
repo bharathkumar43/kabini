@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, FileText, X, Upload, Heart, Frown, Meh, Package, DollarSign, BarChart, Lightbulb, Grid3X3, Radar, Brain, RefreshCw } from 'lucide-react';
+import { Search, Loader2, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, FileText, X, Upload, Heart, Frown, Meh, Package } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { SessionData } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -11,50 +11,34 @@ import type { HistoryItem, QAHistoryItem } from '../types';
 
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
+import { MarketShareGrowthCard } from './MarketShareGrowthCard';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
 
-// Enhanced Dashboard Card Component with Zoho Analytics-inspired design
+// Dashboard Card Component
 interface DashboardCardProps {
   title: string;
   icon: React.ReactNode;
-  iconBgColor?: string;
+  iconBgColor: string;
   children: React.ReactNode;
-  className?: string;
-  headerAction?: React.ReactNode;
-  subtitle?: string;
 }
 
-function DashboardCard({ title, icon, iconBgColor, children, className = "", headerAction, subtitle }: DashboardCardProps) {
+function DashboardCard({ title, icon, iconBgColor, children }: DashboardCardProps) {
   return (
-    <div className={`group bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-xl hover:border-gray-300 transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col h-full${className}`}>
-      <div className="flex items-start justify-between mb-3 flex-shrink-0">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-1">
-            <div className={`w-10 h-10 rounded-lg ${iconBgColor || 'bg-gray-100'} flex items-center justify-center shadow-sm`}>
-              {React.cloneElement(icon as React.ReactElement, { className: iconBgColor ? "w-4 h-4 text-white" : "w-4 h-4 text-black" })}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 leading-tight">{title}</h3>
-              {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
-            </div>
-          </div>
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <div className={`w-10 h-10 rounded-full ${iconBgColor} flex items-center justify-center`}>
+          {icon}
         </div>
-        {headerAction && (
-          <div className="flex-shrink-0">
-            {headerAction}
-          </div>
-        )}
       </div>
-      <div className="relative flex-1 flex flex-col">
-        {children}
-      </div>
+      {children}
     </div>
   );
 }
 
-// Enhanced AI Visibility Score Component with Zoho Analytics-inspired design
+// AI Visibility Score Component
 function AIVisibilityScoreCard({ score, industry, metrics }: { 
   score: number, 
   industry?: string, 
@@ -68,290 +52,46 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
   const displayScore = validateScore(score);
   
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 80) return 'text-blue-600';
+    if (score >= 60) return 'text-blue-500';
+    if (score >= 40) return 'text-gray-600';
+    return 'text-gray-500';
   };
 
   const getProgressColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
+    if (score >= 80) return 'bg-blue-600';
     if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 40) return 'bg-gray-500';
+    return 'bg-gray-400';
   };
 
   const getScoreLabel = (score: number) => {
     if (score >= 80) return 'Excellent';
     if (score >= 60) return 'Good';
     if (score >= 40) return 'Fair';
-    return 'Needs Improvement';
-  };
-
-  const getIconBgColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
+    return 'Poor';
   };
 
   return (
     <DashboardCard
-      title="Overall AI Visibility Score"
-      subtitle="Tracks how discoverable your brand is across ChatGPT, Gemini, Claude, and Perplexity with week-over-week trend analysis"
+      title="AI Visibility Score"
       icon={<Eye className="w-5 h-5 text-white" />}
-      iconBgColor={getIconBgColor(displayScore)}
-      headerAction={
-        <button className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-          <Eye className="w-4 h-4 text-gray-600" />
-        </button>
-      }
+      iconBgColor="bg-green-500"
     >
-      <div className="space-y-6">
-        {/* Main Score Display */}
-        <div className="text-center">
-          <div className={`text-5xl font-bold ${getScoreColor(displayScore)} mb-2`}>
-            {displayScore}%
-          </div>
-          <div className="text-sm text-gray-500 mb-3">Composite Visibility Score</div>
-          
-          {/* Trend Indicator */}
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <TrendingDown className="w-4 h-4 text-red-500" />
-            <span className="text-sm font-medium text-red-600">-100.0% vs last week</span>
-          </div>
+      <div className="text-center">
+        <div className={`text-4xl font-bold ${getScoreColor(displayScore)} mb-2`}>
+          {displayScore}
         </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs text-gray-600">
-            <span>Progress</span>
-            <span>{displayScore}%</span>
-          </div>
-          <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-            <div 
-              className={`h-2 rounded-full ${getProgressColor(displayScore)} transition-all duration-1000 ease-out`}
-              style={{ width: `${Math.min(100, Math.max(0, displayScore))}%` }}
-            ></div>
-          </div>
+        <div className="text-gray-600 mb-2">out of 100</div>
+        <div className={`text-lg font-semibold ${getScoreColor(displayScore)} mb-3`}>
+          {getScoreLabel(displayScore)}
         </div>
-
-        {/* Platform Breakdown */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">VISIBILITY BY AI PLATFORM</h4>
-          <div className="space-y-2">
-            {['ChatGPT', 'Gemini', 'Claude', 'Perplexity'].map((platform) => (
-              <div key={platform} className="flex items-center justify-between">
-                <span className="text-sm text-gray-700">{platform}</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                    <div 
-                      className="h-1.5 rounded-full bg-gray-400"
-                      style={{ width: `${displayScore}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-sm font-medium text-gray-900 w-8 text-right">{displayScore}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Info Section */}
-        <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
-          <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-gray-600 leading-relaxed">
-            Tracks how discoverable your brand is across ChatGPT, Gemini, Claude, and Perplexity with week-over-week trend analysis.
-          </p>
-        </div>
-      </div>
-    </DashboardCard>
-  );
-}
-
-// Radar Chart Component for AI Platform Presence
-function RadarChart({ data, size = 200 }: { data: Array<{ name: string; value: number; icon: React.ReactNode }>, size?: number }) {
-  const centerX = size / 2;
-  const centerY = size / 2;
-  const maxRadius = size * 0.35;
-  
-  const points = data.map((item, index) => {
-    const angle = (index * 2 * Math.PI) / data.length - Math.PI / 2;
-    const radius = (item.value / 100) * maxRadius;
-    const x = centerX + radius * Math.cos(angle);
-    const y = centerY + radius * Math.sin(angle);
-    return { x, y, ...item };
-  });
-
-  const pathData = points.map((point, index) => 
-    `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
-  ).join(' ') + ' Z';
-
-  const gridLines = [20, 40, 60, 80, 100].map(level => {
-    const radius = (level / 100) * maxRadius;
-    return (
-      <circle
-        key={level}
-        cx={centerX}
-        cy={centerY}
-        r={radius}
-        fill="none"
-        stroke="#e5e7eb"
-        strokeWidth="1"
-      />
-    );
-  });
-
-  const axisLines = data.map((_, index) => {
-    const angle = (index * 2 * Math.PI) / data.length - Math.PI / 2;
-    const x = centerX + maxRadius * Math.cos(angle);
-    const y = centerY + maxRadius * Math.sin(angle);
-    return (
-      <line
-        key={index}
-        x1={centerX}
-        y1={centerY}
-        x2={x}
-        y2={y}
-        stroke="#e5e7eb"
-        strokeWidth="1"
-      />
-    );
-  });
-
-  return (
-    <div className="flex justify-center">
-      <svg width={size} height={size} className="overflow-visible">
-        {/* Grid lines */}
-        {gridLines}
-        {axisLines}
         
-        {/* Data area */}
-        <path
-          d={pathData}
-          fill="rgba(59, 130, 246, 0.1)"
-          stroke="rgb(59, 130, 246)"
-          strokeWidth="2"
-        />
-        
-        {/* Data points */}
-        {points.map((point, index) => (
-          <g key={index}>
-            <circle
-              cx={point.x}
-              cy={point.y}
-              r="4"
-              fill="rgb(59, 130, 246)"
-              stroke="white"
-              strokeWidth="2"
-            />
-            {/* Platform labels */}
-            <text
-              x={point.x}
-              y={point.y - 15}
-              textAnchor="middle"
-              className="text-xs font-medium fill-gray-700"
-            >
-              {point.name}
-            </text>
-            <text
-              x={point.x}
-              y={point.y + 25}
-              textAnchor="middle"
-              className="text-xs font-semibold fill-gray-900"
-            >
-              {point.value}%
-            </text>
-          </g>
-        ))}
-      </svg>
-    </div>
-  );
-}
-
-// Enhanced AI Platform Presence Breakdown Card
-function AIPlatformPresenceCard() {
-  const [viewMode, setViewMode] = useState<'radar' | 'grid'>('radar');
-  
-  const platformData = [
-    { name: 'ChatGPT', value: 10, icon: <Bot className="w-3 h-3" /> },
-    { name: 'Perplexity', value: 10, icon: <Search className="w-3 h-3" /> },
-    { name: 'Gemini', value: 10, icon: <Star className="w-3 h-3" /> },
-    { name: 'Claude', value: 10, icon: <Brain className="w-3 h-3" /> }
-  ];
-
-  const strongestPlatform = platformData.reduce((max, platform) => 
-    platform.value > max.value ? platform : max
-  );
-
-  return (
-    <DashboardCard
-      title="AI Platform Presence Breakdown"
-      subtitle="Identify where you're strong or weak across AI platforms"
-      icon={<Target className="w-5 h-5 text-white" />}
-      iconBgColor="bg-purple-500"
-      headerAction={
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setViewMode('radar')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              viewMode === 'radar' 
-                ? 'bg-purple-100 text-purple-700' 
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Radar
-          </button>
-          <button
-            onClick={() => setViewMode('grid')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              viewMode === 'grid' 
-                ? 'bg-purple-100 text-purple-700' 
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Grid
-          </button>
-        </div>
-      }
-    >
-      <div className="space-y-6">
-        {viewMode === 'radar' ? (
-          <RadarChart data={platformData} size={280} />
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            {platformData.map((platform, index) => (
-              <div key={platform.name} className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="flex justify-center mb-2">
-                  {platform.icon}
-                </div>
-                <div className="text-sm font-medium text-gray-900 mb-1">{platform.name}</div>
-                <div className="text-lg font-bold text-gray-900">{platform.value}%</div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-                  <div 
-                    className="h-1.5 rounded-full bg-purple-500"
-                    style={{ width: `${platform.value}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Legend */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-emerald-500" />
-            <span className="text-sm text-gray-700">
-              <span className="font-medium">Strongest:</span> {strongestPlatform.name} ({strongestPlatform.value}%)
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            <span className="text-sm text-gray-700">
-              <span className="font-medium">Needs improvement:</span> {strongestPlatform.name} ({strongestPlatform.value}%)
-            </span>
-          </div>
+        <div className="w-full bg-gray-200 rounded-full h-3">
+          <div 
+            className={`h-3 rounded-full ${getProgressColor(displayScore)} transition-all duration-500`}
+            style={{ width: `${Math.min(100, Math.max(0, displayScore))}%` }}
+          ></div>
         </div>
       </div>
     </DashboardCard>
@@ -362,7 +102,6 @@ function AIPlatformPresenceCard() {
 function OverallAIVisibilityScoreCard({ result }: { result: any }) {
   const [weeklyTrend, setWeeklyTrend] = useState<number | null>(null);
   const [loadingTrend, setLoadingTrend] = useState(false);
-  const [showDescription, setShowDescription] = useState(false);
 
   // Get main company data
   const mainCompany = result?.competitors?.find((comp: any) => 
@@ -427,6 +166,19 @@ function OverallAIVisibilityScoreCard({ result }: { result: any }) {
     fetchTrend();
   }, [mainCompany?.name]);
 
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-blue-600';
+    if (score >= 60) return 'text-blue-500';
+    if (score >= 40) return 'text-gray-600';
+    return 'text-gray-500';
+  };
+
+  const getProgressColor = (score: number) => {
+    if (score >= 80) return 'bg-blue-600';
+    if (score >= 60) return 'bg-blue-500';
+    if (score >= 40) return 'bg-gray-500';
+    return 'bg-gray-400';
+  };
 
   const getTrendColor = (trend: number) => {
     if (trend > 0) return 'text-green-600';
@@ -435,416 +187,394 @@ function OverallAIVisibilityScoreCard({ result }: { result: any }) {
   };
 
   const getTrendIcon = (trend: number) => {
-    if (trend > 0) return <TrendingUp className="w-3 h-3" />;
-    if (trend < 0) return <TrendingDown className="w-3 h-3" />;
-    return <Activity className="w-3 h-3" />;
-  };
-
-  const getScoreLabel = (score: number) => {
-    if (score >= 80) return 'Excellent';
-    if (score >= 60) return 'Good';
-    if (score >= 40) return 'Fair';
-    return 'Poor';
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getProgressColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (trend > 0) return <TrendingUp className="w-4 h-4" />;
+    if (trend < 0) return <TrendingDown className="w-4 h-4" />;
+    return <Activity className="w-4 h-4" />;
   };
 
   return (
     <DashboardCard
-      title="AI Visibility Score"
-      icon={<Eye className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-          </div>
-      }
+      title="Overall AI Visibility Score"
+      icon={<Eye className="w-5 h-5 text-white" />}
+      iconBgColor="bg-purple-500"
     >
-      <div className="text-center">
-        <div className={`text-4xl font-bold ${getScoreColor(compositeScore)} mb-2`}>
-          {compositeScore}
-        </div>
-        <div className="text-gray-600 mb-2">out of 100</div>
-        <div className={`text-lg font-semibold ${getScoreColor(compositeScore)} mb-3`}>
-          {getScoreLabel(compositeScore)}
-        </div>
-        
-        <div className="w-full bg-gray-200 rounded-full h-3">
-          <div 
-            className={`h-3 rounded-full ${getProgressColor(compositeScore)} transition-all duration-500`}
-            style={{ width: `${Math.min(100, Math.max(0, compositeScore))}%` }}
-          ></div>
-      </div>
-        {showDescription && (
-          <div className="text-xs text-gray-500 mt-3">
-            How well your brand appears in AI assistant responses
-    </div>
-        )}
-      </div>
-    </DashboardCard>
-  );
-}
-
-// SKUs Mentioned Card Component with Image-Inspired Design
-// Product Performance Analysis Card - Comprehensive LLM + Shopify Analytics
-function ProductPerformanceAnalysisCard({ result, setShowShopifyModal }: { result: any; setShowShopifyModal?: (show: boolean) => void }) {
-  const [shopifyProducts, setShopifyProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [analysisResults, setAnalysisResults] = useState<any>(null);
-
-  // Get main company data
-  const mainCompany = result?.competitors?.find((comp: any) => 
-    comp.name?.toLowerCase() === result.company?.toLowerCase()
-  ) || result?.competitors?.[0];
-
-  // Check if Shopify store is connected
-  const shopifyConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
-  const hasShopifyConnection = shopifyConnections.length > 0;
-
-  // Fetch real Shopify products for comprehensive analysis
-  const fetchShopifyProducts = async () => {
-    if (!hasShopifyConnection) return;
-
-    setLoading(true);
-    try {
-      const connections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
-      if (connections.length === 0) return;
-
-      const allProducts: any[] = [];
-      for (const connection of connections) {
-        try {
-          const query = `
-            query {
-              products(first: 250) {
-                edges {
-                  node {
-                    id
-                    title
-                    handle
-                    vendor
-                    tags
-                    productType
-                    variants(first: 10) {
-                      edges {
-                        node {
-                          id
-                          sku
-                          price
-                          title
-                        }
-                      }
-                    }
-                    images(first: 1) {
-                      edges {
-                        node {
-                          url
-                          altText
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          `;
-
-          const response = await fetch(`https://${connection.shop}/api/2023-10/graphql.json`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Shopify-Storefront-Access-Token': connection.token,
-            },
-            body: JSON.stringify({ query }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            console.log('Shopify API Response for', connection.shop, ':', data);
-
-            const products = data.data?.products?.edges?.map((edge: any) => ({
-              ...edge.node,
-              shop: connection.shop
-            })) || [];
-
-            console.log('Parsed products for', connection.shop, ':', products.length, products.slice(0, 3));
-            allProducts.push(...products);
-          } else {
-            console.error('Failed to fetch from', connection.shop, ':', response.status, response.statusText);
-          }
-        } catch (error) {
-          console.error(`Failed to fetch products from ${connection.shop}:`, error);
-        }
-      }
-
-      setShopifyProducts(allProducts);
-      console.log('Total products fetched:', allProducts.length);
-
-      // Generate AI-powered product analysis
-      await generateProductAnalysis(allProducts);
-
-      // If no categories were found, create some sample categories for demo purposes
-      if (allProducts.length > 0) {
-        console.log('Products fetched successfully, proceeding with analysis...');
-      }
-
-    } catch (error) {
-      console.error('Failed to fetch Shopify products:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Generate comprehensive product analysis using LLM
-  const generateProductAnalysis = async (products: any[]) => {
-    try {
-      const categories = groupProductsByCategory(products);
-      console.log('Generated categories:', categories);
-
-      const analysis = {
-        totalProducts: products.length,
-        totalSKUs: products.reduce((count, product) => count + (product.variants?.edges?.length || 0), 0),
-        categories: categories,
-        performanceTiers: calculatePerformanceTiers(products),
-        insights: await generateLLMAnalysis(products),
-        recommendations: await generateLLMRecommendations(products)
-      };
-
-      console.log('Analysis results:', analysis);
-      setAnalysisResults(analysis);
-    } catch (error) {
-      console.error('Failed to generate product analysis:', error);
-    }
-  };
-
-  // Group products by category for segmentation
-  const groupProductsByCategory = (products: any[]) => {
-    const categories: { [key: string]: { products: any[], count: number } } = {};
-
-    products.forEach(product => {
-      // Try multiple fields to determine category
-      let category = null;
-
-      // Check productType (this is the standard Shopify field)
-      if (product.productType && product.productType.trim()) {
-        category = product.productType.trim();
-      }
-      // Fallback to tags (some stores use tags for categorization)
-      else if (product.tags && product.tags.length > 0) {
-        // Use the first tag as category, or combine multiple tags
-        category = product.tags.slice(0, 2).join(' / '); // Use first 2 tags
-      }
-      // Fallback to vendor (brand)
-      else if (product.vendor && product.vendor.trim()) {
-        category = product.vendor.trim();
-      }
-      // Final fallback
-      else {
-        category = 'Uncategorized';
-      }
-
-      console.log('Product:', product.title, 'Category:', category, 'productType:', product.productType, 'tags:', product.tags, 'vendor:', product.vendor);
-
-      if (!categories[category]) {
-        categories[category] = { products: [], count: 0 };
-      }
-      categories[category].products.push(product);
-      categories[category].count++;
-    });
-
-    return Object.entries(categories).map(([name, data]) => ({
-      name,
-      count: data.count,
-      products: data.products
-    }));
-  };
-
-  // Calculate performance tiers based on product metrics
-  const calculatePerformanceTiers = (products: any[]) => {
-    // This would integrate with your AI analysis data for more accurate scoring
-    const tiers = {
-      top: products.length * 0.1, // Top 10%
-      mid: products.length * 0.4, // Middle 40%
-      bottom: products.length * 0.5 // Bottom 50%
-    };
-
-    return tiers;
-  };
-
-  // Generate LLM-powered insights (mock for now, would integrate with real LLM API)
-  const generateLLMAnalysis = async (products: any[]) => {
-    // This would call your LLM API with structured prompts
-    return {
-      summary: "Based on the product dataset, your top-performing categories show strong conversion rates with electronics leading at 3.2%.",
-      patterns: ["Price range $50-150 shows highest engagement", "Electronics category has 2x better conversion than average"],
-      opportunities: ["Expand yoga/fitness category", "Optimize pricing for mid-range products"]
-    };
-  };
-
-  // Generate LLM-powered recommendations
-  const generateLLMRecommendations = async (products: any[]) => {
-    return [
-      { priority: "High", action: "Optimize product descriptions for electronics category", impact: "15-20% conversion increase" },
-      { priority: "Medium", action: "Expand fitness/yoga product line", impact: "10-15% revenue growth" },
-      { priority: "Low", action: "Review pricing strategy for mid-range items", impact: "5-10% margin improvement" }
-    ];
-  };
-
-  useEffect(() => {
-    if (hasShopifyConnection) {
-      fetchShopifyProducts();
-    }
-  }, [hasShopifyConnection]);
-
-  return (
-    <DashboardCard
-      title="Top Performing Categories"
-      icon={<BarChart3 className="w-4 h-4 text-black" />}
-    >
-      {hasShopifyConnection ? (
-        loading ? (
-          <div className="text-center py-8">
-            <div className="text-gray-400 mb-4">
-              <BarChart3 className="w-8 h-8 mx-auto animate-pulse" />
+      <div className="space-y-4">
+        {/* Composite Score */}
+        <div className="text-center pb-4 border-b border-gray-200">
+          <div className={`text-5xl font-bold ${getScoreColor(compositeScore)} mb-2`}>
+            {compositeScore}%
           </div>
-            <p className="text-sm text-gray-600">Analyzing product performance...</p>
+          <div className="text-sm text-gray-600 mb-3">
+            Composite Visibility Score
           </div>
-        ) : analysisResults ? (
-          <div className="space-y-6">
-            {/* Segmentation Section Only */}
-              <div className="space-y-3">
-                {analysisResults.categories.length > 0 ? (
-                  analysisResults.categories.map((category: any, index: number) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <span className="text-sm font-medium text-gray-900">{category.name}</span>
-                      <span className="text-sm text-gray-600">{category.count} products</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="text-gray-400 mb-4">
-                      <BarChart3 className="w-8 h-8 mx-auto" />
-                    </div>
-                    <p className="text-sm text-gray-600">No categories found in store data</p>
-                    <p className="text-xs text-gray-500 mt-1">Categories will appear once products are properly categorized in Shopify</p>
-                  </div>
-                )}
-              </div>
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <div className="text-gray-400 mb-4">
-              <BarChart3 className="w-8 h-8 mx-auto" />
+          
+          {/* Week-over-Week Trend */}
+          {loadingTrend ? (
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Loading trend...</span>
             </div>
-            <p className="text-sm text-gray-600">Generating analysis...</p>
-          </div>
-        )
-      ) : (
-        <div className="text-center py-8">
-          <div className="mb-4">
-            <Package className="w-12 h-12 text-gray-400 mx-auto" />
-          </div>
-          <p className="text-sm text-gray-600 mb-4">Connect Shopify Store</p>
-          <p className="text-xs text-gray-500 mb-4">
-            Get comprehensive product performance analysis with AI-powered insights
-          </p>
-          <button
-            onClick={() => setShowShopifyModal?.(true)}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Connect Store
-          </button>
+          ) : weeklyTrend !== null ? (
+            <div className={`flex items-center justify-center gap-2 text-sm font-semibold ${getTrendColor(weeklyTrend)}`}>
+              {getTrendIcon(weeklyTrend)}
+              <span>
+                {weeklyTrend > 0 ? '+' : ''}{weeklyTrend.toFixed(1)}% vs last week
+              </span>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-400">
+              Trend data unavailable
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Model Breakdown */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Visibility by AI Platform
+          </h4>
+          
+          {/* ChatGPT */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-sm font-medium text-gray-700">ChatGPT</span>
+              <span className="text-sm font-semibold text-gray-900">{modelVisibility.chatgpt}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className={`h-2 rounded-full ${getProgressColor(modelVisibility.chatgpt)} transition-all duration-500`}
+                style={{ width: `${modelVisibility.chatgpt}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Gemini */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-sm font-medium text-gray-700">Gemini</span>
+              <span className="text-sm font-semibold text-gray-900">{modelVisibility.gemini}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className={`h-2 rounded-full ${getProgressColor(modelVisibility.gemini)} transition-all duration-500`}
+                style={{ width: `${modelVisibility.gemini}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Claude */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-sm font-medium text-gray-700">Claude</span>
+              <span className="text-sm font-semibold text-gray-900">{modelVisibility.claude}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className={`h-2 rounded-full ${getProgressColor(modelVisibility.claude)} transition-all duration-500`}
+                style={{ width: `${modelVisibility.claude}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Perplexity */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-sm font-medium text-gray-700">Perplexity</span>
+              <span className="text-sm font-semibold text-gray-900">{modelVisibility.perplexity}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className={`h-2 rounded-full ${getProgressColor(modelVisibility.perplexity)} transition-all duration-500`}
+                style={{ width: `${modelVisibility.perplexity}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Discoverability Insight */}
+        <div className="pt-3 border-t border-gray-200">
+          <div className="flex items-start gap-2 text-xs text-gray-600">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-500" />
+            <p>
+              Tracks how discoverable your brand is across ChatGPT, Gemini, Claude, and Perplexity with week-over-week trend analysis.
+            </p>
+          </div>
+        </div>
+      </div>
     </DashboardCard>
   );
 }
 
-// LLM Presence Component (Updated to match image design)
+// AI Platform Presence Breakdown Component with Radar Chart and Grid View
 function AIPlatformPresenceBreakdown({ result }: { result: any }) {
-  const [showDescription, setShowDescription] = useState(false);
-  
+  const [viewMode, setViewMode] = useState<'radar' | 'grid'>('radar');
+
   // Get main company data
   const mainCompany = result?.competitors?.find((comp: any) => 
     comp.name?.toLowerCase() === result.company?.toLowerCase()
   ) || result?.competitors?.[0];
 
-  // Calculate platform availability based on scores
-  const getPlatformAvailability = () => {
+  // Calculate platform strengths (0-100 scale)
+  const getPlatformStrengths = () => {
     if (!mainCompany?.aiScores) {
       return {
-        chatgpt: true,
-        gemini: true,
-        claude: true,
-        perplexity: true
+        chatgpt: 0,
+        gemini: 0,
+        claude: 0,
+        perplexity: 0
       };
     }
 
     const scores = mainCompany.aiScores;
-    // Consider available if score > 0
     return {
-      chatgpt: Number(scores.chatgpt || 0) > 0,
-      gemini: Number(scores.gemini || 0) > 0,
-      claude: Number(scores.claude || 0) > 0,
-      perplexity: Number(scores.perplexity || 0) > 0
+      chatgpt: Math.round(Math.min(100, Math.max(0, Number(scores.chatgpt || 0) * 10))),
+      gemini: Math.round(Math.min(100, Math.max(0, Number(scores.gemini || 0) * 10))),
+      claude: Math.round(Math.min(100, Math.max(0, Number(scores.claude || 0) * 10))),
+      perplexity: Math.round(Math.min(100, Math.max(0, Number(scores.perplexity || 0) * 10)))
     };
   };
 
-  const platformAvailability = getPlatformAvailability();
+  const platformStrengths = getPlatformStrengths();
   
   const platforms = [
-    { name: 'ChatGPT', available: platformAvailability.chatgpt, icon: <Bot className="w-4 h-4" /> },
-    { name: 'Gemini', available: platformAvailability.gemini, icon: <Star className="w-4 h-4" /> },
-    { name: 'Perplexity', available: platformAvailability.perplexity, icon: <Search className="w-4 h-4" /> },
-    { name: 'Claude', available: platformAvailability.claude, icon: <Brain className="w-4 h-4" /> }
+    { name: 'ChatGPT', value: platformStrengths.chatgpt, color: 'bg-green-500', icon: '🤖' },
+    { name: 'Gemini', value: platformStrengths.gemini, color: 'bg-blue-500', icon: '💎' },
+    { name: 'Claude', value: platformStrengths.claude, color: 'bg-purple-500', icon: '🧠' },
+    { name: 'Perplexity', value: platformStrengths.perplexity, color: 'bg-orange-500', icon: '🔍' }
   ];
+
+  const getStrengthLabel = (value: number) => {
+    if (value >= 80) return { label: 'Excellent', color: 'text-green-600', bgColor: 'bg-green-50' };
+    if (value >= 60) return { label: 'Strong', color: 'text-blue-600', bgColor: 'bg-blue-50' };
+    if (value >= 40) return { label: 'Moderate', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
+    if (value >= 20) return { label: 'Weak', color: 'text-orange-600', bgColor: 'bg-orange-50' };
+    return { label: 'Very Weak', color: 'text-red-600', bgColor: 'bg-red-50' };
+  };
+
+  // Simple radar chart using CSS (polygon shape)
+  const RadarChart = () => {
+    const size = 300;
+    const center = size / 2;
+    const maxRadius = size / 2 - 40;
+    const angleStep = (2 * Math.PI) / platforms.length;
+
+    // Calculate polygon points for the data
+    const dataPoints = platforms.map((platform, index) => {
+      const angle = angleStep * index - Math.PI / 2; // Start from top
+      const radius = (platform.value / 100) * maxRadius;
+      const x = center + radius * Math.cos(angle);
+      const y = center + radius * Math.sin(angle);
+      return `${x},${y}`;
+    }).join(' ');
+
+    // Grid circles (background)
+    const gridLevels = [20, 40, 60, 80, 100];
+
+    return (
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="absolute inset-0">
+          {/* Background grid circles */}
+          {gridLevels.map((level, idx) => {
+            const radius = (level / 100) * maxRadius;
+            return (
+              <circle
+                key={idx}
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="none"
+                stroke="#e5e7eb"
+                strokeWidth="1"
+              />
+            );
+          })}
+
+          {/* Axis lines */}
+          {platforms.map((_, index) => {
+            const angle = angleStep * index - Math.PI / 2;
+            const x = center + maxRadius * Math.cos(angle);
+            const y = center + maxRadius * Math.sin(angle);
+            return (
+              <line
+                key={index}
+                x1={center}
+                y1={center}
+                x2={x}
+                y2={y}
+                stroke="#d1d5db"
+                strokeWidth="1"
+              />
+            );
+          })}
+
+          {/* Data polygon */}
+          <polygon
+            points={dataPoints}
+            fill="rgba(59, 130, 246, 0.2)"
+            stroke="#3b82f6"
+            strokeWidth="2"
+          />
+
+          {/* Data points */}
+          {platforms.map((platform, index) => {
+            const angle = angleStep * index - Math.PI / 2;
+            const radius = (platform.value / 100) * maxRadius;
+            const x = center + radius * Math.cos(angle);
+            const y = center + radius * Math.sin(angle);
+            return (
+              <circle
+                key={index}
+                cx={x}
+                cy={y}
+                r="5"
+                fill="#3b82f6"
+                stroke="white"
+                strokeWidth="2"
+              />
+            );
+          })}
+        </svg>
+
+        {/* Labels around the chart */}
+        {platforms.map((platform, index) => {
+          const angle = angleStep * index - Math.PI / 2;
+          const labelRadius = maxRadius + 30;
+          const x = center + labelRadius * Math.cos(angle);
+          const y = center + labelRadius * Math.sin(angle);
+          
+          return (
+            <div
+              key={index}
+              className="absolute text-sm font-semibold text-gray-700 flex flex-col items-center"
+              style={{
+                left: `${x}px`,
+                top: `${y}px`,
+                transform: 'translate(-50%, -50%)'
+              }}
+            >
+              <span className="text-lg mb-1">{platform.icon}</span>
+              <span>{platform.name}</span>
+              <span className="text-xs text-gray-500">{platform.value}%</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Grid view component
+  const GridView = () => {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {platforms.map((platform, index) => {
+          const strength = getStrengthLabel(platform.value);
+          return (
+            <div
+              key={index}
+              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{platform.icon}</span>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{platform.name}</h4>
+                    <span className={`text-xs px-2 py-1 rounded-full ${strength.bgColor} ${strength.color} font-medium`}>
+                      {strength.label}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-gray-900">{platform.value}%</div>
+                  <div className="text-xs text-gray-500">Presence</div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div 
+                  className={`h-3 rounded-full ${platform.color} transition-all duration-500`}
+                  style={{ width: `${platform.value}%` }}
+                />
+              </div>
+
+              {/* Insights */}
+              <div className="mt-3 text-xs text-gray-600">
+                {platform.value >= 80 && `🎯 Excellent visibility on ${platform.name}`}
+                {platform.value >= 60 && platform.value < 80 && `✅ Strong presence on ${platform.name}`}
+                {platform.value >= 40 && platform.value < 60 && `⚠️ Moderate visibility - room for improvement`}
+                {platform.value < 40 && `🔴 Low visibility - needs attention`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Get weakest platform for recommendations
+  const weakestPlatform = platforms.reduce((min, p) => p.value < min.value ? p : min, platforms[0]);
+  const strongestPlatform = platforms.reduce((max, p) => p.value > max.value ? p : max, platforms[0]);
 
   return (
     <DashboardCard
-      title="LLM Presence"
-      icon={<Globe className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
+      title="AI Platform Presence Breakdown"
+      icon={<Target className="w-5 h-5 text-white" />}
+      iconBgColor="bg-indigo-500"
     >
-      <div className="space-y-3">
-        {platforms.map((platform, index) => (
-          <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-              {platform.icon}
-              <span className="text-sm font-medium text-gray-900">{platform.name}</span>
-                    </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-500" />
-              <span className="text-sm text-green-600 font-medium">Available</span>
-                    </div>
-                  </div>
-        ))}
-        {showDescription && (
-          <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-200">
-            Which AI platforms recognize your brand
-                  </div>
-        )}
+      <div className="space-y-4">
+        {/* View Toggle */}
+        <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+          <p className="text-sm text-gray-600">
+            Identify where you're strong or weak across AI platforms
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('radar')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                viewMode === 'radar'
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Radar
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                viewMode === 'grid'
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Grid
+            </button>
+          </div>
+        </div>
+
+        {/* View Content */}
+        <div className="min-h-[300px] flex items-center justify-center">
+          {viewMode === 'radar' ? (
+            <RadarChart />
+          ) : (
+            <GridView />
+          )}
+        </div>
+
+        {/* Insights Section */}
+        <div className="pt-4 border-t border-gray-200 space-y-2">
+          <div className="flex items-start gap-2 text-xs">
+            <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-green-500" />
+            <p className="text-gray-700">
+              <span className="font-semibold">Strongest:</span> {strongestPlatform.name} ({strongestPlatform.value}%)
+            </p>
+          </div>
+          <div className="flex items-start gap-2 text-xs">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-orange-500" />
+            <p className="text-gray-700">
+              <span className="font-semibold">Needs improvement:</span> {weakestPlatform.name} ({weakestPlatform.value}%)
+            </p>
+          </div>
+        </div>
       </div>
     </DashboardCard>
   );
@@ -852,8 +582,6 @@ function AIPlatformPresenceBreakdown({ result }: { result: any }) {
 
 // Share of AI Voice Card
 function ShareOfAIVoiceCard({ result }: { result: any }) {
-  const [showDescription, setShowDescription] = useState(false);
-  
   const computeShare = (analysisResult: any): number => {
     try {
       if (!analysisResult || !Array.isArray(analysisResult.competitors) || analysisResult.competitors.length === 0) return 0;
@@ -886,27 +614,13 @@ function ShareOfAIVoiceCard({ result }: { result: any }) {
   return (
     <DashboardCard
       title="Share of AI Voice"
-      icon={<PieChart className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
+      icon={<PieChart className="w-5 h-5 text-white" />}
+      iconBgColor="bg-rose-500"
     >
-      <div className="flex items-center justify-center h-32">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-gray-900 mb-2">{sharePct}%</div>
-        </div>
+      <div className="text-center">
+        <div className="text-4xl font-bold text-gray-900 mb-1">{sharePct}%</div>
+        <div className="text-sm text-gray-600">Your brand mentions ÷ total mentions</div>
       </div>
-      {showDescription && (
-        <div className="text-xs text-gray-500 mt-3">
-          Measure your brand's share of voice across AI platforms
-        </div>
-      )}
     </DashboardCard>
   );
 }
@@ -917,10 +631,10 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
   aiScores?: any
 }) {
   const llmServices = [
-    { name: 'ChatGPT', key: 'chatgpt', icon: <CheckCircle className="w-3 h-3" /> },
-    { name: 'Gemini', key: 'gemini', icon: <CheckCircle className="w-3 h-3" /> },
-    { name: 'Perplexity', key: 'perplexity', icon: <CheckCircle className="w-3 h-3" /> },
-    { name: 'Claude', key: 'claude', icon: <CheckCircle className="w-3 h-3" /> },
+    { name: 'ChatGPT', key: 'chatgpt', icon: <CheckCircle className="w-4 h-4" /> },
+    { name: 'Gemini', key: 'gemini', icon: <CheckCircle className="w-4 h-4" /> },
+    { name: 'Perplexity', key: 'perplexity', icon: <CheckCircle className="w-4 h-4" /> },
+    { name: 'Claude', key: 'claude', icon: <CheckCircle className="w-4 h-4" /> },
   ];
 
   const getLLMAvailability = () => {
@@ -946,10 +660,10 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
   return (
     <DashboardCard
       title="LLM Presence"
-      icon={<Bot className="w-4 h-4 text-white" />}
+      icon={<Bot className="w-5 h-5 text-white" />}
       iconBgColor="bg-blue-500"
     >
-      <div className="space-y-2">
+      <div className="space-y-3">
         {llmServices.map((service) => {
           const isAvailable = currentStatus[service.key];
           
@@ -964,7 +678,7 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
                   </>
                 ) : (
                   <>
-                    <XCircle className="w-3 h-3" />
+                    <XCircle className="w-4 h-4" />
                     <span className="ml-1 text-sm">Not Available</span>
                   </>
                 )}
@@ -979,18 +693,17 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
 
 // Competitor Benchmark Card
 function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
-  const [showDescription, setShowDescription] = useState(false);
-  
   const getBenchmarkStatus = (competitors: any[]) => {
     if (!competitors || competitors.length === 0) return { status: 'No Data', color: 'text-gray-500', score: 0 };
-
+    
     const avgScore = competitors.reduce((sum, comp) => sum + (comp.totalScore || 0), 0) / competitors.length;
-    const normalizedScore = avgScore > 10 ? avgScore : avgScore * 10;
-
-    if (normalizedScore >= 80) return { status: 'Excellent', color: 'text-green-600', score: Math.round(normalizedScore) };
-    if (normalizedScore >= 60) return { status: 'Good', color: 'text-blue-600', score: Math.round(normalizedScore) };
-    if (normalizedScore >= 40) return { status: 'Fair', color: 'text-yellow-600', score: Math.round(normalizedScore) };
-    return { status: 'Poor', color: 'text-red-600', score: Math.round(normalizedScore) };
+    const displayScore = Math.round(avgScore * 10);
+    
+    if (displayScore >= 80) return { status: 'Excellent', color: 'text-blue-600', score: displayScore };
+    if (displayScore >= 70) return { status: 'Above Average', color: 'text-blue-500', score: displayScore };
+    if (displayScore >= 60) return { status: 'Average', color: 'text-gray-600', score: displayScore };
+    if (displayScore >= 50) return { status: 'Below Average', color: 'text-gray-500', score: displayScore };
+    return { status: 'Poor', color: 'text-gray-400', score: displayScore };
   };
 
   const benchmark = getBenchmarkStatus(competitors);
@@ -998,32 +711,17 @@ function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
   return (
     <DashboardCard
       title="Competitor Benchmark"
-      icon={<BarChartIcon className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
+      icon={<BarChartIcon className="w-5 h-5 text-white" />}
+      iconBgColor="bg-blue-500"
     >
-      <div className="flex items-center justify-center h-32">
-        <div className="text-center">
-          <div className={`text-2xl font-bold ${benchmark.color} mb-2`}>
-            {benchmark.status}
-          </div>
-          <div className="text-base font-semibold text-gray-700">
-            Score: {benchmark.score}/100
-          </div>
+      <div className="text-center">
+        <div className={`text-2xl font-bold ${benchmark.color} mb-2`}>
+          {benchmark.status}
+        </div>
+        <div className="text-lg font-semibold text-gray-700 mb-3">
+          Score: {benchmark.score}/100
         </div>
       </div>
-      {showDescription && (
-        <div className="text-xs text-gray-500 mt-3">
-          Compare your performance against industry competitors
-        </div>
-      )}
     </DashboardCard>
   );
 }
@@ -1168,9 +866,9 @@ function SentimentAnalysisCard({ competitors, result }: { competitors: any[]; re
 
   const getSentimentIcon = (type: string) => {
     switch (type) {
-      case 'positive': return <Heart className="w-3 h-3 text-green-500" />;
-      case 'negative': return <Frown className="w-3 h-3 text-red-500" />;
-      default: return <Meh className="w-3 h-3 text-gray-500" />;
+      case 'positive': return <Heart className="w-4 h-4 text-green-500" />;
+      case 'negative': return <Frown className="w-4 h-4 text-red-500" />;
+      default: return <Meh className="w-4 h-4 text-gray-500" />;
     }
   };
 
@@ -1183,9 +881,9 @@ function SentimentAnalysisCard({ competitors, result }: { competitors: any[]; re
   };
 
   const getTrendIcon = (trend: number) => {
-    if (trend > 0) return <TrendingUp className="w-3 h-3 text-green-500" />;
-    if (trend < 0) return <TrendingDown className="w-3 h-3 text-red-500" />;
-    return <Activity className="w-3 h-3 text-gray-500" />;
+    if (trend > 0) return <TrendingUp className="w-4 h-4 text-green-500" />;
+    if (trend < 0) return <TrendingDown className="w-4 h-4 text-red-500" />;
+    return <Activity className="w-4 h-4 text-gray-500" />;
   };
 
   const getTrendColor = (trend: number) => {
@@ -1196,380 +894,143 @@ function SentimentAnalysisCard({ competitors, result }: { competitors: any[]; re
 
   return (
     <DashboardCard
-      title="Customer Sentiment"
-      icon={<Heart className="w-4 h-4 text-black" />}
+      title="Brand Sentiment"
+      icon={<Heart className="w-5 h-5 text-white" />}
+      iconBgColor="bg-pink-500"
     >
-      {/* Overall Sentiment */}
-      <div className="text-center mb-6">
-        <div className="text-4xl font-bold text-green-600 mb-2">72%</div>
-        <div className="text-sm text-[#475569]">Positive sentiment</div>
-      </div>
-
-      {/* Sentiment Breakdown */}
-      <div className="space-y-3">
-        {[
-          { label: 'Positive', value: 72, color: 'bg-green-500' },
-          { label: 'Neutral', value: 21, color: 'bg-gray-400' },
-          { label: 'Negative', value: 7, color: 'bg-red-500' }
-        ].map(({ label, value, color }) => (
-          <div key={label} className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-[#0F172A]">{label}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-20 bg-gray-200 rounded-full h-2">
-                <div 
-                  className={`h-2 rounded-full ${color} transition-all duration-500`}
-                  style={{ width: `${value}%` }}
-                />
-              </div>
-              <span className="text-sm text-[#475569] w-8 text-right">{value}%</span>
-            </div>
+      <div className="space-y-4">
+        {/* Time Period Toggle */}
+        <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+          <p className="text-sm text-gray-600">
+            AI + social + reviews sentiment analysis with trend arrows
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTimePeriod('week')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                timePeriod === 'week'
+                  ? 'bg-pink-100 text-pink-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Week
+            </button>
+            <button
+              onClick={() => setTimePeriod('month')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                timePeriod === 'month'
+                  ? 'bg-pink-100 text-pink-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Month
+            </button>
           </div>
-        ))}
-      </div>
-    </DashboardCard>
-  );
-}
+        </div>
 
-// Top Performing SKUs Card
-function TopProductsKpiCard({ result, setShowShopifyModal }: { result?: any; setShowShopifyModal?: (show: boolean) => void }) {
-  const [shopifyProducts, setShopifyProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Get main company data
-  const mainCompany = result?.competitors?.find((comp: any) => 
-    comp.name?.toLowerCase() === result.company?.toLowerCase()
-  ) || result?.competitors?.[0];
-
-  // Fetch Shopify products from connected stores
-  const fetchShopifyProducts = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Get connected Shopify accounts from localStorage
-      const connections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
-      console.log('Fetching products for connections:', connections);
-      
-      if (connections.length === 0) {
-        setError('No Shopify stores connected. Please connect a store to see real product data.');
-        setLoading(false);
-        return;
-      }
-
-      const allProducts: any[] = [];
-      
-      // Add timeout to prevent hanging
-      const fetchWithTimeout = (url: string, options: RequestInit, timeoutMs = 10000) => {
-        return Promise.race([
-          fetch(url, options),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
-          )
-        ]);
-      };
-      
-      // Fetch products from each connected store
-      for (const connection of connections) {
-        if (!connection.token) continue;
-        
-        try {
-          console.log(`Fetching from shop: ${connection.shop}`);
-          const productsQuery = `
-            query getProducts($first: Int!) {
-              products(first: $first) {
-                edges {
-                  node {
-                    id
-                    title
-                    handle
-                    description
-                    images(first: 1) {
-                      edges {
-                        node {
-                          url
-                          altText
-                        }
-                      }
-                    }
-                    variants(first: 1) {
-                      edges {
-                        node {
-                          id
-                          title
-                          sku
-                          price {
-                            amount
-                            currencyCode
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          `;
-
-          const response = await fetchWithTimeout(`https://${connection.shop}/api/2023-10/graphql.json`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Shopify-Storefront-Access-Token': connection.token,
-            },
-            body: JSON.stringify({ 
-              query: productsQuery,
-              variables: { first: 50 }
-            }),
-          }) as Response;
-
-          if (!response.ok) {
-            console.warn(`Failed to fetch products from ${connection.shop}: ${response.status}`);
-            continue;
-          }
-
-          const data = await response.json();
-
-          if (data.errors) {
-            console.warn(`GraphQL error for ${connection.shop}:`, data.errors[0]?.message);
-            continue;
-          }
-
-          const products = data.data?.products?.edges?.map((edge: any) => ({
-            ...edge.node,
-            shop: connection.shop
-          })) || [];
-          
-          allProducts.push(...products);
-        } catch (error) {
-          console.warn(`Error fetching products from ${connection.shop}:`, error);
-        }
-      }
-
-      setShopifyProducts(allProducts);
-    } catch (error) {
-      console.error('Error fetching Shopify products:', error);
-      setError('Failed to fetch products from connected stores.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Calculate performance metrics for real products
-  const calculateProductMetrics = (products: any[]) => {
-    if (!mainCompany || products.length === 0) {
-      return [];
-    }
-
-    const aiScores = mainCompany.aiScores || {};
-    const baseVisibility = Math.round((Number(aiScores.chatgpt || 0) + Number(aiScores.gemini || 0) + Number(aiScores.claude || 0) + Number(aiScores.perplexity || 0)) / 4 * 10);
-    
-    return products.map((product, index) => {
-      const variant = product.variants?.edges?.[0]?.node;
-      const price = parseFloat(variant?.price?.amount || '0');
-      const currency = variant?.price?.currencyCode || 'USD';
-      
-      // Calculate realistic metrics based on product data
-      const baseRevenue = price * (50 + Math.random() * 200); // Simulate sales volume
-      const baseConversion = 1.5 + (Math.random() * 4); // 1.5-5.5% conversion
-      const visibility = baseVisibility + (Math.random() * 30); // Add some variation
-      
-      return {
-        id: variant?.sku || product.id,
-        name: product.title,
-        handle: product.handle,
-        price: price,
-        currency: currency,
-        image: product.images?.edges?.[0]?.node?.url,
-        shop: product.shop,
-        revenue: Math.round(baseRevenue),
-        conversion: Math.round(baseConversion * 100) / 100,
-        visibility: Math.round(visibility),
-        trend: Math.random() > 0.5 ? 'up' : 'down',
-        trendValue: Math.round(Math.random() * 20 + 5) // 5-25% change
-      };
-    }).sort((a, b) => b.revenue - a.revenue); // Sort by revenue
-  };
-
-  // Fetch products on component mount
-  useEffect(() => {
-    fetchShopifyProducts();
-  }, []);
-
-  const topSKUs = calculateProductMetrics(shopifyProducts);
-  const totalRevenue = topSKUs.reduce((sum, sku) => sum + sku.revenue, 0);
-  const avgConversion = topSKUs.reduce((sum, sku) => sum + sku.conversion, 0) / (topSKUs.length || 1);
-  const avgVisibility = topSKUs.reduce((sum, sku) => sum + sku.visibility, 0) / (topSKUs.length || 1);
-
-  const getTrendIcon = (trend: string) => {
-    return trend === 'up' ? <TrendingUp className="w-3 h-3 text-green-500" /> : <TrendingDown className="w-3 h-3 text-red-500" />;
-  };
-
-  const getTrendColor = (trend: string) => {
-    return trend === 'up' ? 'text-green-600' : 'text-red-600';
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Generate sample products for the image design
-  const sampleProducts = [
-    { name: "Wireless Headphones Pro", sku: "SKU-WH-001", authority: "High Authority", performance: 94 },
-    { name: "Smart Watch Series X", sku: "SKU-SW-003", authority: "Medium Authority", performance: 89 },
-    { name: "Gaming Keyboard RGB", sku: "SKU-KB-007", authority: "Mixed Sentiment", performance: 82 }
-  ];
-
-  // Check if Shopify store is connected
-  const shopifyConnections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
-  const hasShopifyConnection = shopifyConnections.length > 0;
-
-  // Fetch products when component mounts or Shopify connection changes
-  useEffect(() => {
-    if (hasShopifyConnection && !loading) {
-      console.log('Automatically fetching Shopify products');
-      fetchShopifyProducts();
-    }
-  }, [hasShopifyConnection]);
-
-  return (
-    <DashboardCard
-      title="Top Performing Products"
-      icon={<Award className="w-4 h-4 text-black" />}
-    >
-      {hasShopifyConnection ? (
-      <div className="space-y-3">
-          {loading ? (
-            <div className="text-center py-8">
-              <div className="text-gray-400 mb-4">
-                <BarChart3 className="w-8 h-8 mx-auto animate-pulse" />
-              </div>
-              <p className="text-sm text-gray-600">Loading product data...</p>
+        {/* Overall Sentiment with Trend */}
+        <div className="text-center pb-4 border-b border-gray-200">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            {getSentimentIcon(dominantSentiment.toLowerCase())}
+            <div className={`text-3xl font-bold ${getSentimentColor(dominantSentiment.toLowerCase())}`}>
+              {dominantSentiment}
             </div>
-          ) : error ? (
-            <div className="text-center py-8">
-              <div className="text-red-400 mb-4">
-                <AlertTriangle className="w-8 h-8 mx-auto" />
-              </div>
-              <p className="text-sm text-red-600">{error}</p>
-              <button
-                onClick={fetchShopifyProducts}
-                className="mt-3 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-              >
-                Retry
-              </button>
-            </div>
-          ) : topSKUs.length > 0 ? (
-            topSKUs.slice(0, 3).map((product, index) => (
-              <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4 group hover:bg-gray-100 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <div className="font-semibold text-[#0F172A] text-sm mb-1">
-                  {product.name}
-                </div>
-                    {/* Default revenue display, hidden on hover */}
-                    <div className="text-xs text-[#475569] group-hover:opacity-0 group-hover:h-0 group-hover:overflow-hidden transition-all duration-200">
-                      ${formatCurrency(product.revenue)}
-                    </div>
-                    {/* GID and revenue display on hover */}
-                    <div className="text-xs text-gray-400 mt-1 opacity-0 h-0 overflow-hidden group-hover:opacity-100 group-hover:h-auto group-hover:flex group-hover:items-baseline transition-all duration-200">
-                      <span>{product.id}</span>
-                      <span className="text-[#475569] ml-2">${formatCurrency(product.revenue)}</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-semibold text-green-600">
-                      {product.visibility}%
-                </div>
-              </div>
-            </div>
+            {loadingTrend ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            ) : (
+              getTrendIcon(sentimentTrend)
+            )}
           </div>
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <div className="text-gray-400 mb-4">
-                <Package className="w-8 h-8 mx-auto" />
-      </div>
-              <p className="text-sm text-gray-600">No products found in your store</p>
+          <div className="text-sm text-gray-600 mb-1">
+            Overall Brand Sentiment
+          </div>
+          {!loadingTrend && (
+            <div className={`text-sm font-semibold ${getTrendColor(sentimentTrend)}`}>
+              {sentimentTrend > 0 ? '+' : ''}{sentimentTrend.toFixed(1)}% vs last {timePeriod}
             </div>
           )}
         </div>
-      ) : (
-        <div className="text-center py-8">
-          <div className="mb-4">
-            <Package className="w-12 h-12 text-gray-400 mx-auto" />
-          </div>
-          <h3 className="text-sm font-medium text-gray-900 mb-2">
-            Connect Shopify Store
-          </h3>
-          <p className="text-xs text-gray-600 mb-4">
-            Connect your Shopify store to see top performing products and detailed analytics.
-          </p>
-          <button 
-            onClick={() => setShowShopifyModal?.(true)}
-            className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Connect Store
-          </button>
+
+        {/* Sentiment Breakdown */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Sentiment Distribution
+          </h4>
+          
+          {[
+            { label: 'Positive', value: sentiment.positive, color: 'bg-green-500', icon: '😊' },
+            { label: 'Neutral', value: sentiment.neutral, color: 'bg-gray-500', icon: '😐' },
+            { label: 'Negative', value: sentiment.negative, color: 'bg-red-500', icon: '😞' }
+          ].map(({ label, value, color, icon }) => (
+            <div key={label} className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">{icon}</span>
+                <span className="text-sm font-medium text-gray-700">{label}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-gray-900">{value}%</div>
+                <div className="w-16 bg-gray-200 rounded-full h-2">
+                  <div 
+                    className={`h-2 rounded-full ${color} transition-all duration-500`}
+                    style={{ width: `${value}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+
+        {/* Multi-Source Breakdown */}
+        <div className="pt-3 border-t border-gray-200 space-y-2">
+          <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            By Source
+          </h4>
+          
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div className="text-center">
+              <div className="font-semibold text-blue-600">AI Platforms</div>
+              <div className="text-gray-600">
+                {sentiment.aiSentiment.positive}% / {sentiment.aiSentiment.neutral}% / {sentiment.aiSentiment.negative}%
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-purple-600">Social Media</div>
+              <div className="text-gray-600">
+                {sentiment.socialSentiment.positive}% / {sentiment.socialSentiment.neutral}% / {sentiment.socialSentiment.negative}%
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold text-orange-600">Reviews</div>
+              <div className="text-gray-600">
+                {sentiment.reviewSentiment.positive}% / {sentiment.reviewSentiment.neutral}% / {sentiment.reviewSentiment.negative}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Insights */}
+        <div className="pt-3 border-t border-gray-200">
+          <div className="flex items-start gap-2 text-xs text-gray-600">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-pink-500" />
+            <p>
+              <span className="font-semibold">Track public perception and brand trust</span> across AI platforms, social media, and review sites with trend analysis.
+            </p>
+          </div>
+        </div>
+      </div>
     </DashboardCard>
   );
 }
 
-// Growth Opportunities Card
-function GrowthOpportunitiesCard({ result }: { result?: any }) {
-  // Sample growth opportunities data
-  const growthOpportunities = [
-    { 
-      name: "Fitness Tracker Lite", 
-      description: "Strong category relevance • High potential", 
-      growthPotential: 23 
-    },
-    { 
-      name: "Bluetooth Speaker Mini", 
-      description: "High search volume • Trending", 
-      growthPotential: 31 
-    },
-    { 
-      name: "USB-C Hub Pro", 
-      description: "Trending category • Optimize content", 
-      growthPotential: 18 
-    }
-  ];
-
+// Top Products Card
+function TopProductsKpiCard() {
   return (
     <DashboardCard
-      title="Growth Opportunities"
-      icon={<TrendingUp className="w-4 h-4 text-white" />}
-      iconBgColor="bg-blue-500"
+      title="Top Performing Products"
+      icon={<Award className="w-5 h-5 text-white" />}
+      iconBgColor="bg-orange-500"
     >
-      <div className="space-y-3">
-        {growthOpportunities.map((opportunity, index) => (
-          <div key={index} className="flex items-center justify-between p-3 border-l-4 border-blue-500 bg-blue-50/30">
-            <div className="flex-1">
-              <div className="font-semibold text-[#0F172A] text-sm mb-1">
-                {opportunity.name}
-              </div>
-              <div className="text-xs text-[#475569]">
-                {opportunity.description}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-lg font-semibold text-blue-600">
-                {opportunity.growthPotential}%
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <div className="text-sm text-gray-600 text-center">No product performance data available</div>
     </DashboardCard>
   );
 }
@@ -1669,13 +1130,13 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
   return (
     <DashboardCard
       title="Product Visibility Index"
-      icon={<Package className="w-4 h-4 text-white" />}
+      icon={<Package className="w-5 h-5 text-white" />}
       iconBgColor="bg-indigo-500"
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         {/* View Mode Toggle */}
         <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-          <p className="text-xs text-gray-600">
+          <p className="text-sm text-gray-600">
             Track how well products are surfaced across platforms
           </p>
           <div className="flex gap-2">
@@ -1703,7 +1164,7 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
         </div>
 
         {viewMode === 'overview' ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Overall Visibility Score */}
             <div className="text-center pb-4 border-b border-gray-200">
               <div className={`text-5xl font-bold ${getVisibilityColor(visibility.overallVisibility)} mb-2`}>
@@ -1718,7 +1179,7 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
             </div>
 
             {/* Platform Categories */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Visibility by Platform Type
               </h4>
@@ -1728,27 +1189,30 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
                   label: 'AI Platforms', 
                   value: visibility.visibleInAi, 
                   total: visibility.totalSkus, 
-                  color: 'bg-purple-500'
+                  color: 'bg-purple-500', 
+                  icon: '🤖' 
                 },
                 { 
                   label: 'Search Engines', 
                   value: visibility.visibleInSearch, 
                   total: visibility.totalSkus, 
-                  color: 'bg-blue-500'
+                  color: 'bg-blue-500', 
+                  icon: '🔍' 
                 },
                 { 
                   label: 'Site Search', 
                   value: visibility.visibleInSite, 
                   total: visibility.totalSkus, 
-                  color: 'bg-green-500'
+                  color: 'bg-green-500', 
+                  icon: '🏪' 
                 }
-              ].map(({ label, value, total, color }) => {
+              ].map(({ label, value, total, color, icon }) => {
                 const percentage = Math.round((value / total) * 100);
                 return (
                   <div key={label}>
                     <div className="flex justify-between items-center mb-1">
                       <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${color}`}></div>
+                        <span className="text-lg">{icon}</span>
                         <span className="text-sm font-medium text-gray-700">{label}</span>
                       </div>
                       <span className="text-sm font-semibold text-gray-900">
@@ -1767,25 +1231,25 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Detailed Platform Breakdown
             </h4>
             
             {/* AI Platforms */}
-            <div className="space-y-1">
+            <div className="space-y-2">
               <h5 className="text-xs font-semibold text-purple-700">AI Platforms</h5>
               {[
-                { name: 'ChatGPT', value: visibility.breakdown.chatgpt },
-                { name: 'Gemini', value: visibility.breakdown.gemini },
-                { name: 'Claude', value: visibility.breakdown.claude },
-                { name: 'Perplexity', value: visibility.breakdown.perplexity }
-              ].map(({ name, value }) => {
+                { name: 'ChatGPT', value: visibility.breakdown.chatgpt, icon: '🤖' },
+                { name: 'Gemini', value: visibility.breakdown.gemini, icon: '💎' },
+                { name: 'Claude', value: visibility.breakdown.claude, icon: '🧠' },
+                { name: 'Perplexity', value: visibility.breakdown.perplexity, icon: '🔍' }
+              ].map(({ name, value, icon }) => {
                 const percentage = Math.round((value / visibility.totalSkus) * 100);
                 return (
                   <div key={name} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <span>{icon}</span>
                       <span className="text-gray-700">{name}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1801,14 +1265,14 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
             <div className="space-y-2 pt-3 border-t border-gray-200">
               <h5 className="text-xs font-semibold text-blue-700">Search Platforms</h5>
               {[
-                { name: 'Organic Search', value: visibility.breakdown.organicSearch },
-                { name: 'Site Search', value: visibility.breakdown.siteSearch }
-              ].map(({ name, value }) => {
+                { name: 'Organic Search', value: visibility.breakdown.organicSearch, icon: '🔍' },
+                { name: 'Site Search', value: visibility.breakdown.siteSearch, icon: '🏪' }
+              ].map(({ name, value, icon }) => {
                 const percentage = Math.round((value / visibility.totalSkus) * 100);
                 return (
                   <div key={name} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span>{icon}</span>
                       <span className="text-gray-700">{name}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1825,7 +1289,7 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
         {/* Insights */}
         <div className="pt-3 border-t border-gray-200">
           <div className="flex items-start gap-2 text-xs text-gray-600">
-            <Info className="w-3 h-3 flex-shrink-0 mt-0.5 text-indigo-500" />
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-indigo-500" />
             <p>
               <span className="font-semibold">Product-level discoverability score</span> tracks the percentage of SKUs visible across AI platforms, search engines, and internal site search.
             </p>
@@ -1835,266 +1299,6 @@ function ProductVisibilityIndexCard({ result }: { result?: any }) {
     </DashboardCard>
   );
 }
-
-// Low Visibility / High Potential SKUs Card
-function LowVisibilityHighPotentialCard({ result }: { result?: any }) {
-  const [viewMode, setViewMode] = useState<'gap' | 'recommendations'>('gap');
-
-  // Get main company data
-  const mainCompany = result?.competitors?.find((comp: any) => 
-    comp.name?.toLowerCase() === result.company?.toLowerCase()
-  ) || result?.competitors?.[0];
-
-  // Generate low visibility / high potential SKUs data
-  const generateLowVisibilitySKUs = () => {
-    if (!mainCompany) {
-      return [];
-    }
-
-    const aiScores = mainCompany.aiScores || {};
-    const baseVisibility = Math.round((Number(aiScores.chatgpt || 0) + Number(aiScores.gemini || 0) + Number(aiScores.claude || 0) + Number(aiScores.perplexity || 0)) / 4 * 10);
-    
-    // Generate 6 low visibility / high potential SKUs
-    const skuNames = [
-      'Eco-Friendly Water Bottle',
-      'Wireless Phone Charger',
-      'Ergonomic Laptop Stand',
-      'Bluetooth Car Adapter',
-      'Portable Power Bank',
-      'Smart Home Hub'
-    ];
-
-    return skuNames.map((name, index) => {
-      // Simulate traffic vs conversion gap
-      const traffic = 80 + (Math.random() * 20); // High traffic (80-100%)
-      const conversion = 0.5 + (Math.random() * 1.5); // Low conversion (0.5-2%)
-      const visibility = Math.max(10, baseVisibility - (Math.random() * 30)); // Low visibility
-      const potential = Math.round((traffic - conversion * 10) * 2); // High potential score
-      
-      // Determine improvement recommendations
-      const recommendations = [];
-      if (conversion < 1) recommendations.push('Pricing');
-      if (visibility < 30) recommendations.push('SEO');
-      if (traffic > 90 && conversion < 1.5) recommendations.push('Content');
-      
-      return {
-        id: `SKU-LV-${index + 1}`,
-        name,
-        traffic: Math.round(traffic),
-        conversion: Math.round(conversion * 100) / 100,
-        visibility: Math.round(visibility),
-        potential: Math.round(potential),
-        gap: Math.round(traffic - conversion * 10),
-        recommendations,
-        trend: Math.random() > 0.3 ? 'up' : 'down',
-        trendValue: Math.round(Math.random() * 20 + 5)
-      };
-    }).sort((a, b) => b.potential - a.potential); // Sort by potential
-  };
-
-  const lowVisibilitySKUs = generateLowVisibilitySKUs();
-  const avgGap = lowVisibilitySKUs.reduce((sum, sku) => sum + sku.gap, 0) / (lowVisibilitySKUs.length || 1);
-  const totalPotential = lowVisibilitySKUs.reduce((sum, sku) => sum + sku.potential, 0);
-
-  const getGapColor = (gap: number) => {
-    if (gap >= 70) return 'text-red-600';
-    if (gap >= 50) return 'text-orange-600';
-    return 'text-yellow-600';
-  };
-
-  const getPotentialColor = (potential: number) => {
-    if (potential >= 150) return 'text-green-600';
-    if (potential >= 100) return 'text-blue-600';
-    return 'text-purple-600';
-  };
-
-  const getRecommendationIcon = (recommendation: string) => {
-    switch (recommendation) {
-      case 'SEO': return '';
-      case 'Content': return '';
-      case 'Pricing': return '';
-      default: return '';
-    }
-  };
-
-  const getTrendIcon = (trend: string) => {
-    return trend === 'up' ? <TrendingUp className="w-3 h-3 text-green-500" /> : <TrendingDown className="w-3 h-3 text-red-500" />;
-  };
-
-  const getTrendColor = (trend: string) => {
-    return trend === 'up' ? 'text-green-600' : 'text-red-600';
-  };
-
-  return (
-    <DashboardCard
-      title="Low Visibility / High Potential SKUs"
-      icon={<Lightbulb className="w-4 h-4 text-white" />}
-      iconBgColor="bg-yellow-500"
-    >
-      <div className="space-y-3">
-        {/* View Mode Toggle */}
-        <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-          <p className="text-xs text-gray-600">
-            Products with strong interest but weak sales
-          </p>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setViewMode('gap')}
-              className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${
-                viewMode === 'gap'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Gap Analysis
-            </button>
-            <button
-              onClick={() => setViewMode('recommendations')}
-              className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${
-                viewMode === 'recommendations'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Recommendations
-            </button>
-          </div>
-        </div>
-
-        {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-4 pb-4 border-b border-gray-200">
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <AlertTriangle className="w-3 h-3 text-orange-500" />
-              <span className="text-lg font-bold text-gray-900">{avgGap.toFixed(0)}</span>
-            </div>
-            <div className="text-xs text-gray-500">Avg Gap</div>
-          </div>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <Target className="w-3 h-3 text-green-500" />
-              <span className="text-lg font-bold text-gray-900">{totalPotential}</span>
-            </div>
-            <div className="text-xs text-gray-500">Total Potential</div>
-          </div>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <Lightbulb className="w-3 h-3 text-yellow-500" />
-              <span className="text-lg font-bold text-gray-900">{lowVisibilitySKUs.length}</span>
-            </div>
-            <div className="text-xs text-gray-500">SKUs</div>
-          </div>
-        </div>
-
-        {viewMode === 'gap' ? (
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-              Traffic vs. Conversion Gap
-            </h4>
-            
-            {lowVisibilitySKUs.slice(0, 5).map((sku, index) => (
-              <div key={sku.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-yellow-600">#{index + 1}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">
-                      {sku.name}
-                    </div>
-                    <div className="text-xs text-gray-500">{sku.id}</div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="text-right">
-                    <div className="font-semibold text-gray-900">{sku.traffic}%</div>
-                    <div className="text-xs text-gray-500">Traffic</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-gray-900">{sku.conversion}%</div>
-                    <div className="text-xs text-gray-500">Conversion</div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`font-semibold ${getGapColor(sku.gap)}`}>
-                      {sku.gap}
-                    </div>
-                    <div className="text-xs text-gray-500">Gap</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-              Improvement Recommendations
-            </h4>
-            
-            {lowVisibilitySKUs.slice(0, 5).map((sku, index) => (
-              <div key={sku.id} className="p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
-                      <span className="text-xs font-bold text-yellow-600">#{index + 1}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">
-                        {sku.name}
-                      </div>
-                      <div className="text-xs text-gray-500">{sku.id}</div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <div className={`font-semibold ${getPotentialColor(sku.potential)}`}>
-                      {sku.potential}
-                    </div>
-                    <div className="text-xs text-gray-500">Potential</div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2 flex-wrap">
-                  {sku.recommendations.map((rec, recIndex) => (
-                    <span
-                      key={recIndex}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-white rounded-full text-gray-700 border border-yellow-200"
-                    >
-                      <span>{getRecommendationIcon(rec)}</span>
-                      {rec}
-                    </span>
-                  ))}
-                </div>
-                
-                <div className="mt-2 flex items-center gap-1 text-xs">
-                  {getTrendIcon(sku.trend)}
-                  <span className={getTrendColor(sku.trend)}>
-                    {sku.trendValue}% potential growth
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Insights */}
-        <div className="pt-3 border-t border-gray-200">
-          <div className="flex items-start gap-2 text-xs text-gray-600">
-            <Info className="w-3 h-3 flex-shrink-0 mt-0.5 text-yellow-500" />
-            <p>
-              <span className="font-semibold">Focus on SEO, content, or pricing improvements</span> to convert high traffic into sales for these underperforming products.
-            </p>
-          </div>
-          
-          <div className="mt-2 text-xs text-gray-500">
-            Gap = Traffic % - (Conversion %  10). Higher gap indicates more optimization opportunity.
-          </div>
-        </div>
-      </div>
-    </DashboardCard>
-  );
-}
-
 
 // Modal Components
 interface ModalProps {
@@ -2507,7 +1711,7 @@ function ShopifyConnectModal({ isOpen, onClose, onSuccess }: ShopifyConnectModal
           onClick={onClose}
           className="absolute top-0 right-0 text-gray-400 hover:text-gray-600 z-10"
         >
-          <X className="w-5 h-5" />
+          <X className="w-6 h-6" />
         </button>
 
         <div className="text-center mb-6">
@@ -2515,7 +1719,7 @@ function ShopifyConnectModal({ isOpen, onClose, onSuccess }: ShopifyConnectModal
             <Zap className="w-8 h-8 text-blue-600" />
           </div>
           
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">
             Shopify Integration
           </h3>
           
@@ -2529,7 +1733,7 @@ function ShopifyConnectModal({ isOpen, onClose, onSuccess }: ShopifyConnectModal
 
           {/* OAuth / BYO */}
           {(mode === 'oauth' || mode === 'byo') && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">Shop Domain</label>
                 <input 
@@ -2540,7 +1744,7 @@ function ShopifyConnectModal({ isOpen, onClose, onSuccess }: ShopifyConnectModal
                 />
               </div>
               {mode === 'byo' && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input 
                       value={creds.name} 
@@ -2608,8 +1812,8 @@ function ShopifyConnectModal({ isOpen, onClose, onSuccess }: ShopifyConnectModal
 
           {/* Storefront */}
           {mode === 'storefront' && (
-            <div className="space-y-2">
-              <div className="space-y-2">
+            <div className="space-y-3">
+              <div className="space-y-3">
                 <input 
                   value={shopDomain} 
                   onChange={e => setShopDomain(e.target.value)} 
@@ -2712,19 +1916,13 @@ function CSVUploadModal({ isOpen, onClose }: CSVUploadModalProps) {
   };
 
   const downloadTemplate = () => {
-    // Create comprehensive CSV template based on the provided format
-    const csvContent = 'SKU,Product Name,URL,Category,Price,Brand,Description,Tags,Stock Status/Weight,Dimensions\n' +
-      'ELEC-1001,Wireless Bluetooth Headphones,https://example.com/wireless-bluetooth-headphones,Electronics,79.99,SoundMax,"High-quality wireless headphones, bluetooth 5.0, noise cancelling, comfortable fit",headphones|wireless|bluetooth,In Stock|250g,20 x 18 x 5 cm\n' +
-      'CLOT-2001,Men\'s Cotton T-Shirt,https://example.com/mens-cotton-tshirt,Clothing,19.99,ComfortWear,"100% cotton t-shirt, casual wear, soft fabric, regular fit",clothing|cotton|casual|men,In Stock|180g,30 x 25 x 2 cm\n' +
-      'SPRT-3001,Yoga Mat with Carrying Strap,https://example.com/yoga-mat,Sports & Outdoors,29.99,FlexFit,"Eco-friendly, non-slip yoga mat, fitness, exercise, portable",yoga|fitness|exercise|eco,In Stock|1.2kg,180 x 60 x 0.6 cm\n' +
-      'HOME-4001,Stainless Steel Cookware Set,https://example.com/cookware-set,Home & Garden,129.99,KitchenPro,"10-piece stainless steel cookware, stainless steel, durable, even heating",cookware|kitchen|stainless|durable,In Stock|7kg,60 x 40 x 30 cm\n' +
-      'HOME-4002,Indoor Plant - Peace Lily,https://example.com/peace-lily,Home & Garden,24.99,GreenLife,"Low-maintenance indoor peace lily, indoor plants, air purifying, easy care",plants|indoor|peace lily|low maintenance,In Stock|1.5kg,40 x 20 x 20 cm';
-
+    // Create a sample CSV template
+    const csvContent = 'SKU,Product Name,URL,Category,Price\nSKU001,Sample Product,https://example.com/product,Electronics,99.99\nSKU002,Another Product,https://example.com/product2,Accessories,49.99';
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'product_analysis_template.csv';
+    a.download = 'product_template.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -2738,7 +1936,7 @@ function CSVUploadModal({ isOpen, onClose }: CSVUploadModalProps) {
           onClick={onClose}
           className="absolute top-0 right-0 text-gray-400 hover:text-gray-600"
         >
-          <X className="w-5 h-5" />
+          <X className="w-6 h-6" />
         </button>
 
         <div className="text-center">
@@ -2746,12 +1944,12 @@ function CSVUploadModal({ isOpen, onClose }: CSVUploadModalProps) {
             <Upload className="w-8 h-8 text-gray-600" />
           </div>
           
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">
             Upload CSV File
           </h3>
           
           <p className="text-gray-600 mb-6">
-            Upload a CSV with columns: SKU, Product Name, URL, Category, Price, Brand, Description, Tags, Stock Status/Weight, Dimensions.
+            Upload a CSV with columns: SKU, Product Name, URL, Category, Price.
           </p>
         </div>
 
@@ -2880,7 +2078,7 @@ function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
           onClick={onClose}
           className="absolute top-0 right-0 text-gray-400 hover:text-gray-600 z-10"
         >
-          <X className="w-5 h-5" />
+          <X className="w-6 h-6" />
         </button>
 
         <div className="text-center mb-6">
@@ -2888,12 +2086,12 @@ function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
             <Target className="w-8 h-8 text-blue-600" />
           </div>
           
-          <h3 className="text-xl font-bold text-gray-900">
+          <h3 className="text-2xl font-bold text-gray-900">
             Add Product Manually
           </h3>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               SKU ID <span className="text-red-500">*</span>
@@ -3129,13 +2327,6 @@ export function Overview() {
       domain = domain.split('/')[0].split('?')[0].split('#')[0];
       
       const domainParts = domain.split('.');
-      
-      // Special handling for Shopify stores (e.g., kabinidevstore.myshopify.com)
-      if (domainParts.length >= 3 && domainParts[domainParts.length - 2] === 'myshopify') {
-        return domainParts[0]; // Return "kabinidevstore" for "kabinidevstore.myshopify.com"
-      }
-      
-      // For other domains, use the standard logic
       if (domainParts.length >= 2) {
         return domainParts[domainParts.length - 2];
       }
@@ -3687,21 +2878,15 @@ export function Overview() {
   };
 
   const getScoreColor = (score: number) => {
-    // Handle both 0-10 and 0-100 ranges
-    const normalizedScore = score > 10 ? score : score * 10;
-    if (normalizedScore >= 80) return 'bg-green-500';
-    if (normalizedScore >= 60) return 'bg-blue-500';
-    if (normalizedScore >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 2.5) return 'bg-blue-600';
+    if (score >= 1.5) return 'bg-gray-500';
+    return 'bg-gray-400';
   };
 
   const getScoreClass = (score: number) => {
-    // Handle both 0-10 and 0-100 ranges
-    const normalizedScore = score > 10 ? score : score * 10;
-    if (normalizedScore >= 80) return 'text-green-600 font-semibold';
-    if (normalizedScore >= 60) return 'text-blue-600 font-semibold';
-    if (normalizedScore >= 40) return 'text-yellow-600 font-semibold';
-    return 'text-red-600 font-semibold';
+    if (score >= 2.5) return 'text-blue-600 font-semibold';
+    if (score >= 1.5) return 'text-gray-600 font-semibold';
+    return 'text-gray-500 font-semibold';
   };
 
   const formatScore = (score: number) => {
@@ -3781,7 +2966,7 @@ export function Overview() {
                     </>
                   ) : (
                     <>
-                      <Zap className="w-4 h-4" />
+                      <Zap className="w-5 h-5" />
                       Quick Analysis
                     </>
                   )}
@@ -3805,7 +2990,7 @@ export function Overview() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Shopify Sync Card */}
                 <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group flex flex-col">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                       <Zap className="w-6 h-6 text-blue-600" />
                     </div>
@@ -3890,7 +3075,7 @@ export function Overview() {
                     onClick={() => setShowProducts(false)}
                     className="text-gray-400 hover:text-gray-600"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
 
@@ -3905,7 +3090,7 @@ export function Overview() {
                         />
                       )}
                       
-                      <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
                         {product.title}
                       </h3>
                       
@@ -3932,7 +3117,7 @@ export function Overview() {
                       >
                         {isAnalyzing ? (
                           <>
-                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <Loader2 className="w-4 h-4 animate-spin" />
                             Analyzing...
                           </>
                         ) : (
@@ -3956,7 +3141,7 @@ export function Overview() {
             onClick={() => setShowConnectionSuccess(false)}
             className="text-green-500 hover:text-green-700 ml-2"
           >
-            <X className="w-3 h-3" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -4016,9 +3201,9 @@ export function Overview() {
       </div>
 
       {/* Analysis Results Section */}
-      <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6 shadow-sm">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">AI Visibility Analysis Results</h2>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-3">AI Visibility Analysis Results</h2>
           {analysisResult?.sourceProduct ? (
             <div className="flex items-center justify-center gap-4 mb-4">
               {analysisResult.sourceProduct.image && (
@@ -4029,8 +3214,8 @@ export function Overview() {
                 />
               )}
               <div className="text-left">
-                <p className="text-base font-semibold text-gray-900">{analysisResult.sourceProduct.title}</p>
-                <p className="text-xs text-gray-600">
+                <p className="text-lg font-semibold text-gray-900">{analysisResult.sourceProduct.title}</p>
+                <p className="text-sm text-gray-600">
                   From {analysisResult.sourceProduct.shopName || analysisResult.sourceProduct.shop}
                   {analysisResult.sourceProduct.price && (
                     <span className="ml-2 font-medium text-blue-600">
@@ -4050,56 +3235,64 @@ export function Overview() {
         )}
 
         {/* Dashboard Cards */}
-        <div className="space-y-8 lg:space-y-12 mb-8 lg:mb-12">
-          {/* AI Brand Visibility Section */}
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900">AI Brand Visibility</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 md:gap-3 lg:gap-4 items-stretch">
-              <OverallAIVisibilityScoreCard result={analysisResult} />
-              <AIPlatformPresenceBreakdown result={analysisResult} />
-              <ShareOfAIVoiceCard result={analysisResult} />
-              <CompetitorBenchmarkCard competitors={analysisResult?.competitors || []} />
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
+          <OverallAIVisibilityScoreCard 
+            result={analysisResult}
+          />
+          <div className="sm:col-span-2">
+            <AIPlatformPresenceBreakdown 
+              result={analysisResult}
+            />
           </div>
-          
-          {/* Product Performance Analysis Section */}
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900">Product Performance Analysis</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-              <TopProductsKpiCard result={analysisResult} setShowShopifyModal={setShowShopifyModal} />
-              <ProductPerformanceAnalysisCard result={analysisResult} setShowShopifyModal={setShowShopifyModal} />
-              <SentimentAnalysisCard competitors={analysisResult?.competitors || []} result={analysisResult} />
-            </div>
-          </div>
-        </div>
-          {/* <div className="sm:col-span-2">
-            <LowVisibilityHighPotentialCard result={analysisResult} />
+          <MarketShareGrowthCard 
+            result={analysisResult}
+          />
+          <AIVisibilityScoreCard 
+            score={getAIVisibilityScore(analysisResult)} 
+            industry={analysisResult?.industry}
+            metrics={getAIVisibilityMetrics(analysisResult)}
+          />
+          <ShareOfAIVoiceCard 
+            result={analysisResult}
+          />
+          <LLMPresenceCard 
+            serviceStatus={analysisResult?.serviceStatus} 
+            aiScores={analysisResult?.competitors?.[0]?.aiScores}
+          />
+          <CompetitorBenchmarkCard 
+            competitors={analysisResult?.competitors || []}
+          />
+          <SentimentAnalysisCard 
+            competitors={analysisResult?.competitors || []}
+            result={analysisResult}
+          />
+          <div className="sm:col-span-2">
+            <TopProductsKpiCard />
           </div>
           <div className="sm:col-span-2">
             <ProductVisibilityIndexCard result={analysisResult} />
-          </div> */}
+          </div>
+        </div>
 
         {/* Competitor Analysis */}
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Competitor Analysis</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Competitor Analysis</h2>
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
         </div>
 
         {/* Competitor Performance Overview Chart */}
         {analysisResult?.competitors && analysisResult.competitors.length > 0 && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <div className="mb-3">
-              <h3 className="text-base font-semibold text-gray-900">Competitor Performance Overview</h3>
-              <p className="text-xs text-gray-600">Visual comparison of average AI visibility scores across competitors</p>
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Competitor Performance Overview</h3>
+              <p className="text-sm text-gray-600">Visual comparison of average AI visibility scores across competitors</p>
             </div>
             
             <div className="h-48 sm:h-56 lg:h-64 overflow-x-auto overflow-y-visible">
               <div className="flex items-end h-full gap-3 sm:gap-4 min-w-max px-2 pb-2">
               {analysisResult.competitors.map((competitor: any, index: number) => {
                 const avgScore = competitor.totalScore || 0;
-                // Normalize score for height calculation (handle both 0-10 and 0-100 ranges)
-                const normalizedScore = avgScore > 10 ? avgScore : avgScore * 10;
-                const heightPercentage = Math.min(95, Math.max(10, (normalizedScore / 100) * 85 + 10));
+                const heightPercentage = Math.min(95, Math.max(10, (avgScore / 10) * 85 + 10));
                 const barColor = getScoreColor(avgScore);
                 
                 return (
@@ -4130,7 +3323,7 @@ export function Overview() {
             <div className="mt-4 text-center">
                 <div className="inline-flex items-center flex-wrap justify-center gap-2 sm:gap-4 text-xs text-gray-500">
                   <div className="flex items-center">
-                    <div className="w-3 h-3 bg-green-500 rounded mr-1"></div>
+                    <div className="w-3 h-3 bg-blue-600 rounded mr-1"></div>
                     <span>Excellent (8-10)</span>
                   </div>
                   <div className="flex items-center">
@@ -4138,11 +3331,11 @@ export function Overview() {
                     <span>Good (6-7.9)</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-3 h-3 bg-yellow-500 rounded mr-1"></div>
+                    <div className="w-3 h-3 bg-gray-500 rounded mr-1"></div>
                     <span>Fair (4-5.9)</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-3 h-3 bg-red-500 rounded mr-1"></div>
+                    <div className="w-3 h-3 bg-gray-400 rounded mr-1"></div>
                     <span>Poor (0-3.9)</span>
                   </div>
                 </div>
@@ -4153,8 +3346,8 @@ export function Overview() {
         {/* Competitors Comparison Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-base font-semibold text-gray-900">Competitors Comparison</h2>
-            <p className="text-xs text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
+            <h2 className="text-lg font-semibold text-gray-900">Competitors Comparison</h2>
+            <p className="text-sm text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
           </div>
           
           <div className="overflow-x-auto w-full">
@@ -4245,7 +3438,7 @@ export function Overview() {
           onClick={() => setShowConnectionSuccess(false)}
           className="text-green-500 hover:text-green-700 ml-2"
         >
-          <X className="w-3 h-3" />
+          <X className="w-4 h-4" />
         </button>
       </div>
     )}
@@ -4267,8 +3460,3 @@ export function Overview() {
     </>
   );
 } 
-
-
-
-
-

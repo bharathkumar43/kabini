@@ -51,7 +51,12 @@ const IdleSessionManager: React.FC<IdleSessionManagerProps> = ({
       setShowExpiredBanner(true);
       // Give user brief feedback then logout and redirect
       window.setTimeout(async () => {
-        try { await logout(); } catch {}
+        try { 
+          await logout(); 
+          console.log('🔐 IdleSessionManager: Logout completed, redirecting...');
+        } catch (error) {
+          console.error('🔐 IdleSessionManager: Logout failed:', error);
+        }
         navigate('/', { replace: true });
       }, redirectDelayMs);
     }, idleMs);
