@@ -1,6 +1,6 @@
 interface AnalysisSession {
   id: string;
-  type: 'overview' | 'ai-visibility' | 'content-structure' | 'competitor';
+  type: 'overview' | 'ai-visibility' | 'content-structure' | 'competitor' | 'product-insights';
   data: any;
   timestamp: number;
   expiresAt: number;

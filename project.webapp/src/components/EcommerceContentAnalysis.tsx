@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Loader2, Link as LinkIcon, Globe, FileText, Upload, BarChart3, CheckCircle2, XCircle, HelpCircle, Image as ImageIcon, ListChecks, Network, ShieldCheck, AlertTriangle, ExternalLink, Check, X } from 'lucide-react';
 import { apiService } from '../services/apiService';
 
@@ -299,6 +299,44 @@ export function EcommerceContentAnalysis() {
   const [pricesLoading, setPricesLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Load saved analysis results on component mount
+  useEffect(() => {
+    const savedAnalysis = localStorage.getItem('contentAnalysisResults');
+    if (savedAnalysis) {
+      try {
+        const parsed = JSON.parse(savedAnalysis);
+        if (parsed.extracted) setExtracted(parsed.extracted);
+        if (parsed.offsite) setOffsite(parsed.offsite);
+        if (parsed.competitors) setCompetitors(parsed.competitors);
+        if (parsed.brandCompetitors) setBrandCompetitors(parsed.brandCompetitors);
+        if (parsed.priceOffers) setPriceOffers(parsed.priceOffers);
+        if (parsed.urlInput) setUrlInput(parsed.urlInput);
+        if (parsed.contentInput) setContentInput(parsed.contentInput);
+        if (parsed.inputMode) setInputMode(parsed.inputMode);
+      } catch (e) {
+        console.warn('Failed to load saved content analysis results:', e);
+      }
+    }
+  }, []);
+
+  // Save analysis results whenever they change
+  useEffect(() => {
+    if (extracted || offsite || competitors.length > 0 || brandCompetitors.length > 0 || priceOffers.length > 0) {
+      const analysisData = {
+        extracted,
+        offsite,
+        competitors,
+        brandCompetitors,
+        priceOffers,
+        urlInput,
+        contentInput,
+        inputMode,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('contentAnalysisResults', JSON.stringify(analysisData));
+    }
+  }, [extracted, offsite, competitors, brandCompetitors, priceOffers, urlInput, contentInput, inputMode]);
+
   // Shopify product picker state
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<'oauth' | 'storefront'>('oauth');
@@ -380,6 +418,17 @@ export function EcommerceContentAnalysis() {
     const text = await file.text();
     setContentInput(text);
     setInputMode('content');
+  };
+
+  const clearAnalysis = () => {
+    setExtracted(null);
+    setOffsite(null);
+    setCompetitors([]);
+    setBrandCompetitors([]);
+    setCompetitorCoverage([]);
+    setPriceOffers([]);
+    setError(null);
+    localStorage.removeItem('contentAnalysisResults');
   };
 
   const runAnalysis = async () => {
@@ -561,27 +610,59 @@ export function EcommerceContentAnalysis() {
   }, [extracted, isAnalyzing]);
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex items-center gap-2 mb-6">
-        <ShoppingCartBadge />
-        <h2 className="text-3xl font-extrabold text-black">E-commerce Content Analysis</h2>
+    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
+        <div className="flex-1 min-w-0">
+        </div>
+        {extracted && (
+          <button
+            onClick={clearAnalysis}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+          >
+            <FileText className="w-4 h-4" />
+            New Analysis
+          </button>
+        )}
       </div>
 
-      <div className="bg-white border rounded-lg p-4 mb-6">
-        <div className="flex items-center gap-4 mb-4">
-          <button
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${inputMode === 'url' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-            onClick={() => setInputMode('url')}
-          >
-            <LinkIcon className="w-4 h-4 inline mr-1" /> URL
-          </button>
-          <button
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${inputMode === 'content' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-            onClick={() => setInputMode('content')}
-          >
-            <FileText className="w-4 h-4 inline mr-1" /> HTML/Text
-          </button>
+      {/* Content Analysis Dashboard Section */}
+    <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-3">Content Analysis Dashboard</h2>
+          <p className="text-gray-600 text-lg">Enter your website URL or paste HTML content to analyze your e-commerce content structure and optimization.</p>
+          {extracted && (
+            <div className="mt-4 flex items-center justify-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                <CheckCircle2 className="w-4 h-4" />
+                Analysis Results Loaded
+              </div>
+              <button
+                onClick={clearAnalysis}
+                className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors"
+              >
+                Clear Results
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Analysis Configuration - Structured Inputs */}
+        <div className="bg-gray-50 border border-gray-300 rounded-xl p-4 sm:p-6 mb-6">
+          <div className="flex items-center gap-4 mb-4">
+            <button
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${inputMode === 'url' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
+              onClick={() => setInputMode('url')}
+            >
+              <LinkIcon className="w-4 h-4 inline mr-1" /> URL
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${inputMode === 'content' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
+              onClick={() => setInputMode('content')}
+            >
+              <FileText className="w-4 h-4 inline mr-1" /> HTML/Text
+            </button>
+          </div>
 
         {inputMode === 'url' ? (
           <div className="flex gap-2">
@@ -705,22 +786,29 @@ export function EcommerceContentAnalysis() {
             )}
           </div>
         </div>
-      )}
+        )}
+        {error && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" /> {error}
+          </div>
+        )}
+      </div>
 
+      {/* Results Section */}
       {isResultsReady && (
         <div className="space-y-6">
           {/* Overview */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="text-sm text-green-800 mb-1">AI Readiness Score</div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
+              <div className="text-base text-green-800 mb-1">AI Readiness Score</div>
               <div className="text-4xl font-extrabold text-green-900">{results.overall}%</div>
             </div>
-            <div className="bg-white border rounded-lg p-4">
-              <div className="text-sm text-gray-600">Title</div>
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
+              <div className="text-base text-gray-700">Title</div>
               <div className="font-medium text-black truncate" title={extracted.title || ''}>{extracted.title || '—'}</div>
             </div>
-            <div className="bg-white border rounded-lg p-4">
-              <div className="text-sm text-gray-600">Description</div>
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
+              <div className="text-base text-gray-700">Description</div>
               <div className="text-black line-clamp-2" title={extracted.metaDescription || ''}>{extracted.metaDescription || '—'}</div>
             </div>
           </div>
@@ -728,14 +816,14 @@ export function EcommerceContentAnalysis() {
           {/* Pillars breakdown - simple present/absent ticks */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {results.pillars.map(p => (
-              <div key={p.name} className="bg-white border rounded-lg p-4">
+              <div key={p.name} className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
                 <div className="flex items-center justify-between mb-3">
                   <div className="font-semibold text-black">{p.name}</div>
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 font-semibold">{p.score}%</span>
+                  <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">{p.score}%</span>
                 </div>
                 <div className="divide-y">
                   {p.checks.map(c => (
-                    <div key={c.id} className="flex items-center justify-between py-2 text-sm">
+                    <div key={c.id} className="flex items-center justify-between py-2 text-base">
                       <span className="text-black">{c.label}</span>
                       {c.passed ? (
                         <Check className="w-4 h-4 text-green-600" />
@@ -752,10 +840,10 @@ export function EcommerceContentAnalysis() {
           {/* Price Comparison - Google Shopping style */}
           {console.log('[EcommerceContentAnalysis] Rendering, priceOffers:', priceOffers)}
           {priceOffers && priceOffers.length > 0 && (
-            <div className="bg-white border rounded-lg p-4">
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-4">
                 <div className="font-semibold text-black">Price Comparison</div>
-                <span className="text-xs text-gray-500">Typically {(() => {
+                <span className="text-sm text-gray-600">Typically {(() => {
                   const prices = priceOffers.map(o => o.price).filter(Boolean);
                   const min = Math.min(...prices);
                   const max = Math.max(...prices);
@@ -776,12 +864,12 @@ export function EcommerceContentAnalysis() {
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
-                            <span className="text-xs font-bold text-blue-600">{o.site.charAt(0).toUpperCase()}</span>
+                            <span className="text-sm font-bold text-blue-600">{o.site.charAt(0).toUpperCase()}</span>
                           </div>
                           <div>
                             <div className="font-medium text-black capitalize">{o.site.replace(/^www\./, '')}</div>
                             {o.rating && o.reviews && (
-                              <div className="text-xs text-gray-600 flex items-center gap-1">
+                              <div className="text-sm text-gray-600 flex items-center gap-1">
                                 <span className="text-yellow-400">★</span>
                                 <span>{o.rating}/5</span>
                                 <span>·</span>
@@ -805,13 +893,13 @@ export function EcommerceContentAnalysis() {
                           })()}
                           </div>
                           {o.discount && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                            <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded">
                               {o.discount}% off
                             </span>
                           )}
                         </div>
                         {o.originalPrice && (
-                          <div className="text-xs text-gray-500 line-through">
+                          <div className="text-sm text-gray-500 line-through">
                             {(() => {
                               const currency = (o.currency || 'USD').toUpperCase();
                               try {
@@ -825,7 +913,7 @@ export function EcommerceContentAnalysis() {
                       </div>
                     </div>
                     
-                    <div className="mt-2 flex items-center justify-between text-xs text-gray-600">
+                    <div className="mt-2 flex items-center justify-between text-sm text-gray-600">
                       <div className="flex items-center gap-4">
                         {o.availability && (
                           <span className="text-green-600 font-medium">
@@ -853,29 +941,29 @@ export function EcommerceContentAnalysis() {
 
           {/* Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white border rounded-lg p-4">
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="font-semibold text-black mb-2">Structure</div>
-              <div className="text-sm text-black"><strong>H1</strong>: {extracted.h1.join(' | ') || '—'}</div>
-              <div className="text-sm text-black mt-1"><strong>H2</strong>: {extracted.h2.slice(0,6).join(' | ') || '—'}</div>
-              <div className="text-sm text-black mt-1"><strong>H3</strong>: {extracted.h3.slice(0,6).join(' | ') || '—'}</div>
+              <div className="text-base text-black"><strong>H1</strong>: {extracted.h1.join(' | ') || '—'}</div>
+              <div className="text-base text-black mt-1"><strong>H2</strong>: {extracted.h2.slice(0,6).join(' | ') || '—'}</div>
+              <div className="text-base text-black mt-1"><strong>H3</strong>: {extracted.h3.slice(0,6).join(' | ') || '—'}</div>
             </div>
-            <div className="bg-white border rounded-lg p-4">
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="font-semibold text-black mb-2">Schema & Media</div>
-              <div className="text-sm text-black">Product schema: {extracted.productSchemaFound ? 'Yes' : 'No'}</div>
-              <div className="text-sm text-black">FAQ schema: {extracted.faqSchemaFound ? 'Yes' : 'No'}</div>
-              <div className="text-sm text-black">Breadcrumb: {extracted.breadcrumbSchemaFound ? 'Yes' : 'No'}</div>
-              <div className="text-sm text-black">Reviews schema: {extracted.reviewsSchemaFound ? 'Yes' : 'No'}</div>
-              <div className="text-sm text-black">Image alt coverage: {extracted.imageAltCoverage.withAlt}/{extracted.imageAltCoverage.total}</div>
+              <div className="text-base text-black">Product schema: {extracted.productSchemaFound ? 'Yes' : 'No'}</div>
+              <div className="text-base text-black">FAQ schema: {extracted.faqSchemaFound ? 'Yes' : 'No'}</div>
+              <div className="text-base text-black">Breadcrumb: {extracted.breadcrumbSchemaFound ? 'Yes' : 'No'}</div>
+              <div className="text-base text-black">Reviews schema: {extracted.reviewsSchemaFound ? 'Yes' : 'No'}</div>
+              <div className="text-base text-black">Image alt coverage: {extracted.imageAltCoverage.withAlt}/{extracted.imageAltCoverage.total}</div>
             </div>
           </div>
 
           {/* Suggestions */}
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
             <div className="font-semibold text-black mb-2">Actionable Suggestions</div>
             {results.suggestions.length === 0 ? (
-              <div className="text-sm text-green-700">No critical issues found. Great job!</div>
+              <div className="text-base text-green-700">No critical issues found. Great job!</div>
             ) : (
-              <ul className="list-disc pl-5 text-sm text-black space-y-1">
+              <ul className="list-disc pl-5 text-base text-black space-y-1">
                 {results.suggestions.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}
@@ -885,14 +973,14 @@ export function EcommerceContentAnalysis() {
 
           {/* Off-site signals (Google CSE) - render only when real data ready */}
           {offsite && (
-            <div className="bg-white border rounded-lg p-4">
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-3">
                 <div className="font-semibold text-black">Off‑Site & Trust Signals</div>
-                <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 font-semibold">
+                <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">
                   {(() => { const p = results.pillars.find(pp => pp.name === 'Off-Site & Trust Signals'); return p ? p.score : 0; })()}%
                 </span>
               </div>
-              <div className="divide-y text-sm">
+              <div className="divide-y text-base">
                 {[
                   { id:'reviews', label:'Third‑party reviews', pass:(offsite.counts?.trustpilot||0) + (offsite.counts?.google||0) > 0 },
                   { id:'blogs', label:'Blog mentions', pass:(offsite.counts?.google||0) > 0 },
@@ -916,7 +1004,7 @@ export function EcommerceContentAnalysis() {
                       }
                     } catch { if (!title) title = 'Link'; }
                     return (
-                      <a key={i} href={r.link} target="_blank" rel="noreferrer" className="block text-sm text-blue-700 hover:underline">
+                      <a key={i} href={r.link} target="_blank" rel="noreferrer" className="block text-base text-blue-700 hover:underline">
                         <ExternalLink className="w-3.5 h-3.5 inline mr-1" /> {title}
                       </a>
                     );
@@ -928,10 +1016,10 @@ export function EcommerceContentAnalysis() {
 
           {/* Competitors (Google CSE) - render only when data ready */}
           {(brandCompetitors.length > 0 || (competitors && competitors.length > 0)) && (
-            <div className="bg-white border rounded-lg p-4">
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="font-semibold text-black mb-2">Product Competitors</div>
               {brandCompetitors.length > 0 && (
-                <div className="mb-3 text-sm text-black">
+                <div className="mb-3 text-base text-black">
                   <div className="font-medium mb-1">Similar brands</div>
                   <div className="flex flex-wrap gap-2">
                     {brandCompetitors.map((b, i) => (
@@ -946,7 +1034,7 @@ export function EcommerceContentAnalysis() {
                     <div className="font-medium text-black flex items-center gap-2">
                       <ExternalLink className="w-3.5 h-3.5" /> {c.name}
                     </div>
-                    <div className="text-xs text-gray-600 mt-1 line-clamp-2">{c.snippet}</div>
+                    <div className="text-sm text-gray-600 mt-1 line-clamp-2">{c.snippet}</div>
                   </a>
                 ))}
               </div>
