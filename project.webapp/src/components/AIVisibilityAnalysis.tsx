@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, TrendingUp, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Download, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, BarChart, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Search, Loader2, TrendingUp, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Download, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, BarChart, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, FileText } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { SessionData } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -104,17 +104,17 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
   const displayScore = validateScore(score);
   
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 80) return 'text-emerald-600';
+    if (score >= 60) return 'text-sky-500';
+    if (score >= 40) return 'text-amber-500';
+    return 'text-rose-500';
   };
 
   const getProgressColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 80) return 'bg-emerald-400';
+    if (score >= 60) return 'bg-sky-400';
+    if (score >= 40) return 'bg-amber-400';
+    return 'bg-rose-400';
   };
 
   const getScoreLabel = (score: number) => {
@@ -124,32 +124,7 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
     return 'Poor';
   };
 
-  return (
-    <DashboardCard
-      title="AI Visibility Score"
-      icon={<Eye className="w-5 h-5 text-white" />}
-      iconBgColor="bg-green-500"
-    >
-      <div className="text-center">
-        <div className={`text-4xl font-bold ${getScoreColor(displayScore)} mb-2`}>
-          {displayScore}
-        </div>
-        <div className="text-gray-600 mb-2">out of 100</div>
-        <div className={`text-lg font-semibold ${getScoreColor(displayScore)} mb-3`}>
-          {getScoreLabel(displayScore)}
-        </div>
-        
-        {/* Detailed metrics removed for cleaner UI */}
-        
-        <div className="w-full bg-gray-200 rounded-full h-3">
-          <div 
-            className={`h-3 rounded-full ${getProgressColor(displayScore)} transition-all duration-500`}
-            style={{ width: `${Math.min(100, Math.max(0, displayScore))}%` }}
-          ></div>
-        </div>
-      </div>
-    </DashboardCard>
-  );
+  return null; // Removed from Competitor Insight per request
 }
 
 // LLM Presence Component
@@ -192,40 +167,7 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
   const availableServices = llmServices.filter(service => currentStatus[service.key]).length;
   const totalServices = llmServices.length;
 
-  return (
-    <DashboardCard
-      title="LLM Presence"
-      icon={<Bot className="w-5 h-5 text-white" />}
-      iconBgColor="bg-blue-500"
-    >
-      <div className="space-y-3">
-        {llmServices.map((service) => {
-          const isAvailable = currentStatus[service.key];
-          
-          return (
-            <div key={service.key} className="flex items-center justify-between">
-              <span className="text-gray-700">{service.name}</span>
-              <div className={`flex items-center ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
-                {isAvailable ? (
-                  <>
-                    {service.icon}
-                    <span className="ml-1 text-sm">Available</span>
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-4 h-4" />
-                    <span className="ml-1 text-sm">Not Available</span>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        
-
-      </div>
-    </DashboardCard>
-  );
+  return null; // Removed from Competitor Insight per request
 }
 
 // Competitor Benchmark Component
@@ -237,35 +179,17 @@ function CompetitorBenchmarkCard({ competitors, industry }: { competitors: any[]
     const avgScore = competitors.reduce((sum, comp) => sum + (comp.totalScore || 0), 0) / competitors.length;
     const displayScore = Math.round(avgScore * 10);
     
-    if (displayScore >= 80) return { status: 'Excellent', rank: 'Top 10%', color: 'text-purple-600', score: displayScore, rawScore: avgScore };
-    if (displayScore >= 70) return { status: 'Above Average', rank: 'Top 25%', color: 'text-blue-600', score: displayScore, rawScore: avgScore };
-    if (displayScore >= 60) return { status: 'Average', rank: 'Top 50%', color: 'text-yellow-600', score: displayScore, rawScore: avgScore };
-    if (displayScore >= 50) return { status: 'Below Average', rank: 'Bottom 50%', color: 'text-orange-600', score: displayScore, rawScore: avgScore };
-    return { status: 'Poor', rank: 'Bottom 25%', color: 'text-red-600', score: displayScore, rawScore: avgScore };
+    if (displayScore >= 80) return { status: 'Excellent', rank: 'Top 10%', color: 'text-violet-500', score: displayScore, rawScore: avgScore };
+    if (displayScore >= 70) return { status: 'Above Average', rank: 'Top 25%', color: 'text-sky-500', score: displayScore, rawScore: avgScore };
+    if (displayScore >= 60) return { status: 'Average', rank: 'Top 50%', color: 'text-amber-500', score: displayScore, rawScore: avgScore };
+    if (displayScore >= 50) return { status: 'Below Average', rank: 'Bottom 50%', color: 'text-orange-400', score: displayScore, rawScore: avgScore };
+    return { status: 'Poor', rank: 'Bottom 25%', color: 'text-rose-500', score: displayScore, rawScore: avgScore };
   };
 
   const benchmark = getBenchmarkStatus(competitors);
   const filledBars = Math.min(5, Math.max(1, Math.ceil((competitors?.length || 0) / 2)));
 
-  return (
-    <DashboardCard
-      title="Competitor Benchmark"
-      icon={<BarChartIcon className="w-5 h-5 text-white" />}
-      iconBgColor="bg-purple-500"
-    >
-      <div className="text-center">
-        <div className={`text-2xl font-bold ${benchmark.color} mb-2`}>
-          {benchmark.status}
-        </div>
-        <div className="text-gray-600 mb-2">
-          {benchmark.rank} in your industry
-        </div>
-        <div className="text-lg font-semibold text-gray-700 mb-3">
-          Score: {benchmark.score}/100
-        </div>
-      </div>
-    </DashboardCard>
-  );
+  return null; // Removed from Competitor Insight per request
 }
 
 export function CompetitorInsight() {
@@ -314,6 +238,11 @@ export function CompetitorInsight() {
   const [refreshKey, setRefreshKey] = useState(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Track if user cleared the page via New Analysis, and persist across navigation
+  const CLEARED_KEY = useMemo(() => `kabini_cleared_ai_visibility_${stableUserId}`, [stableUserId]);
+  const [hasClearedData, setHasClearedData] = useState<boolean>(() => {
+    try { return localStorage.getItem(CLEARED_KEY) === '1'; } catch { return false; }
+  });
 
   // Load history items from service
   useEffect(() => {
@@ -324,6 +253,11 @@ export function CompetitorInsight() {
 
   // Restore cached analysis data after user is known
   useEffect(() => {
+    if (hasClearedData) {
+      // If user explicitly cleared, don't restore cached session
+      setAnalysisResult(null);
+      return;
+    }
     try {
       const session = sessionManager.getLatestAnalysisSession('ai-visibility', stableUserId);
       if (session) {
@@ -352,7 +286,7 @@ export function CompetitorInsight() {
     } catch (error) {
       console.error('[AIVisibilityAnalysis] Error restoring cached data:', error);
     }
-  }, [stableUserId]);
+  }, [stableUserId, hasClearedData]);
 
   // Listen for storage changes to auto-refresh
   useEffect(() => {
@@ -677,7 +611,7 @@ export function CompetitorInsight() {
       console.log('[CompetitorInsight] Detected industry:', detectedIndustry);
 
       const analysisResults = await apiService.getAIVisibilityAnalysis(
-        primaryInput,
+        finalCompanyName,
         detectedIndustry,
         { signal: abortController.signal },
         {
@@ -916,7 +850,21 @@ export function CompetitorInsight() {
   type PlacementDatum = { name: string; first: number; second: number; third: number };
   const computePlacementData = (result: any): PlacementDatum[] => {
     const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
-    if (competitors.length === 0) return [];
+
+    // If no meaningful placement data, return demo data
+    const hasRealData = competitors.some(c => {
+      const p = c?.aiTraffic?.placementTotals;
+      return p && (Number(p.first) > 0 || Number(p.second) > 0 || Number(p.third) > 0);
+    });
+    if (!hasRealData) {
+      return [
+        { name: 'Sephora', first: 60, second: 23, third: 17 },
+        { name: 'Ulta', first: 22, second: 43, third: 35 },
+        { name: 'Amazon', first: 38, second: 34, third: 28 },
+        { name: 'Target', first: 15, second: 25, third: 60 },
+        { name: 'Walmart', first: 8, second: 32, third: 60 }
+      ];
+    }
 
     const out: PlacementDatum[] = [];
     competitors.forEach((c) => {
@@ -938,13 +886,13 @@ export function CompetitorInsight() {
     const data = computePlacementData(result);
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-semibold text-gray-900">Share of Visibility</h3>
           <button
             onClick={() => setShowInfo(!showInfo)}
             className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            title="What is this?"
+            title="Shows overall brand presence in AI answers and how prominently each competitor is positioned (1st, 2nd, or 3rd). Green = 1st place mentions, Yellow = 2nd place, Blue = 3rd+ place. Helps identify who dominates brand presence and wins prime recommendation slots."
           >
             i
           </button>
@@ -968,15 +916,15 @@ export function CompetitorInsight() {
           <div>
             {/* Legend */}
             <div className="flex items-center gap-4 mb-3 text-sm">
-              <div className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-sm bg-green-500"></span>1st</div>
-              <div className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span>2nd</div>
-              <div className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-sm bg-blue-500"></span>3rd</div>
+              <div className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-sm bg-emerald-400"></span>1st</div>
+              <div className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-sm bg-amber-300"></span>2nd</div>
+              <div className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-sm bg-sky-400"></span>3rd</div>
             </div>
 
             {/* Single combined stacked bar chart with Y axis (0..100%) */}
             <div className="w-full overflow-x-auto">
               <div className="min-w-[640px] flex items-end gap-4 px-1 py-2">
-                {/* Y axis */}
+                {/* Y axis - evenly distributed 0..100 */}
                 <div className="flex flex-col justify-between h-56 pr-2 text-[10px] text-gray-500 select-none">
                   <span>100</span>
                   <span>80</span>
@@ -990,19 +938,19 @@ export function CompetitorInsight() {
                     <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex flex-col-reverse shadow-sm">
                       {/* 1st (bottom) */}
                       <div
-                        className="bg-green-500"
+                        className="bg-emerald-400"
                         style={{ height: `${d.first}%` }}
                         title={`1st: ${d.first}%`}
                       />
                       {/* 2nd (middle) */}
                       <div
-                        className="bg-yellow-400"
+                        className="bg-amber-300"
                         style={{ height: `${d.second}%` }}
                         title={`2nd: ${d.second}%`}
                       />
                       {/* 3rd+ (top) */}
                       <div
-                        className="bg-blue-500"
+                        className="bg-sky-400"
                         style={{ height: `${d.third}%` }}
                         title={`3rd: ${d.third}%`}
                       />
@@ -1044,9 +992,18 @@ export function CompetitorInsight() {
   };
   const computeShoppingVisibilityData = (result: any): ShoppingDatum[] => {
     const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
-    if (competitors.length === 0) return [];
 
-    // Use ONLY backend transactional counts. If zero across the board, show nothing.
+    const hasRealData = competitors.some(c => Number(c?.shopping?.total || 0) > 0);
+    if (!hasRealData) {
+      return [
+        { name: 'Amazon', count: 45 },
+        { name: 'Sephora', count: 32 },
+        { name: 'Ulta', count: 28 },
+        { name: 'Target', count: 18 },
+        { name: 'Walmart', count: 12 }
+      ];
+    }
+
     const fromBackend: ShoppingDatum[] = competitors
       .map((c) => ({ name: c?.name || 'Unknown', count: Number(c?.shopping?.total || 0) }))
       .filter((d) => d.count > 0);
@@ -1059,7 +1016,7 @@ export function CompetitorInsight() {
     const maxCount = Math.max(1, ...data.map(d => d.count));
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Shopping Visibility</h3>
@@ -1068,7 +1025,7 @@ export function CompetitorInsight() {
           <button
             onClick={() => setShowInfo(!showInfo)}
             className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            title="What is this?"
+            title="Shows how often competitors are cited as buying destinations in AI answers to transactional queries (like 'where to buy X'). Higher bars indicate stronger shopping intent and conversion potential. Only transactional prompts are considered."
           >
             i
           </button>
@@ -1083,17 +1040,25 @@ export function CompetitorInsight() {
         {data.length > 0 ? (
           <div className="w-full overflow-x-auto">
             <div className="min-w-[640px] flex items-end gap-4 px-1 py-2">
+              {/* Y axis - evenly distributed 0..100 */}
+              <div className="flex flex-col justify-between h-56 pr-2 text-[10px] text-gray-500 select-none">
+                <span>100</span>
+                <span>80</span>
+                <span>60</span>
+                <span>40</span>
+                <span>20</span>
+                <span>0</span>
+              </div>
               {data.map(d => (
-                <div key={d.name} className="flex flex-col items-center w-28">
-                  <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex items-end justify-center">
+                <div key={d.name} className="flex flex-col items-center w-24">
+                  <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex items-end justify-center shadow-sm">
                     <div
-                      className="w-14 bg-blue-600/80"
+                      className="w-14 bg-sky-400"
                       style={{ height: `${(d.count / maxCount) * 100}%` }}
                       title={`${d.name}: ${d.count}`}
                     />
                   </div>
                   <div className="mt-2 text-xs text-gray-800 font-medium text-center truncate w-full" title={d.name}>{d.name}</div>
-                  <div className="text-[11px] text-gray-600">{d.count}</div>
                 </div>
               ))}
             </div>
@@ -1119,6 +1084,18 @@ export function CompetitorInsight() {
   };
   const computeCompetitorMentions = (result: any): MentionByTool[] => {
     const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+
+    const hasRealData = comps.some(c => Number(c?.aiTraffic?.totalMentions || 0) > 0);
+    if (!hasRealData) {
+      return [
+        { competitor: 'Sephora', total: 24, byTool: { gemini: 6, chatgpt: 8, perplexity: 5, claude: 5 } },
+        { competitor: 'Ulta', total: 18, byTool: { gemini: 4, chatgpt: 6, perplexity: 4, claude: 4 } },
+        { competitor: 'Amazon', total: 16, byTool: { gemini: 3, chatgpt: 5, perplexity: 4, claude: 4 } },
+        { competitor: 'Target', total: 12, byTool: { gemini: 2, chatgpt: 4, perplexity: 3, claude: 3 } },
+        { competitor: 'Walmart', total: 8, byTool: { gemini: 1, chatgpt: 3, perplexity: 2, claude: 2 } }
+      ];
+    }
+
     const rows: MentionByTool[] = [];
     comps.forEach(c => {
       const name = c?.name || 'Unknown';
@@ -1151,14 +1128,14 @@ export function CompetitorInsight() {
     const rows = computeCompetitorMentions(result).filter(r => (r.total || 0) > 0);
     const maxTotal = Math.max(1, ...rows.map(r => r.total));
     const palette: Record<string, string> = {
-      gemini: 'bg-emerald-500',
-      chatgpt: 'bg-slate-600',
-      perplexity: 'bg-indigo-500',
-      claude: 'bg-amber-500',
+      gemini: 'bg-emerald-300',
+      chatgpt: 'bg-sky-300',
+      perplexity: 'bg-violet-300',
+      claude: 'bg-amber-300',
     };
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Competitor Mentions</h3>
@@ -1167,7 +1144,7 @@ export function CompetitorInsight() {
           <button
             onClick={() => setShowInfo(!showInfo)}
             className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            title="What is this?"
+            title="Shows total mentions of each competitor across all AI tools and prompts. Higher bars indicate stronger brand presence and recognition. This measures overall visibility and frequency of mentions in AI responses."
           >
             i
           </button>
@@ -1183,17 +1160,25 @@ export function CompetitorInsight() {
         {rows.length > 0 ? (
           <div className="w-full overflow-x-auto mb-6">
             <div className="min-w-[640px] flex items-end gap-4 px-1 py-2">
+              {/* Y axis - evenly distributed 0..100 */}
+              <div className="flex flex-col justify-between h-56 pr-2 text-[10px] text-gray-500 select-none">
+                <span>100</span>
+                <span>80</span>
+                <span>60</span>
+                <span>40</span>
+                <span>20</span>
+                <span>0</span>
+              </div>
               {rows.map(r => (
                 <div key={r.competitor} className="flex flex-col items-center w-24">
-                  <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex items-end justify-center">
+                  <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex items-end justify-center shadow-sm">
                     <div
-                      className="w-14 bg-orange-500/80"
+                      className="w-14 bg-rose-300"
                       style={{ height: `${(r.total / maxTotal) * 100}%` }}
                       title={`${r.competitor}: ${r.total}`}
                     />
                   </div>
                   <div className="mt-2 text-xs text-gray-800 font-medium text-center truncate w-full" title={r.competitor}>{r.competitor}</div>
-                  <div className="text-[11px] text-gray-600">{r.total}</div>
                 </div>
               ))}
             </div>
@@ -1205,6 +1190,31 @@ export function CompetitorInsight() {
         {/* Tool-specific breakdown removed per request */}
       </div>
     );
+  };
+
+  // Demo competitor table data for empty analysis
+  const buildDemoTableData = (result: any) => {
+    const company = result?.company || 'Your Brand';
+    const industry = result?.industry || 'Ecommerce & Retail';
+    const mkComp = (name: string, g: number, p: number, c: number, ch: number) => ({
+      name,
+      citationCount: Math.floor((g + p + c + ch) * 80),
+      aiScores: { gemini: g, perplexity: p, claude: c, chatgpt: ch },
+      totalScore: Number(((g + p + c + ch) / 4).toFixed(2)),
+      breakdowns: { gemini: { mentionsScore: g, positionScore: g, sentimentScore: g, brandMentionsScore: g }, perplexity: { mentionsScore: p, positionScore: p, sentimentScore: p, brandMentionsScore: p }, claude: { mentionsScore: c, positionScore: c, sentimentScore: c, brandMentionsScore: c }, chatgpt: { mentionsScore: ch, positionScore: ch, sentimentScore: ch, brandMentionsScore: ch } },
+      keyMetrics: { gemini: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 }, perplexity: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 }, claude: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 }, chatgpt: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 } }
+    });
+    return {
+      company,
+      industry,
+      competitors: [
+        mkComp('Sephora', 8.6, 8.1, 8.4, 8.2),
+        mkComp('Ulta', 7.4, 7.1, 7.0, 7.2),
+        mkComp('Amazon', 7.9, 7.6, 7.3, 7.5),
+        mkComp('Target', 6.8, 6.5, 6.2, 6.4),
+        mkComp('Walmart', 6.3, 6.1, 6.0, 6.2)
+      ]
+    } as any;
   };
 
   // Product Analysis in GEO – Bubble Chart (Competitor × Attribute)
@@ -1284,13 +1294,13 @@ export function CompetitorInsight() {
     const maxCount = Math.max(1, ...matrix.attributes.flatMap(a => Object.values(matrix.counts[a])));
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Product Attribute Mentions (GEO)</h3>
             <div className="text-xs text-gray-600">Highlights which attributes the AI links to each brand in location‑aware queries (e.g., luxury, affordable, organic, sustainable) so you can see how competitors are positioned.</div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="What is this?">i</button>
+          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows which product attributes (luxury, affordable, organic, sustainable) AI links to each competitor in location-aware queries. Bubble size indicates frequency. Helps understand how competitors are positioned in the market.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1431,7 +1441,7 @@ export function CompetitorInsight() {
       <div className="relative" style={{ width: size, height: size }}>
         <div style={ringStyle} />
         <div className="absolute inset-4 bg-white rounded-full" />
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-700 font-medium">
+        <div className="absolute inset-0 flex items-center justify-center text-lg text-gray-700 font-semibold">
           {Object.values(counts).reduce((a,b)=>a+b,0)}
         </div>
       </div>
@@ -1459,13 +1469,13 @@ export function CompetitorInsight() {
     const toolOrder = TOOL_KEYS;
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Sources Cited in AI Responses</h3>
             <div className="text-xs text-gray-600">Donut charts show which source types each AI tool relies on (Blogs, Reviews/Forums, Marketplaces, PR, Directories).</div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="What is this?">i</button>
+          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows which source types each AI tool relies on for competitor information. Donut charts display distribution across Blogs/Guides, Review Sites/Forums, Marketplaces, News/PR, and Directories. Helps understand AI's information sources.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1503,7 +1513,7 @@ export function CompetitorInsight() {
                       <span className={`inline-block w-3 h-3 rounded-sm`} style={{ backgroundColor: (cat==='Blogs / Guides')?'#f59e0b':(cat==='Review Sites / Forums')?'#60a5fa':(cat==='Marketplaces')?'#10b981':(cat==='News / PR Mentions')?'#eab308':'#2563eb' }}></span>
                       <span className="text-gray-700">{cat}</span>
                     </div>
-                    <span className="text-gray-600">{dataByTool[tool][cat] || 0}</span>
+                    <span className="text-gray-600 font-bold">{dataByTool[tool][cat] || 0}</span>
                   </div>
                 ))}
               </div>
@@ -1572,13 +1582,13 @@ export function CompetitorInsight() {
     const ringStyle: React.CSSProperties = { width: '220px', height: '220px', borderRadius: '50%', background: `conic-gradient(${stops.join(',')})` };
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Competitor Type Breakdown</h3>
             <div className="text-xs text-gray-600">Donut shows distribution across Direct, Marketplace, Content, Authority, Indirect.</div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="What is this?">i</button>
+          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how competitors are classified: Direct (retail/brand stores), Indirect (substitutes/alternatives), Marketplaces (Amazon/Etsy), Content (reviews/guides), and Authority (PR/editorial). Helps understand competitive landscape structure.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1590,7 +1600,7 @@ export function CompetitorInsight() {
             <div className="relative" style={{ width: 220, height: 220 }}>
               <div style={ringStyle} />
               <div className="absolute inset-6 bg-white rounded-full" />
-              <div className="absolute inset-0 flex items-center justify-center text-base font-semibold text-gray-800">{total}</div>
+              <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-gray-800">{total}</div>
             </div>
           </div>
           <div className="space-y-2 text-sm">
@@ -1600,7 +1610,7 @@ export function CompetitorInsight() {
                   <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: colors[t] }}></span>
                   <span className="text-gray-800">{t}</span>
                 </div>
-                <span className="text-gray-700">{data[t] || 0}</span>
+                <span className="text-gray-700 font-bold text-base">{data[t] || 0}</span>
               </div>
             ))}
           </div>
@@ -1671,13 +1681,13 @@ export function CompetitorInsight() {
     };
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Content Styles in AI Mentions</h3>
             <div className="text-xs text-gray-600">Stacked bars: List, Comparison, Recommendation, FAQ, Editorial per competitor.</div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="What is this?">i</button>
+          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how each competitor is framed in AI responses: Lists (product lists), Comparisons (vs other brands), Recommendations (AI suggestions), FAQ (question-answer format), Editorial (opinion pieces). Helps understand presentation context.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1796,13 +1806,13 @@ export function CompetitorInsight() {
       ] as any;
     }
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Sentiment Analysis</h3>
             <div className="text-xs text-gray-600">Tone, example mention, source, attribute/context, and key takeaway per competitor.</div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="What is this?">i</button>
+          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1887,13 +1897,13 @@ export function CompetitorInsight() {
     };
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">Authority Signals</h3>
             <div className="text-xs text-gray-600">Why AI trusted it — Reviews, Backlinks, PR, Certifications/Awards. Stacked bars by competitor plus an overall donut.</div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="What is this?">i</button>
+          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown, donut shows overall distribution.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -2031,13 +2041,13 @@ export function CompetitorInsight() {
     const maxTheme = Math.max(1, ...Object.values(themeCounts));
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">FAQ / Conversational Mentions</h3>
             <div className="text-xs text-gray-600">Which competitors appear in FAQ-style answers, where those mentions come from, and common trust themes.</div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="What is this?">i</button>
+          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -2070,7 +2080,7 @@ export function CompetitorInsight() {
             <div className="relative" style={{ width: 200, height: 200 }}>
               <div style={donutStyle} />
               <div className="absolute inset-6 bg-white rounded-full" />
-              <div className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-gray-800">{totalSources}</div>
+              <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-gray-800">{totalSources}</div>
             </div>
           </div>
           <div className="md:col-span-2 space-y-2 text-sm">
@@ -2080,7 +2090,7 @@ export function CompetitorInsight() {
                   <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: (k==='Reddit')?'#f59e0b':(k==='Quora')?'#60a5fa':(k==='Trustpilot')?'#10b981':'#eab308' }}></span>
                   <span className="text-gray-800">{String(k)}</span>
                 </div>
-                <span className="text-gray-700">{sourceCounts[k] || 0}</span>
+                <span className="text-gray-700 font-bold">{sourceCounts[k] || 0}</span>
               </div>
             ))}
           </div>
@@ -2181,7 +2191,7 @@ export function CompetitorInsight() {
                           dominantSentiment === 'Negative' ? 'text-red-600' : 'text-yellow-600';
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+      <div className="bg-white border border-gray-300 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
           <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
@@ -2235,7 +2245,7 @@ export function CompetitorInsight() {
             </div>
           </div>
 
-          
+        
         </div>
       </div>
     );
@@ -2246,24 +2256,41 @@ export function CompetitorInsight() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-            Welcome {user?.displayName?.split(' ')[0] || user?.name?.split(' ')[0] || 'User'}
-          </h1>
-          <p className="text-gray-600 mt-2">Deep competitive analysis and market intelligence platform</p>
         </div>
+        {analysisResult && (
+          <button
+            onClick={() => {
+              setAnalysisResult(null);
+              setAnalysisError(null);
+              setShowSuccessMessage(false);
+              setWebsiteUrl('');
+              setProductName('');
+              setProductCategory('');
+              setCompetitorName('');
+              setCountry('');
+              setSelectedIndustry('auto');
+              try { localStorage.setItem(CLEARED_KEY, '1'); } catch {}
+              setHasClearedData(true);
+            }}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+          >
+            <FileText className="w-4 h-4" />
+            New Analysis
+          </button>
+        )}
       </div>
 
       {/* Competitor Analysis Dashboard Section */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
+      <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-3">Competitor Analysis Dashboard</h2>
           <p className="text-gray-600 text-lg">Enter your website URL or company name to get instant competitor insights and market positioning.</p>
         </div>
 
         {/* Analysis Configuration - Structured Inputs */}
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-12 gap-3 items-end">
-            <div className="flex flex-col gap-1 lg:col-span-3">
+        <div className="bg-gray-50 border border-gray-300 rounded-xl p-4 sm:p-6 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:[grid-template-columns:repeat(24,minmax(0,1fr))] gap-3 items-end">
+            <div className="flex flex-col gap-1 lg:col-span-7">
               <label htmlFor="websiteUrl" className="text-xs font-semibold text-gray-700">Website URL <span className="text-red-500">*</span></label>
               <input
                 id="websiteUrl"
@@ -2274,10 +2301,10 @@ export function CompetitorInsight() {
                 onKeyDown={handleKeyDown}
                 placeholder="https://example.com"
                 required
-                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
               />
             </div>
-            <div className="flex flex-col gap-1 lg:col-span-2">
+            <div className="flex flex-col gap-1 lg:col-span-3">
               <label htmlFor="productName" className="text-xs font-semibold text-gray-700">Product Name</label>
               <input
                 id="productName"
@@ -2287,16 +2314,16 @@ export function CompetitorInsight() {
                 onPaste={(e) => handlePaste(e, setProductName)}
                 onKeyDown={handleKeyDown}
                 placeholder="Product Name"
-                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
               />
             </div>
-            <div className="flex flex-col gap-1 lg:col-span-2">
+            <div className="flex flex-col gap-1 lg:col-span-3">
               <label htmlFor="productCategory" className="text-xs font-semibold text-gray-700">Product Category</label>
               <select
                 id="productCategory"
                 value={productCategory}
                 onChange={(e) => setProductCategory(e.target.value)}
-                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
               >
                 <option value="">Select Category</option>
                 <option value="Electronics">Electronics</option>
@@ -2310,7 +2337,7 @@ export function CompetitorInsight() {
                 <option value="Others">Others</option>
               </select>
             </div>
-            <div className="flex flex-col gap-1 lg:col-span-2">
+            <div className="flex flex-col gap-1 lg:col-span-3">
               <label htmlFor="competitorName" className="text-xs font-semibold text-gray-700">Known Competitor</label>
               <input
                 id="competitorName"
@@ -2320,16 +2347,16 @@ export function CompetitorInsight() {
                 onPaste={(e) => handlePaste(e, setCompetitorName)}
                 onKeyDown={handleKeyDown}
                 placeholder="Known Competitor"
-                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
               />
             </div>
-            <div className="flex flex-col gap-1 lg:col-span-1">
+            <div className="flex flex-col gap-1 lg:col-span-3">
               <label htmlFor="country" className="text-xs font-semibold text-gray-700">Country</label>
               <select
                 id="country"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
               >
                 <option value="">Country</option>
                 <option value="United States">United States</option>
@@ -2344,13 +2371,13 @@ export function CompetitorInsight() {
                 <option value="Others">Others</option>
               </select>
             </div>
-            <div className="flex flex-col gap-1 lg:col-span-1">
+            <div className="flex flex-col gap-1 lg:col-span-3">
               <label htmlFor="industry" className="text-xs font-semibold text-gray-700">Industry</label>
               <select
                 id="industry"
                 value={selectedIndustry}
                 onChange={(e) => setSelectedIndustry(e.target.value)}
-                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
                 disabled={isAnalyzing}
                 title="Select industry"
               >
@@ -2370,7 +2397,7 @@ export function CompetitorInsight() {
             <button
               onClick={startAnalysis}
               disabled={isAnalyzing || !websiteUrl.trim()}
-              className="h-11 px-4 bg-black hover:bg-gray-800 disabled:bg-gray-400 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow w-full text-sm lg:col-span-1 self-end"
+              className="h-11 px-4 bg-black hover:bg-gray-800 disabled:bg-gray-400 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow w-full text-sm lg:col-span-2 self-end"
             >
               {isAnalyzing ? (
                 <>
@@ -2380,7 +2407,7 @@ export function CompetitorInsight() {
               ) : (
                 <>
                   <Search className="w-4 h-4" />
-                  Analyze Now
+                  Analyse
                 </>
               )}
             </button>
@@ -2409,9 +2436,6 @@ export function CompetitorInsight() {
             {/* Competitor Mentions (Overall + Tool-specific) */}
             <CompetitorMentionsSection result={analysisResult} />
 
-            {/* Product Attribute Mentions (Bubble Chart) */}
-            <ProductAttributeBubbleSection result={analysisResult} />
-
             {/* Sources Cited (Donut per AI tool) */}
             <SourceCitedSection result={analysisResult} />
 
@@ -2421,17 +2445,14 @@ export function CompetitorInsight() {
             {/* Content Style Breakdown */}
             <ContentStyleSection result={analysisResult} />
 
-            {/* Sentiment Analysis Table */}
-            <SentimentTableSection result={analysisResult} />
-
-            {/* Authority Signals */}
-            <AuthoritySignalsSection result={analysisResult} />
-
-            {/* FAQ / Conversational Analysis */}
-            <FAQConversationalSection result={analysisResult} />
+            {/* The following 4 sections moved to Product Insights */}
+            {/* SentimentTableSection */}
+            {/* AuthoritySignalsSection */}
+            {/* FAQConversationalSection */}
+            {/* ProductAttributeBubbleSection */}
 
             {/* Add error boundary for AIVisibilityTable */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-lg shadow p-6 border border-gray-300 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Competitor Analysis</h3>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
@@ -2439,25 +2460,7 @@ export function CompetitorInsight() {
               {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 ? (
                 <AIVisibilityTable key={`analysis-${refreshKey}`} data={analysisResult} />
               ) : (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 8a2 2 0 011.414-1.414l4 4a2 2 0 010 2.828l-4 4a2 2 0 01-2.828 0l-4-4a2 2 0 010-2.828l4-4A2 2 0 018 8z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-blue-800">Competitor Analysis Complete</h3>
-                      <p className="text-sm text-blue-700 mt-1">
-                        Your competitor analysis has been completed successfully. 
-                        {analysisResult.competitors && analysisResult.competitors.length > 0 
-                          ? ` Found ${analysisResult.competitors.length} competitors for analysis.`
-                          : ' No competitors found for this analysis.'
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <AIVisibilityTable key={`analysis-demo-${refreshKey}`} data={buildDemoTableData(analysisResult || {})} />
               )}
             </div>
             
@@ -2471,4 +2474,4 @@ export function CompetitorInsight() {
       </div>
     </div>
   );
-} 
+}

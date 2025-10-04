@@ -2365,24 +2365,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                       <Eye className="w-4 h-4" />
                       Compare Pages
                     </button>
-                    <button
-                      onClick={() => {
-                        console.log('[Debug] Current state check:', {
-                          hasAnalysis: !!analysis,
-                          hasFullPageHtml: !!analysis?.fullPageHtml,
-                          hasImprovedFullPageHtml: !!improvedFullPageHtml,
-                          improvedHtmlLength: improvedFullPageHtml?.length || 0,
-                          originalHtmlLength: analysis?.fullPageHtml?.length || 0,
-                          suggestionsCount: analysis?.suggestions?.length || 0,
-                          improvedHtmlPreview: improvedFullPageHtml?.substring(0, 200) + '...',
-                          originalHtmlPreview: analysis?.fullPageHtml?.substring(0, 200) + '...'
-                        });
-                        alert('Debug info logged to console. Check console for details.');
-                      }}
-                      className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors font-semibold flex items-center gap-2"
-                    >
-                      🔍 Debug State
-                    </button>
+                    {/* Removed Debug State button for production UI */}
                     <button
                       onClick={applySuggestions}
                       className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2"

@@ -31,6 +31,7 @@ import { Overview } from './components/Overview.tsx';
 // import { CompetitorBenchmarking } from './components/CompetitorBenchmarking';
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
 import { CompetitorInsight } from './components/AIVisibilityAnalysis';
+import { ProductInsights } from './components/ProductInsights';
 import EmailVerification from './components/EmailVerification';
 
 // import SmartCompetitorAnalysis from './components/SmartCompetitorAnalysis';
@@ -56,11 +57,12 @@ const CURRENT_SESSION_KEY = 'llm_qa_current_session';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: <Zap />, path: '/overview' },
-          { label: 'Competitor Insight', icon: <Eye />, path: '/ai-visibility-analysis' },
-      { label: 'Content Enhancement', icon: <FileText />, path: '/enhance-content' },
+  { label: 'Competitor Insight', icon: <Eye />, path: '/ai-visibility-analysis' },
+  { label: 'Product Insights', icon: <BarChart3 />, path: '/product-insights' },
+  { label: 'Content Enhancement', icon: <FileText />, path: '/enhance-content' },
   // { label: 'Content Analysis', icon: <BarChart3 />, path: '/content-analysis' },
   { label: 'Structure Analysis', icon: <Target />, path: '/content-structure-analysis' },
-  { label: 'Ecom Content Analysis', icon: <BarChart3 />, path: '/ecommerce-content-analysis' },
+  { label: 'Content Analysis', icon: <BarChart3 />, path: '/ecommerce-content-analysis' },
     { label: 'Settings', icon: <Settings />, path: '/configuration' },
   // { label: 'Smart Competitor Analysis', icon: <BarChart3 />, path: '/smart-competitor-analysis' },
   { label: 'History', icon: <HistoryIcon />, path: '/history' },
@@ -384,6 +386,7 @@ function AppContent() {
           <div className="main-content-container">
             <Routes>
               <Route path="/overview" element={<Overview />} />
+              <Route path="/product-insights" element={<ProductInsights />} />
               <Route path="/ai-visibility-analysis" element={<CompetitorInsight />} />
               <Route path="/qa-generation" element={<QAGenerationPage />} />
               <Route path="/enhance-content" element={<QAGenerationPage />} />
