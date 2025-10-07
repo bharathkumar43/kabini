@@ -31,7 +31,7 @@ class LLMService {
   }
 
   // Gemini API call
-  async callGeminiAPI(prompt, model = 'gemini-1.5-flash', isQuestion = false, retryCount = 0, continuation = false, accumulated = '') {
+  async callGeminiAPI(prompt, model = 'gemini-2.0-flash', isQuestion = false, retryCount = 0, continuation = false, accumulated = '') {
     if (!this.geminiApiKey) {
       console.error('[Gemini API] API key not configured');
       throw new Error('Gemini API key not configured');
@@ -426,9 +426,9 @@ class LLMService {
   getAvailableModels() {
     return {
       gemini: [
-        { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Recommended)', pricing: { input: 0.000075, output: 0.0003 } },
-        { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', pricing: { input: 0.00125, output: 0.005 } },
-        { value: 'gemini-pro', label: 'Gemini 1.0 Pro (Legacy)', pricing: { input: 0.0005, output: 0.0015 } }
+        { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Recommended)', pricing: { input: 0.000075, output: 0.0003 } },
+        { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', pricing: { input: 0.000075, output: 0.0003 } },
+        { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', pricing: { input: 0.00125, output: 0.005 } }
       ],
       openai: [
         { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Recommended)', pricing: { input: 0.0005, output: 0.0015 } },

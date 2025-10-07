@@ -106,7 +106,7 @@ function Sidebar({ isOpen, setIsOpen, onLogout, user, currentPath }: SidebarProp
               {/* Fallback icon if Zap doesn't render */}
               <span className="text-white text-lg font-bold" style={{ display: 'none' }}>⚡</span>
             </div>
-            <span className="text-lg font-bold text-primary tracking-wide truncate logo-text">kabini.ai</span>
+            <span className="text-lg font-bold text-primary tracking-wide truncate logo-text">Kabini.ai</span>
           </div>
           <button 
             className="md:hidden text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors p-1.5 rounded-md flex items-center justify-center flex-shrink-0 ml-2" 
@@ -176,7 +176,7 @@ function Topbar({ setIsOpen, onLogout }: { setIsOpen: (open: boolean) => void; o
           {/* Fallback icon if Zap doesn't render */}
           <span className="text-white text-lg font-bold" style={{ display: 'none' }}>⚡</span>
         </div>
-        <span className="logo-text text-xl font-extrabold tracking-wide">kabini.ai</span>
+        <span className="logo-text text-xl font-extrabold tracking-wide">Kabini.ai</span>
       </div>
       <div className="flex items-center gap-2">
         {/* Logout button for mobile */}
@@ -210,7 +210,7 @@ function Topbar({ setIsOpen, onLogout }: { setIsOpen: (open: boolean) => void; o
 function Footer() {
   return (
     <footer className="w-full bg-white border-t border-primary/10 text-center text-primary py-3 text-sm">
-      © {new Date().getFullYear()} kabini.ai. All rights reserved.
+      © {new Date().getFullYear()} Kabini.ai. All rights reserved.
     </footer>
   );
 }
@@ -321,7 +321,7 @@ function AppContent() {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-800 font-medium">Loading kabini.ai...</p>
+          <p className="text-gray-800 font-medium">Loading Kabini.ai...</p>
           <p className="text-gray-600 text-sm mt-2">Please wait while we verify your authentication...</p>
         </div>
       </div>
@@ -399,11 +399,11 @@ function AppContent() {
               {/* E-commerce AI removed */}
               <Route path="/configuration" element={<Configuration 
                 questionProvider={"gemini"}
-                questionModel={"gemini-1.5-flash"}
+                questionModel={"gemini-2.0-flash"}
                 onQuestionProviderChange={() => {}}
                 onQuestionModelChange={() => {}}
                 answerProvider={"gemini"}
-                answerModel={"gemini-1.5-flash"}
+                answerModel={"gemini-2.0-flash"}
                 onAnswerProviderChange={() => {}}
                 onAnswerModelChange={() => {}}
                 questionCount={5}

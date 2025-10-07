@@ -122,18 +122,69 @@ const ATTRIBUTE_SYNONYMS: Record<string, string[]> = {
 function computeAttributeMatrix(result: any): AttributeMatrix {
   const attributes: string[] = Object.keys(ATTRIBUTE_SYNONYMS);
   
-  // Always use demo data for Product Insights
-  const demoCompetitors = ['Sephora', 'Ulta', 'Amazon', 'Target', 'Walmart'];
-  const demoData: Record<string, Record<string, number>> = {
-    'Quality': { 'Sephora': 8, 'Ulta': 7, 'Amazon': 6, 'Target': 5, 'Walmart': 4 },
-    'Price': { 'Sephora': 4, 'Ulta': 6, 'Amazon': 8, 'Target': 7, 'Walmart': 9 },
-    'Brand': { 'Sephora': 9, 'Ulta': 7, 'Amazon': 5, 'Target': 6, 'Walmart': 4 },
-    'Organic': { 'Sephora': 6, 'Ulta': 5, 'Amazon': 4, 'Target': 7, 'Walmart': 3 },
-    'Sustainable': { 'Sephora': 7, 'Ulta': 6, 'Amazon': 5, 'Target': 8, 'Walmart': 4 },
-    'Variety': { 'Sephora': 9, 'Ulta': 8, 'Amazon': 9, 'Target': 7, 'Walmart': 6 }
-  };
+  // Use real competitors from the API response
+  const competitors: string[] = (Array.isArray(result?.competitors) ? result.competitors : []).map((c: any) => c?.name || 'Unknown');
+  const counts: Record<string, Record<string, number>> = {};
   
-  return { attributes, competitors: demoCompetitors, counts: demoData };
+  // Initialize counts for all attributes and competitors
+  attributes.forEach(attr => {
+    counts[attr] = {};
+    competitors.forEach(c => {
+      counts[attr][c] = 0;
+    });
+  });
+  
+  // Extract attribute mentions from competitor data
+  (Array.isArray(result?.competitors) ? result.competitors : []).forEach((c: any) => {
+    const name = c?.name || 'Unknown';
+    
+    // Use backend productAttributes if available
+    if (c?.productAttributes && typeof c.productAttributes === 'object') {
+      // Map backend attributes to frontend attributes
+      const attributeMap: Record<string, string> = {
+        'Luxury': 'Luxury',
+        'Affordable': 'Affordable',
+        'Fast Shipping': 'Fast Shipping',
+        'Organic': 'Organic',
+        'Sustainable': 'Sustainable',
+        'Variety': 'Variety',
+        'Cheap Deals': 'Affordable', // Map to Affordable
+        'Minimalist': 'Luxury' // Map to Luxury
+      };
+      
+      Object.entries(c.productAttributes).forEach(([backendAttr, count]) => {
+        const frontendAttr = attributeMap[backendAttr] || backendAttr;
+        if (attributes.includes(frontendAttr)) {
+          counts[frontendAttr][name] = (counts[frontendAttr][name] || 0) + Number(count || 0);
+        }
+      });
+    } else {
+      // Fallback: Get all text content to analyze
+      const texts = [
+        c?.analysis,
+        c?.breakdowns?.gemini?.analysis,
+        c?.breakdowns?.chatgpt?.analysis,
+        c?.breakdowns?.perplexity?.analysis,
+        c?.breakdowns?.claude?.analysis
+      ]
+        .filter((v) => v !== undefined && v !== null)
+        .map((t: any) => String(t || '').toLowerCase());
+      
+      // Count attribute mentions in the text
+      attributes.forEach(attr => {
+        const keywords = ATTRIBUTE_SYNONYMS[attr] || [];
+        texts.forEach(text => {
+          keywords.forEach(keyword => {
+            if (text.includes(keyword.toLowerCase())) {
+              counts[attr][name] = (counts[attr][name] || 0) + 1;
+            }
+          });
+        });
+      });
+    }
+  });
+  
+  return { attributes, competitors, counts };
 }
 
 function ProductGeoBubbleChart({ result }: { result: any }) {
@@ -191,14 +242,49 @@ const toneColor = (tone: ToneKey): string => {
 function SentimentFromCompetitor({ result }: { result: any }) {
   const [showInfo, setShowInfo] = useState(false);
   
-  // Always use demo data for Product Insights
-  const rows = [
-    { name: 'Sephora', tone: 'Positive' as ToneKey, quote: 'Sephora is the leading beauty retailer with an extensive product range and excellent customer service.', source: 'Beauty Industry Report', attr: 'Brand Authority', takeaway: 'Strong positive sentiment reinforces market leadership position.' },
-    { name: 'Ulta', tone: 'Positive' as ToneKey, quote: 'Ulta provides great value with both high-end and drugstore beauty brands.', source: 'Beauty Blog', attr: 'Value Proposition', takeaway: 'Positive framing emphasizes value and accessibility.' },
-    { name: 'Amazon', tone: 'Neutral' as ToneKey, quote: 'Amazon offers convenience and fast shipping for beauty products.', source: 'E-commerce Review', attr: 'Convenience', takeaway: 'Neutral sentiment suggests opportunity for brand differentiation.' },
-    { name: 'Target', tone: 'Positive' as ToneKey, quote: 'Target offers affordable beauty products with good quality and trendy selections.', source: 'Retail Review', attr: 'Affordability', takeaway: 'Positive sentiment around value and trendiness.' },
-    { name: 'Walmart', tone: 'Neutral' as ToneKey, quote: 'Walmart provides basic beauty products at low prices for budget-conscious consumers.', source: 'Consumer Report', attr: 'Price', takeaway: 'Neutral sentiment focused on price point.' }
-  ];
+  // Use real competitors from the API response
+  const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+  const rows = comps.map(c => {
+    const name = c?.name || 'Unknown';
+    
+    // Use backend sentiment data if available
+    if (c?.sentiment && Array.isArray(c.sentiment) && c.sentiment.length > 0) {
+      const s = c.sentiment[0];
+      return {
+        name: s.name || name,
+        tone: (s.tone || 'Neutral') as ToneKey,
+        quote: s.quote || 'No quote available',
+        source: s.source || 'AI Analysis',
+        attr: s.attr || 'General',
+        takeaway: s.takeaway || 'Analysis not available'
+      };
+    }
+    
+    // Otherwise, derive sentiment from AI analysis text
+    const texts = [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis]
+      .filter(Boolean)
+      .map((t: any) => String(t || '').toLowerCase());
+    const allText = texts.join(' ');
+    
+    const posCount = POS_WORDS.filter(w => allText.includes(w)).length;
+    const negCount = NEG_WORDS.filter(w => allText.includes(w)).length;
+    
+    let tone: ToneKey = 'Neutral';
+    if (posCount > negCount && posCount > 1) tone = 'Positive';
+    else if (negCount > posCount && negCount > 1) tone = 'Negative';
+    else if (posCount > 0 && negCount > 0) tone = 'Mixed';
+    
+    const quote = (c?.analysis || '').substring(0, 150) || 'No analysis available';
+    
+    return {
+      name,
+      tone,
+      quote,
+      source: 'AI Analysis',
+      attr: 'General Perception',
+      takeaway: tone === 'Positive' ? 'Strong brand perception' : tone === 'Negative' ? 'Challenges in brand perception' : 'Neutral brand positioning'
+    };
+  });
   return (
     <DashboardCard title="Sentiment Analysis" icon={<BarChartIcon className="w-5 h-5 text-blue-600" />} iconBgColor="bg-gray-200" tooltip="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation in AI-generated content.">
       <div className="mb-3">
@@ -247,14 +333,54 @@ const SIGNAL_KEYWORDS: Record<SignalKey, string[]> = {
 function AuthorityFromCompetitor({ result }: { result: any }) {
   const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
   
-  // Always use demo data for Product Insights
-  const rows = [
-    { name: 'Sephora', counts: { Reviews: 8, Backlinks: 6, 'PR Coverage': 7, 'Certifications/Awards': 9 } },
-    { name: 'Ulta', counts: { Reviews: 7, Backlinks: 5, 'PR Coverage': 6, 'Certifications/Awards': 7 } },
-    { name: 'Amazon', counts: { Reviews: 9, Backlinks: 9, 'PR Coverage': 8, 'Certifications/Awards': 6 } },
-    { name: 'Target', counts: { Reviews: 6, Backlinks: 4, 'PR Coverage': 5, 'Certifications/Awards': 5 } },
-    { name: 'Walmart', counts: { Reviews: 5, Backlinks: 3, 'PR Coverage': 4, 'Certifications/Awards': 3 } }
-  ];
+  // Use real competitors from the API response
+  const rows = comps.map(c => {
+    const name = c?.name || 'Unknown';
+    const counts: Record<SignalKey, number> = { Reviews: 0, Backlinks: 0, 'PR Coverage': 0, 'Certifications/Awards': 0 };
+    
+    // Use backend authority data if available
+    if (c?.authority && Array.isArray(c.authority) && c.authority.length > 0) {
+      c.authority.forEach((a: any) => {
+        const signal = (a.signal || '').toLowerCase();
+        if (signal.includes('review') || signal.includes('trustpilot') || signal.includes('rating')) {
+          counts.Reviews += 1;
+        } else if (signal.includes('backlink') || signal.includes('domain authority')) {
+          counts.Backlinks += 1;
+        } else if (signal.includes('pr') || signal.includes('press') || signal.includes('coverage')) {
+          counts['PR Coverage'] += 1;
+        } else if (signal.includes('certification') || signal.includes('award') || signal.includes('badge')) {
+          counts['Certifications/Awards'] += 1;
+        } else {
+          // Default to Reviews if signal type is unclear
+          counts.Reviews += 1;
+        }
+      });
+    } else {
+      // Otherwise, extract from text analysis
+      const texts = [
+        c?.analysis,
+        c?.breakdowns?.gemini?.analysis,
+        c?.breakdowns?.chatgpt?.analysis,
+        c?.breakdowns?.perplexity?.analysis,
+        c?.breakdowns?.claude?.analysis
+      ]
+        .filter((v) => v !== undefined && v !== null)
+        .map((t: any) => String(t || '').toLowerCase());
+      
+      texts.forEach(text => {
+        SIGNAL_KEYS.forEach(key => {
+          const keywords = SIGNAL_KEYWORDS[key] || [];
+          keywords.forEach(keyword => {
+            if (text.includes(keyword.toLowerCase())) {
+              counts[key] = (counts[key] || 0) + 1;
+            }
+          });
+        });
+      });
+    }
+    
+    return { name, counts };
+  });
   const totals: Record<SignalKey, number> = { Reviews: 0, Backlinks: 0, 'PR Coverage': 0, 'Certifications/Awards': 0 };
   rows.forEach(r => SIGNAL_KEYS.forEach(k => { totals[k] += r.counts[k]; }));
   const max = Math.max(1, ...Object.values(totals));
@@ -270,12 +396,12 @@ function AuthorityFromCompetitor({ result }: { result: any }) {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="flex items-end gap-6">
-          {rows.slice(0, 2).map(r => {
+        <div className="flex items-end gap-3 overflow-x-auto">
+          {rows.map(r => {
             const total = SIGNAL_KEYS.reduce((s,k)=>s+(r.counts[k]||0),0) || 1;
             return (
-              <div key={r.name} className="flex flex-col items-center">
-                <div className="w-28 h-40 bg-gray-100 rounded-md overflow-hidden flex flex-col justify-end">
+              <div key={r.name} className="flex flex-col items-center flex-shrink-0">
+                <div className="w-20 h-40 bg-gray-100 rounded-md overflow-hidden flex flex-col justify-end">
                   <div className="bg-rose-400" style={{ height: `${(r.counts['Certifications/Awards']/total)*100}%` }} />
                   <div className="bg-amber-400" style={{ height: `${(r.counts['PR Coverage']/total)*100}%` }} />
                   <div className="bg-emerald-400" style={{ height: `${(r.counts['Backlinks']/total)*100}%` }} />
@@ -326,36 +452,68 @@ function FAQFromCompetitor({ result }: { result: any }) {
   const sourceCounts: Record<string, number> = { Reddit: 0, Quora: 0, Trustpilot: 0, Forums: 0 };
   const themeCounts: Record<string, number> = { 'Safe checkout': 0, 'Fast shipping': 0, 'Return policy': 0, 'Trusted reviews': 0, 'Authenticity': 0 };
   
-  // Always use demo data for Product Insights
-  const demoCompetitorCounts = { 'Sephora': 12, 'Ulta': 8, 'Amazon': 15, 'Target': 6, 'Walmart': 4 };
-  const demoSourceCounts = { Reddit: 8, Quora: 6, Trustpilot: 12, Forums: 4 };
-  const demoThemeCounts = { 'Safe checkout': 10, 'Fast shipping': 8, 'Return policy': 6, 'Trusted reviews': 12, 'Authenticity': 5 };
-  
-  Object.assign(competitorCounts, demoCompetitorCounts);
-  Object.assign(sourceCounts, demoSourceCounts);
-  Object.assign(themeCounts, demoThemeCounts);
-  
-  // Keep the else block for future real data processing
-  if (false) {
-  comps.forEach(c => {
-    const name = c?.name || 'Unknown';
-    const texts = [
-      c?.analysis,
-      c?.breakdowns?.gemini?.analysis,
-      c?.breakdowns?.chatgpt?.analysis,
-      c?.breakdowns?.perplexity?.analysis,
-      c?.breakdowns?.claude?.analysis
-    ]
-      .filter((v) => v !== undefined && v !== null)
-      .map((t: any) => String(t || '').toLowerCase());
-    let count = 0;
-    texts.forEach(t => {
-      if (t.includes('where can i') || t.includes('where to buy') || t.includes('faq')) count += 1;
-      (FAQ_SOURCE_CATS as readonly string[]).forEach(cat => { if (FAQ_SRC_KWS[cat as any].some(k => t.includes(k))) sourceCounts[cat as any] += 1; });
-      (FAQ_THEMES as readonly string[]).forEach(theme => { if (FAQ_THEME_KWS[theme as any].some(k => t.includes(k))) themeCounts[theme as any] += 1; });
+  // Use real competitors from the API response
+  // Process FAQ data if available in backend
+  if (comps.length > 0) {
+    comps.forEach(c => {
+      const name = c?.name || 'Unknown';
+      
+      // Use backend FAQ data if available
+      if (c?.faq && Array.isArray(c.faq) && c.faq.length > 0) {
+        competitorCounts[name] = c.faq.length;
+        
+        // Extract source and theme information from FAQ data
+        c.faq.forEach((f: any) => {
+          const source = (f.source || '').toLowerCase();
+          const question = (f.question || '').toLowerCase();
+          const answer = (f.answer || '').toLowerCase();
+          const combined = `${source} ${question} ${answer}`;
+          
+          // Count sources
+          (FAQ_SOURCE_CATS as readonly string[]).forEach(cat => { 
+            if (FAQ_SRC_KWS[cat as any].some(k => combined.includes(k))) {
+              sourceCounts[cat as any] += 1;
+            }
+          });
+          
+          // Count themes
+          (FAQ_THEMES as readonly string[]).forEach(theme => { 
+            if (FAQ_THEME_KWS[theme as any].some(k => combined.includes(k))) {
+              themeCounts[theme as any] += 1;
+            }
+          });
+        });
+      } else {
+        // Otherwise, extract from text analysis
+        const texts = [
+          c?.analysis,
+          c?.breakdowns?.gemini?.analysis,
+          c?.breakdowns?.chatgpt?.analysis,
+          c?.breakdowns?.perplexity?.analysis,
+          c?.breakdowns?.claude?.analysis
+        ]
+          .filter((v) => v !== undefined && v !== null)
+          .map((t: any) => String(t || '').toLowerCase());
+        
+        let count = 0;
+        texts.forEach(t => {
+          if (t.includes('where can i') || t.includes('where to buy') || t.includes('faq') || t.includes('question')) {
+            count += 1;
+          }
+          (FAQ_SOURCE_CATS as readonly string[]).forEach(cat => { 
+            if (FAQ_SRC_KWS[cat as any].some(k => t.includes(k))) {
+              sourceCounts[cat as any] += 1;
+            }
+          });
+          (FAQ_THEMES as readonly string[]).forEach(theme => { 
+            if (FAQ_THEME_KWS[theme as any].some(k => t.includes(k))) {
+              themeCounts[theme as any] += 1;
+            }
+          });
+        });
+        competitorCounts[name] = count;
+      }
     });
-    competitorCounts[name] = count;
-  });
   }
   
   const rows = Object.entries(competitorCounts).sort((a,b) => b[1]-a[1]);
@@ -425,143 +583,6 @@ function FAQFromCompetitor({ result }: { result: any }) {
   );
 }
 
-// Demo data function for Product Insights
-function getDemoData() {
-  return {
-    competitors: [
-      {
-        name: 'Sephora',
-        aiScores: { gemini: 8.2, chatgpt: 7.8, perplexity: 7.5, claude: 8.1 },
-        totalScore: 7.9,
-        schemaMarkup: 8,
-        contentQuality: 9,
-        trustSignals: 8,
-        sentiment: [
-          {
-            name: 'Sephora',
-            tone: 'Positive',
-            quote: 'Sephora is the leading beauty retailer with an extensive product range and excellent customer service.',
-            source: 'Beauty Industry Report',
-            attr: 'Brand Authority',
-            takeaway: 'Strong positive sentiment reinforces market leadership position.'
-          }
-        ],
-        authority: [
-          {
-            name: 'Sephora',
-            signal: 'High',
-            source: 'Forbes',
-            context: 'Featured in top beauty retailers list',
-            takeaway: 'Strong authority signals boost credibility and trust.'
-          }
-        ],
-        faq: [
-          {
-            name: 'Sephora',
-            question: 'What makes Sephora different from other beauty retailers?',
-            answer: 'Sephora offers exclusive brands, expert beauty advice, and a comprehensive loyalty program.',
-            source: 'Customer Support',
-            takeaway: 'Clear differentiation in customer communications.'
-          }
-        ],
-        geoData: [
-          { country: 'United States', score: 8.5, mentions: 45 },
-          { country: 'Canada', score: 7.8, mentions: 32 },
-          { country: 'United Kingdom', score: 7.2, mentions: 28 },
-          { country: 'France', score: 8.1, mentions: 38 },
-          { country: 'Germany', score: 6.9, mentions: 22 }
-        ]
-      },
-      {
-        name: 'Ulta',
-        aiScores: { gemini: 7.1, chatgpt: 6.8, perplexity: 7.3, claude: 6.9 },
-        totalScore: 7.0,
-        schemaMarkup: 7,
-        contentQuality: 8,
-        trustSignals: 7,
-        sentiment: [
-          {
-            name: 'Ulta',
-            tone: 'Positive',
-            quote: 'Ulta provides great value with both high-end and drugstore beauty brands.',
-            source: 'Beauty Blog',
-            attr: 'Value Proposition',
-            takeaway: 'Positive framing emphasizes value and accessibility.'
-          }
-        ],
-        authority: [
-          {
-            name: 'Ulta',
-            signal: 'Medium',
-            source: 'Beauty Magazine',
-            context: 'Mentioned in beauty trends article',
-            takeaway: 'Moderate authority signals suggest room for improvement.'
-          }
-        ],
-        faq: [
-          {
-            name: 'Ulta',
-            question: 'Does Ulta offer professional beauty services?',
-            answer: 'Yes, Ulta provides salon services, brow services, and makeup application.',
-            source: 'FAQ Page',
-            takeaway: 'Clear service information helps customer understanding.'
-          }
-        ],
-        geoData: [
-          { country: 'United States', score: 7.8, mentions: 38 },
-          { country: 'Canada', score: 6.5, mentions: 18 },
-          { country: 'United Kingdom', score: 5.2, mentions: 12 },
-          { country: 'France', score: 4.8, mentions: 8 },
-          { country: 'Germany', score: 4.1, mentions: 6 }
-        ]
-      },
-      {
-        name: 'Amazon',
-        aiScores: { gemini: 6.5, chatgpt: 6.8, perplexity: 6.2, claude: 6.7 },
-        totalScore: 6.6,
-        schemaMarkup: 9,
-        contentQuality: 7,
-        trustSignals: 9,
-        sentiment: [
-          {
-            name: 'Amazon',
-            tone: 'Neutral',
-            quote: 'Amazon offers convenience and fast shipping for beauty products.',
-            source: 'E-commerce Review',
-            attr: 'Convenience',
-            takeaway: 'Neutral sentiment suggests opportunity for brand differentiation.'
-          }
-        ],
-        authority: [
-          {
-            name: 'Amazon',
-            signal: 'High',
-            source: 'Tech News',
-            context: 'E-commerce platform authority',
-            takeaway: 'High platform authority but may lack beauty-specific credibility.'
-          }
-        ],
-        faq: [
-          {
-            name: 'Amazon',
-            question: 'Are beauty products on Amazon authentic?',
-            answer: 'Amazon has measures to ensure authenticity, but customers should buy from authorized sellers.',
-            source: 'Help Center',
-            takeaway: 'Addresses common authenticity concerns proactively.'
-          }
-        ],
-        geoData: [
-          { country: 'United States', score: 7.2, mentions: 52 },
-          { country: 'Canada', score: 6.8, mentions: 28 },
-          { country: 'United Kingdom', score: 6.5, mentions: 35 },
-          { country: 'France', score: 6.1, mentions: 22 },
-          { country: 'Germany', score: 6.3, mentions: 25 }
-        ]
-      }
-    ]
-  };
-}
-
 export function ProductInsights() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -576,31 +597,47 @@ export function ProductInsights() {
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasClearedData, setHasClearedData] = useState<boolean>(() => {
-    try { return localStorage.getItem(CLEARED_KEY) === '1'; } catch { return false; }
-  });
+  const [hasClearedData, setHasClearedData] = useState<boolean>(false);
 
   // Restore saved analysis results on component mount
   useEffect(() => {
-    if (hasClearedData) {
+    // Check if user explicitly cleared data in this session
+    const wasCleared = localStorage.getItem(CLEARED_KEY) === '1';
+    if (wasCleared) {
+      // Clear the flag and don't restore
+      localStorage.removeItem(CLEARED_KEY);
       setAnalysisResult(null);
-      return; // Don't restore if user has explicitly cleared data
+      return;
+    }
+    
+    // Only restore if we don't already have MEANINGFUL analysis data
+    const hasMeaningfulData = analysisResult && 
+                               analysisResult.competitors && 
+                               Array.isArray(analysisResult.competitors) && 
+                               analysisResult.competitors.length > 0;
+    
+    if (hasMeaningfulData) {
+      console.log('[ProductInsights] Already have meaningful analysis data, skipping restoration');
+      return;
     }
     
     try {
       const session = sessionManager.getLatestAnalysisSession('product-insights', stableUserId);
       if (session) {
         console.log('[ProductInsights] Restoring cached analysis data:', session);
+        console.log('[ProductInsights] Session has competitors:', session.data?.competitors?.length || 0);
         
         // Restore all cached values
         if (session.inputValue) setWebsiteUrl(session.inputValue);
         if (session.analysisType) setSelectedIndustry(session.analysisType);
         if (session.data) {
           setAnalysisResult(session.data);
+          console.log('[ProductInsights] Analysis result set with', session.data?.competitors?.length || 0, 'competitors');
         }
         
         console.log('[ProductInsights] Cached data restored successfully');
       } else {
+        console.log('[ProductInsights] No session found for user');
         // No session for this user → clear any stale state
         setAnalysisResult(null);
         setWebsiteUrl('');
@@ -615,7 +652,7 @@ export function ProductInsights() {
       console.error('[ProductInsights] Error restoring cached data:', error);
       setError('Failed to restore previous analysis');
     }
-  }, [stableUserId, hasClearedData]);
+  }, [stableUserId, CLEARED_KEY]);
 
   const startAnalysis = async () => {
     if (!websiteUrl.trim()) {
@@ -677,9 +714,9 @@ export function ProductInsights() {
   };
 
   const computeReadinessScore = (result: any): number => {
-    // If no real data, return demo score
+    // Only calculate from real data
     if (!result || !Array.isArray(result?.competitors) || result.competitors.length === 0) {
-      return 78; // Demo score
+      return 0;
     }
 
     const comps: any[] = result.competitors;
@@ -717,7 +754,6 @@ export function ProductInsights() {
       setCountry('');
       setSelectedIndustry('auto');
       setError(null);
-      setHasClearedData(true); // Set flag to prevent restoration
       try { localStorage.setItem(CLEARED_KEY, '1'); } catch {}
       console.log('[ProductInsights] Analysis data cleared');
     } catch (error) {
@@ -727,9 +763,8 @@ export function ProductInsights() {
 
   // Decide what data to render in the results section
   // - When there is a real analysisResult, show it
-  // - When there is no real result and user has NOT clicked New Analysis yet, show demo data
   // - After clicking New Analysis (hasClearedData === true), hide results entirely
-  const resultData = analysisResult || (!hasClearedData ? getDemoData() : null);
+  const resultData = analysisResult;
 
   return (
     <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">

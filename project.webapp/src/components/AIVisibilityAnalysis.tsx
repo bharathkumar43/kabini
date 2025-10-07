@@ -220,6 +220,62 @@ export function CompetitorInsight() {
   const [productCategory, setProductCategory] = useState('');
   const [competitorName, setCompetitorName] = useState('');
   const [country, setCountry] = useState('');
+  const [shopifyProducts, setShopifyProducts] = useState<any[]>([]);
+
+  // Fetch Shopify products on component mount
+  useEffect(() => {
+    const fetchShopifyProducts = async () => {
+      try {
+        const connections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+        if (connections.length === 0) return;
+
+        const allProducts: any[] = [];
+        for (const connection of connections) {
+          if (!connection.token) continue;
+          
+          try {
+            const query = `
+              query {
+                products(first: 50) {
+                  edges {
+                    node {
+                      id
+                      title
+                      handle
+                    }
+                  }
+                }
+              }
+            `;
+
+            const response = await fetch(`https://${connection.shop}/api/2023-10/graphql.json`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Storefront-Access-Token': connection.token,
+              },
+              body: JSON.stringify({ query }),
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const products = data.data?.products?.edges?.map((edge: any) => edge.node) || [];
+              allProducts.push(...products);
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch products from ${connection.shop}:`, error);
+          }
+        }
+        
+        setShopifyProducts(allProducts);
+      } catch (error) {
+        console.error('Error fetching Shopify products:', error);
+      }
+    };
+
+    fetchShopifyProducts();
+  }, []);
+
   const mapIndustryLabel = (raw?: string): string => {
     const s = String(raw || '').toLowerCase();
     if (/tech|software|it|saas|cloud/.test(s)) return 'Information Technology & Services';
@@ -240,9 +296,7 @@ export function CompetitorInsight() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Track if user cleared the page via New Analysis, and persist across navigation
   const CLEARED_KEY = useMemo(() => `kabini_cleared_ai_visibility_${stableUserId}`, [stableUserId]);
-  const [hasClearedData, setHasClearedData] = useState<boolean>(() => {
-    try { return localStorage.getItem(CLEARED_KEY) === '1'; } catch { return false; }
-  });
+  const [hasClearedData, setHasClearedData] = useState<boolean>(false);
 
   // Load history items from service
   useEffect(() => {
@@ -253,15 +307,32 @@ export function CompetitorInsight() {
 
   // Restore cached analysis data after user is known
   useEffect(() => {
-    if (hasClearedData) {
-      // If user explicitly cleared, don't restore cached session
+    // Check if user explicitly cleared data in this session
+    const wasCleared = localStorage.getItem(CLEARED_KEY) === '1';
+    if (wasCleared) {
+      // Clear the flag and don't restore
+      localStorage.removeItem(CLEARED_KEY);
       setAnalysisResult(null);
       return;
     }
+    
+    // Only restore if we don't already have MEANINGFUL analysis data
+    // Check for actual competitor data, not just empty objects
+    const hasMeaningfulData = analysisResult && 
+                               analysisResult.competitors && 
+                               Array.isArray(analysisResult.competitors) && 
+                               analysisResult.competitors.length > 0;
+    
+    if (hasMeaningfulData) {
+      console.log('[AIVisibilityAnalysis] Already have meaningful analysis data, skipping restoration');
+      return;
+    }
+    
     try {
       const session = sessionManager.getLatestAnalysisSession('ai-visibility', stableUserId);
       if (session) {
         console.log('[AIVisibilityAnalysis] Restoring cached analysis data:', session);
+        console.log('[AIVisibilityAnalysis] Session has competitors:', session.data?.competitors?.length || 0);
         
         // Restore all cached values
         if (session.inputValue) setInputValue(session.inputValue);
@@ -273,10 +344,12 @@ export function CompetitorInsight() {
           setAnalysisResult(session.data);
           // If we have cached results, show success message
           setShowSuccessMessage(true);
+          console.log('[AIVisibilityAnalysis] Analysis result set with', session.data?.competitors?.length || 0, 'competitors');
         }
         
         console.log('[AIVisibilityAnalysis] Cached data restored successfully');
       } else {
+        console.log('[AIVisibilityAnalysis] No session found for user');
         // No session for this user → clear any stale state
         setAnalysisResult(null);
         setInputValue('');
@@ -286,7 +359,7 @@ export function CompetitorInsight() {
     } catch (error) {
       console.error('[AIVisibilityAnalysis] Error restoring cached data:', error);
     }
-  }, [stableUserId, hasClearedData]);
+  }, [stableUserId, CLEARED_KEY]);
 
   // Listen for storage changes to auto-refresh
   useEffect(() => {
@@ -297,7 +370,25 @@ export function CompetitorInsight() {
       }
     };
 
+    const handleNewAnalysis = (e: CustomEvent) => {
+      console.log('[AIVisibilityAnalysis] New analysis detected, refreshing session data');
+      // Force refresh of session data
+      try {
+        const session = sessionManager.getLatestAnalysisSession('ai-visibility', stableUserId);
+        if (session && session.data) {
+          setAnalysisResult(session.data);
+          if (session.inputValue) setInputValue(session.inputValue);
+          if (session.inputType) setInputType(session.inputType as 'company' | 'url');
+          if (session.analysisType) setAnalysisType(session.analysisType as 'root-domain' | 'exact-url');
+          setShowSuccessMessage(true);
+        }
+      } catch (error) {
+        console.error('[AIVisibilityAnalysis] Error refreshing session data:', error);
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('new-analysis-created', handleNewAnalysis as EventListener);
     
     // Also check for changes every 3 seconds (fallback)
     const interval = setInterval(() => {
@@ -310,9 +401,10 @@ export function CompetitorInsight() {
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('new-analysis-created', handleNewAnalysis as EventListener);
       clearInterval(interval);
     };
-  }, [historyItems.length]);
+  }, [historyItems.length, stableUserId]);
 
   // Debug effect to monitor analysis result changes
   useEffect(() => {
@@ -566,6 +658,7 @@ export function CompetitorInsight() {
       setInputType('company');
       setAnalysisError(null);
       setShowSuccessMessage(false);
+      try { localStorage.setItem(CLEARED_KEY, '1'); } catch {}
       console.log('[AIVisibilityAnalysis] Analysis data cleared');
     } catch (error) {
       console.error('[AIVisibilityAnalysis] Error clearing analysis data:', error);
@@ -711,6 +804,7 @@ export function CompetitorInsight() {
             detectedIndustry,
             stableUserId
           );
+          console.log('[AIVisibilityAnalysis] Analysis results saved to session storage');
         } catch (e) {
           console.warn('Failed to cache analysis results:', e);
         }
@@ -846,25 +940,10 @@ export function CompetitorInsight() {
     };
   };
 
-  // Placement/Visibility aggregation (backend-only; no static fallback)
+  // Placement/Visibility aggregation (real data only)
   type PlacementDatum = { name: string; first: number; second: number; third: number };
   const computePlacementData = (result: any): PlacementDatum[] => {
     const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
-
-    // If no meaningful placement data, return demo data
-    const hasRealData = competitors.some(c => {
-      const p = c?.aiTraffic?.placementTotals;
-      return p && (Number(p.first) > 0 || Number(p.second) > 0 || Number(p.third) > 0);
-    });
-    if (!hasRealData) {
-      return [
-        { name: 'Sephora', first: 60, second: 23, third: 17 },
-        { name: 'Ulta', first: 22, second: 43, third: 35 },
-        { name: 'Amazon', first: 38, second: 34, third: 28 },
-        { name: 'Target', first: 15, second: 25, third: 60 },
-        { name: 'Walmart', first: 8, second: 32, third: 60 }
-      ];
-    }
 
     const out: PlacementDatum[] = [];
     competitors.forEach((c) => {
@@ -888,7 +967,12 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold text-gray-900">Share of Visibility</h3>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <PieChart className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900">Share of Visibility</h3>
+          </div>
           <button
             onClick={() => setShowInfo(!showInfo)}
             className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -993,17 +1077,6 @@ export function CompetitorInsight() {
   const computeShoppingVisibilityData = (result: any): ShoppingDatum[] => {
     const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
 
-    const hasRealData = competitors.some(c => Number(c?.shopping?.total || 0) > 0);
-    if (!hasRealData) {
-      return [
-        { name: 'Amazon', count: 45 },
-        { name: 'Sephora', count: 32 },
-        { name: 'Ulta', count: 28 },
-        { name: 'Target', count: 18 },
-        { name: 'Walmart', count: 12 }
-      ];
-    }
-
     const fromBackend: ShoppingDatum[] = competitors
       .map((c) => ({ name: c?.name || 'Unknown', count: Number(c?.shopping?.total || 0) }))
       .filter((d) => d.count > 0);
@@ -1018,9 +1091,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Shopping Visibility</h3>
-            <div className="text-xs text-gray-600">Measures how often a competitor is cited as a buying destination in AI answers to transactional queries.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <Target className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Shopping Visibility</h3>
+              <div className="text-xs text-gray-600">Measures how often a competitor is cited as a buying destination in AI answers to transactional queries.</div>
+            </div>
           </div>
           <button
             onClick={() => setShowInfo(!showInfo)}
@@ -1085,17 +1163,6 @@ export function CompetitorInsight() {
   const computeCompetitorMentions = (result: any): MentionByTool[] => {
     const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
 
-    const hasRealData = comps.some(c => Number(c?.aiTraffic?.totalMentions || 0) > 0);
-    if (!hasRealData) {
-      return [
-        { competitor: 'Sephora', total: 24, byTool: { gemini: 6, chatgpt: 8, perplexity: 5, claude: 5 } },
-        { competitor: 'Ulta', total: 18, byTool: { gemini: 4, chatgpt: 6, perplexity: 4, claude: 4 } },
-        { competitor: 'Amazon', total: 16, byTool: { gemini: 3, chatgpt: 5, perplexity: 4, claude: 4 } },
-        { competitor: 'Target', total: 12, byTool: { gemini: 2, chatgpt: 4, perplexity: 3, claude: 3 } },
-        { competitor: 'Walmart', total: 8, byTool: { gemini: 1, chatgpt: 3, perplexity: 2, claude: 2 } }
-      ];
-    }
-
     const rows: MentionByTool[] = [];
     comps.forEach(c => {
       const name = c?.name || 'Unknown';
@@ -1137,9 +1204,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Competitor Mentions</h3>
-            <div className="text-xs text-gray-600">Bar graph of competitors by number of mentions across prompts.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <Users className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Competitor Mentions</h3>
+              <div className="text-xs text-gray-600">Bar graph of competitors by number of mentions across prompts.</div>
+            </div>
           </div>
           <button
             onClick={() => setShowInfo(!showInfo)}
@@ -1192,30 +1264,6 @@ export function CompetitorInsight() {
     );
   };
 
-  // Demo competitor table data for empty analysis
-  const buildDemoTableData = (result: any) => {
-    const company = result?.company || 'Your Brand';
-    const industry = result?.industry || 'Ecommerce & Retail';
-    const mkComp = (name: string, g: number, p: number, c: number, ch: number) => ({
-      name,
-      citationCount: Math.floor((g + p + c + ch) * 80),
-      aiScores: { gemini: g, perplexity: p, claude: c, chatgpt: ch },
-      totalScore: Number(((g + p + c + ch) / 4).toFixed(2)),
-      breakdowns: { gemini: { mentionsScore: g, positionScore: g, sentimentScore: g, brandMentionsScore: g }, perplexity: { mentionsScore: p, positionScore: p, sentimentScore: p, brandMentionsScore: p }, claude: { mentionsScore: c, positionScore: c, sentimentScore: c, brandMentionsScore: c }, chatgpt: { mentionsScore: ch, positionScore: ch, sentimentScore: ch, brandMentionsScore: ch } },
-      keyMetrics: { gemini: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 }, perplexity: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 }, claude: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 }, chatgpt: { mentionsCount: 0, position: 0, sentiment: 0, brandMentions: 0, positiveWords: 0, negativeWords: 0 } }
-    });
-    return {
-      company,
-      industry,
-      competitors: [
-        mkComp('Sephora', 8.6, 8.1, 8.4, 8.2),
-        mkComp('Ulta', 7.4, 7.1, 7.0, 7.2),
-        mkComp('Amazon', 7.9, 7.6, 7.3, 7.5),
-        mkComp('Target', 6.8, 6.5, 6.2, 6.4),
-        mkComp('Walmart', 6.3, 6.1, 6.0, 6.2)
-      ]
-    } as any;
-  };
 
   // Product Analysis in GEO – Bubble Chart (Competitor × Attribute)
   type AttributeMatrix = { attributes: string[]; competitors: string[]; counts: Record<string, Record<string, number>>; examples: Record<string, Record<string, string[]>> };
@@ -1296,9 +1344,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Product Attribute Mentions (GEO)</h3>
-            <div className="text-xs text-gray-600">Highlights which attributes the AI links to each brand in location‑aware queries (e.g., luxury, affordable, organic, sustainable) so you can see how competitors are positioned.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <MapPin className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Product Attribute Mentions (GEO)</h3>
+              <div className="text-xs text-gray-600">Highlights which attributes the AI links to each brand in location‑aware queries (e.g., luxury, affordable, organic, sustainable) so you can see how competitors are positioned.</div>
+            </div>
           </div>
           <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows which product attributes (luxury, affordable, organic, sustainable) AI links to each competitor in location-aware queries. Bubble size indicates frequency. Helps understand how competitors are positioned in the market.">i</button>
         </div>
@@ -1471,9 +1524,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Sources Cited in AI Responses</h3>
-            <div className="text-xs text-gray-600">Donut charts show which source types each AI tool relies on (Blogs, Reviews/Forums, Marketplaces, PR, Directories).</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <Network className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Sources Cited in AI Responses</h3>
+              <div className="text-xs text-gray-600">Donut charts show which source types each AI tool relies on (Blogs, Reviews/Forums, Marketplaces, PR, Directories).</div>
+            </div>
           </div>
           <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows which source types each AI tool relies on for competitor information. Donut charts display distribution across Blogs/Guides, Review Sites/Forums, Marketplaces, News/PR, and Directories. Helps understand AI's information sources.">i</button>
         </div>
@@ -1584,9 +1642,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Competitor Type Breakdown</h3>
-            <div className="text-xs text-gray-600">Donut shows distribution across Direct, Marketplace, Content, Authority, Indirect.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <PieChart className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Competitor Type Breakdown</h3>
+              <div className="text-xs text-gray-600">Donut shows distribution across Direct, Marketplace, Content, Authority, Indirect.</div>
+            </div>
           </div>
           <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how competitors are classified: Direct (retail/brand stores), Indirect (substitutes/alternatives), Marketplaces (Amazon/Etsy), Content (reviews/guides), and Authority (PR/editorial). Helps understand competitive landscape structure.">i</button>
         </div>
@@ -1683,9 +1746,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Content Styles in AI Mentions</h3>
-            <div className="text-xs text-gray-600">Stacked bars: List, Comparison, Recommendation, FAQ, Editorial per competitor.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <Activity className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Content Styles in AI Mentions</h3>
+              <div className="text-xs text-gray-600">Stacked bars: List, Comparison, Recommendation, FAQ, Editorial per competitor.</div>
+            </div>
           </div>
           <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how each competitor is framed in AI responses: Lists (product lists), Comparisons (vs other brands), Recommendations (AI suggestions), FAQ (question-answer format), Editorial (opinion pieces). Helps understand presentation context.">i</button>
         </div>
@@ -1808,9 +1876,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Sentiment Analysis</h3>
-            <div className="text-xs text-gray-600">Tone, example mention, source, attribute/context, and key takeaway per competitor.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <Star className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Sentiment Analysis</h3>
+              <div className="text-xs text-gray-600">Tone, example mention, source, attribute/context, and key takeaway per competitor.</div>
+            </div>
           </div>
           <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation.">i</button>
         </div>
@@ -1899,9 +1972,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Authority Signals</h3>
-            <div className="text-xs text-gray-600">Why AI trusted it — Reviews, Backlinks, PR, Certifications/Awards. Stacked bars by competitor plus an overall donut.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <Shield className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Authority Signals</h3>
+              <div className="text-xs text-gray-600">Why AI trusted it — Reviews, Backlinks, PR, Certifications/Awards. Stacked bars by competitor plus an overall donut.</div>
+            </div>
           </div>
           <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown, donut shows overall distribution.">i</button>
         </div>
@@ -2043,9 +2121,14 @@ export function CompetitorInsight() {
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">FAQ / Conversational Mentions</h3>
-            <div className="text-xs text-gray-600">Which competitors appear in FAQ-style answers, where those mentions come from, and common trust themes.</div>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+              <Bot className="w-5 h-5" style={{ color: '#2563eb' }} />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">FAQ / Conversational Mentions</h3>
+              <div className="text-xs text-gray-600">Which competitors appear in FAQ-style answers, where those mentions come from, and common trust themes.</div>
+            </div>
           </div>
           <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent.">i</button>
         </div>
@@ -2314,8 +2397,16 @@ export function CompetitorInsight() {
                 onPaste={(e) => handlePaste(e, setProductName)}
                 onKeyDown={handleKeyDown}
                 placeholder="Product Name"
+                list="shopify-products-list"
                 className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
               />
+              {shopifyProducts.length > 0 && (
+                <datalist id="shopify-products-list">
+                  {shopifyProducts.map((product) => (
+                    <option key={product.id} value={product.title} />
+                  ))}
+                </datalist>
+              )}
             </div>
             <div className="flex flex-col gap-1 lg:col-span-3">
               <label htmlFor="productCategory" className="text-xs font-semibold text-gray-700">Product Category</label>
@@ -2457,10 +2548,8 @@ export function CompetitorInsight() {
                 <h3 className="text-lg font-semibold text-gray-900">Competitor Analysis</h3>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
               </div>
-              {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 ? (
+              {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 && (
                 <AIVisibilityTable key={`analysis-${refreshKey}`} data={analysisResult} />
-              ) : (
-                <AIVisibilityTable key={`analysis-demo-${refreshKey}`} data={buildDemoTableData(analysisResult || {})} />
               )}
             </div>
             

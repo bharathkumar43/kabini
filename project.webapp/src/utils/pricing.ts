@@ -1,6 +1,11 @@
 // Comprehensive pricing for all LLM providers (per 1K tokens)
 export const PRICING = {
-  // Gemini models
+  // Gemini models (2.0 - Latest)
+  'gemini-2.0-flash': {
+    input: 0.000075,
+    output: 0.0003
+  },
+  // Gemini models (1.5)
   'gemini-1.5-flash': {
     input: 0.000075,
     output: 0.0003

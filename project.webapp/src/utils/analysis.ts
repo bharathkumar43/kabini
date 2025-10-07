@@ -217,7 +217,7 @@ export async function calculateConfidenceWithGemini(
   question: string, 
   content: string, 
   apiKey: string, 
-  model: string = 'gemini-1.5-flash'
+  model: string = 'gemini-2.0-flash'
 ): Promise<number> {
   // Gemini 1.5 context window is ~30,000 tokens, but to be safe, use ~10,000 chars
   const MAX_CHARS = 9000;
@@ -259,7 +259,7 @@ export async function calculateEnhancedConfidence(
   question: string, 
   content: string, 
   apiKey: string, 
-  model: string = 'gemini-1.5-flash'
+  model: string = 'gemini-2.0-flash'
 ): Promise<{ confidence: number, breakdown: { relevance: number, answerability: number, specificity: number, depth: number } }> {
   try {
     const prompt = `Analyze this question's relevance to the given content using these specific criteria:
@@ -370,7 +370,7 @@ export async function calculateQuestionConfidence(
   question: string, 
   content: string, 
   apiKey: string, 
-  model: string = 'gemini-1.5-flash'
+  model: string = 'gemini-2.0-flash'
 ): Promise<{
   confidence: number;
   reasoning: string;
@@ -569,7 +569,7 @@ export async function calculateAccuracyWithGemini(
   answer: string,
   content: string,
   apiKey: string,
-  model: string = 'gemini-1.5-flash'
+  model: string = 'gemini-2.0-flash'
 ): Promise<number> {
   const prompt = `Rate how well the following answer is supported by the given content on a scale of 0 to 100, where 0 means not supported at all and 100 means fully supported.\n\nContent:\n${content}\n\nAnswer:\n${answer}\n\nRespond with ONLY a number between 0 and 100.`;
   const result = await callGeminiAPI(prompt, apiKey, model, false);

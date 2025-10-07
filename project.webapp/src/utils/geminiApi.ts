@@ -2,6 +2,14 @@ import { ApiResult } from '../types';
 
 // Gemini API pricing (per 1K tokens)
 export const PRICING = {
+  'gemini-2.5-flash': {
+    input: 0.000075,
+    output: 0.0003
+  },
+  'gemini-2.5-pro': {
+    input: 0.00125,
+    output: 0.005
+  },
   'gemini-1.5-flash': {
     input: 0.000075,
     output: 0.0003

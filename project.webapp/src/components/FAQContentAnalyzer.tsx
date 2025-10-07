@@ -169,7 +169,7 @@ export function FAQContentAnalyzer() {
     audience: ''
   });
   const [faqProvider, setFaqProvider] = useState('gemini');
-  const [faqModel, setFaqModel] = useState('gemini-1.5-flash');
+  const [faqModel, setFaqModel] = useState('gemini-2.0-flash');
   const [faqTargetKeywords, setFaqTargetKeywords] = useState<string[]>([]);
   const [showFAQSection, setShowFAQSection] = useState(false);
   const [showQuestionsSection, setShowQuestionsSection] = useState(false);
@@ -252,7 +252,7 @@ export function FAQContentAnalyzer() {
   useEffect(() => {
     switch (faqProvider) {
       case 'gemini':
-        setFaqModel('gemini-1.5-flash');
+        setFaqModel('gemini-2.0-flash');
         break;
       case 'openai':
         setFaqModel('gpt-3.5-turbo');
@@ -264,7 +264,7 @@ export function FAQContentAnalyzer() {
         setFaqModel('claude-3.5-sonnet-20241022');
         break;
       default:
-        setFaqModel('gemini-1.5-flash');
+        setFaqModel('gemini-2.0-flash');
     }
   }, [faqProvider]);
   
@@ -442,7 +442,7 @@ export function FAQContentAnalyzer() {
       setFaqs(currentSession.qaData || []);
       setContent(currentSession.blogContent || '');
       setFaqProvider(currentSession.questionProvider || 'gemini');
-      setFaqModel(currentSession.questionModel || (currentSession.questionProvider === 'perplexity' ? 'sonar' : currentSession.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+      setFaqModel(currentSession.questionModel || (currentSession.questionProvider === 'perplexity' ? 'sonar' : currentSession.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-2.0-flash'));
       
       // Restore questions state
       setGeneratedQuestions(currentSession.generatedQuestions || []);
@@ -1351,7 +1351,7 @@ export function FAQContentAnalyzer() {
       setShowFAQSection(true);
       setContent(session.blogContent || '');
       setFaqProvider(session.questionProvider || 'gemini');
-      setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+      setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-2.0-flash'));
       
               // Reset textarea height to accommodate content
         if (textareaRef.current && session.blogContent) {
@@ -1430,6 +1430,7 @@ export function FAQContentAnalyzer() {
     }
 
     setIsGeneratingEcommerce(true);
+    const startedAt = performance.now();
     try {
       const response = await apiService.generateEcommerceContent({
         type: 'product',
@@ -1442,7 +1443,8 @@ export function FAQContentAnalyzer() {
         console.log('[Product Content] Received data:', response.data);
         const normalized = normalizeEcommerceContent(response.data);
         setEcommerceContent(normalized);
-        setNotificationMessage('Product content generated successfully!');
+        const elapsed = Math.round(performance.now() - startedAt);
+        setNotificationMessage(`Product content generated successfully in ${elapsed}ms!`);
       } else {
         console.error('[Product Content] API error:', response.error);
         alert('Failed to generate product content: ' + (response.error || 'Unknown error'));
@@ -1559,9 +1561,9 @@ export function FAQContentAnalyzer() {
       <div className="flex-1 space-y-8">
         {/* Content Input Section */}
         <div className="card bg-white border border-primary/10 shadow-xl">
-          <div className="flex items-center gap-2 mb-6">
-            <FileText className="w-8 h-8 text-black drop-shadow" />
-            <h2 className="text-3xl font-extrabold text-black tracking-tight">GEO Content Writer Tool</h2>
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">GEO Content Writer Tool</h2>
+            <p className="text-gray-600 text-lg">Generate high-quality, SEO-optimized content for your products and categories.</p>
           </div>
           
                 
@@ -2329,7 +2331,7 @@ export function FAQContentAnalyzer() {
                               // Regenerate FAQs for this session
                               setContent(session.blogContent || '');
                               setFaqProvider(session.questionProvider || 'gemini');
-                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-2.0-flash'));
                               generateQuestions();
                             }}
                             className="p-2 bg-white border border-gray-300 rounded-lg text-black hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"
@@ -2430,7 +2432,7 @@ export function FAQContentAnalyzer() {
                               // Regenerate Q&A for this session
                               setContent(session.blogContent || '');
                               setFaqProvider(session.questionProvider || 'gemini');
-                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-1.5-flash'));
+                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-2.0-flash'));
                               generateQuestions();
                             }}
                             className="p-2 bg-white border border-gray-300 rounded-lg text-black hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"

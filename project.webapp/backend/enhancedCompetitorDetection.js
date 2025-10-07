@@ -208,7 +208,7 @@ async function extractCompetitorNamesEnhanced(companyName, searchResults, indust
   }
   
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   
   const searchText = searchResults.map(item => `${item.name}: ${item.snippet}`).join('\n\n');
   
@@ -271,7 +271,7 @@ async function validateCompetitorsEnhanced(companyName, competitorNames, industr
   console.log(`   🤖 Enhanced validation for ${competitorNames.length} competitors of "${companyName}" in parallel...`);
   
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   
   // Process all competitors in parallel
   const validationPromises = competitorNames.map(async (competitor, index) => {

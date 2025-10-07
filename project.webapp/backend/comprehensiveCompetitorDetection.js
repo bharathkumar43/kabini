@@ -203,7 +203,7 @@ async function extractCompetitorNames(companyName, searchResults) {
   }
   
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   
   const searchText = searchResults.map(item => item.name).join('\n');
   
@@ -264,7 +264,7 @@ async function validateCompetitors(companyName, competitorNames, searchResults) 
   console.log(`   🤖 Validating ${competitorNames.length} competitors for "${companyName}"`);
   
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   
   const validatedCompetitors = [];
   

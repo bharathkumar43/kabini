@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { Loader2, Link as LinkIcon, Globe, FileText, Upload, BarChart3, CheckCircle2, XCircle, HelpCircle, Image as ImageIcon, ListChecks, Network, ShieldCheck, AlertTriangle, ExternalLink, Check, X } from 'lucide-react';
+import { Loader2, Link as LinkIcon, Globe, FileText, Upload, BarChart3, CheckCircle2, XCircle, HelpCircle, Image as ImageIcon, ListChecks, Network, ShieldCheck, AlertTriangle, ExternalLink, Check, X, Package, BookOpen, Award, Settings, Shield } from 'lucide-react';
 import { apiService } from '../services/apiService';
 
 type ExtractedContent = {
@@ -282,6 +282,24 @@ function computeScores(
   return { overall, pillars, suggestions: Array.from(new Set(suggestions)) };
 }
 
+// Helper function to get icon for each pillar
+const getPillarIcon = (pillarName: string) => {
+  switch (pillarName) {
+    case 'Product Page Quality':
+      return <Package className="w-5 h-5" style={{ color: '#2563eb' }} />;
+    case 'Category & Guides':
+      return <BookOpen className="w-5 h-5" style={{ color: '#2563eb' }} />;
+    case 'Content Depth & Authority':
+      return <Award className="w-5 h-5" style={{ color: '#2563eb' }} />;
+    case 'Technical & Schema':
+      return <Settings className="w-5 h-5" style={{ color: '#2563eb' }} />;
+    case 'Off Site & Trust Signals':
+      return <Shield className="w-5 h-5" style={{ color: '#2563eb' }} />;
+    default:
+      return <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />;
+  }
+};
+
 export function EcommerceContentAnalysis() {
   const [inputMode, setInputMode] = useState<'url' | 'content'>('url');
   const [urlInput, setUrlInput] = useState('');
@@ -397,6 +415,61 @@ export function EcommerceContentAnalysis() {
     setSelectedShop('');
     setShopProducts([]);
     setShopCursor(null);
+    
+    // Load products from localStorage shopify_connections immediately
+    try {
+      const connections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+      if (connections.length > 0) {
+        setPickerLoading(true);
+        const allProducts: any[] = [];
+        
+        for (const connection of connections) {
+          if (!connection.token) continue;
+          
+          try {
+            const query = `
+              query {
+                products(first: 50) {
+                  edges {
+                    node {
+                      id
+                      title
+                      handle
+                    }
+                  }
+                }
+              }
+            `;
+
+            const response = await fetch(`https://${connection.shop}/api/2023-10/graphql.json`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Storefront-Access-Token': connection.token,
+              },
+              body: JSON.stringify({ query }),
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const products = data.data?.products?.edges?.map((edge: any) => edge.node) || [];
+              allProducts.push(...products.map(p => ({ ...p, shop: connection.shop })));
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch products from ${connection.shop}:`, error);
+          }
+        }
+        
+        setShopProducts(allProducts);
+        if (allProducts.length > 0 && connections.length > 0) {
+          setSelectedShop(connections[0].shop);
+        }
+        setPickerLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading Shopify products:', error);
+    }
+    
     await loadConnections();
     // Also load storefront-connected shops for convenience
     try {
@@ -428,6 +501,8 @@ export function EcommerceContentAnalysis() {
     setCompetitorCoverage([]);
     setPriceOffers([]);
     setError(null);
+    setUrlInput('');
+    setContentInput('');
     localStorage.removeItem('contentAnalysisResults');
   };
 
@@ -631,20 +706,7 @@ export function EcommerceContentAnalysis() {
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-3">Content Analysis Dashboard</h2>
           <p className="text-gray-600 text-lg">Enter your website URL or paste HTML content to analyze your e-commerce content structure and optimization.</p>
-          {extracted && (
-            <div className="mt-4 flex items-center justify-center gap-4">
-              <div className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                <CheckCircle2 className="w-4 h-4" />
-                Analysis Results Loaded
-              </div>
-              <button
-                onClick={clearAnalysis}
-                className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors"
-              >
-                Clear Results
-              </button>
-            </div>
-          )}
+          {/* Status badges removed per request */}
         </div>
 
         {/* Analysis Configuration - Structured Inputs */}
@@ -665,24 +727,24 @@ export function EcommerceContentAnalysis() {
           </div>
 
         {inputMode === 'url' ? (
-          <div className="flex gap-2">
+          <div className="flex gap-3 items-center">
             <input
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://example.com/product"
-              className="flex-1 border rounded-lg px-3 py-2"
+              className="flex-1 h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
             />
-            <button onClick={openPicker} type="button" className="px-3 py-2 rounded-lg bg-white border text-gray-800 hover:bg-gray-50">Pick from Shopify</button>
-            <button onClick={runAnalysis} disabled={isAnalyzing} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={openPicker} type="button" className="h-11 px-4 rounded-lg bg-white border border-gray-300 text-gray-800 hover:bg-gray-50 font-medium transition-colors">Pick from Shopify</button>
+            <button onClick={runAnalysis} disabled={isAnalyzing} className="h-11 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors flex items-center gap-2">
               {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Analyze'}
             </button>
           </div>
         ) : (
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-3 mb-3">
               <input type="file" accept=".html,.htm,.txt,.md" ref={fileRef} onChange={handleFileUpload} className="hidden" />
-              <button onClick={() => fileRef.current?.click()} className="px-3 py-2 bg-white border rounded-lg text-gray-700 hover:bg-gray-50">
-                <Upload className="w-4 h-4 inline mr-1" /> Upload
+              <button onClick={() => fileRef.current?.click()} className="h-11 px-4 bg-white border border-gray-300 rounded-lg text-gray-800 hover:bg-gray-50 font-medium transition-colors flex items-center gap-2">
+                <Upload className="w-4 h-4" /> Upload File
               </button>
             </div>
             <textarea
@@ -690,10 +752,10 @@ export function EcommerceContentAnalysis() {
               onChange={(e) => setContentInput(e.target.value)}
               rows={8}
               placeholder="Paste HTML or raw text here..."
-              className="w-full border rounded-lg px-3 py-2"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 text-sm"
             />
-            <div className="mt-2">
-              <button onClick={runAnalysis} disabled={isAnalyzing} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+            <div className="mt-3">
+              <button onClick={runAnalysis} disabled={isAnalyzing} className="h-11 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors flex items-center gap-2">
                 {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Analyze'}
               </button>
             </div>
@@ -712,43 +774,16 @@ export function EcommerceContentAnalysis() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg border border-gray-200 w-full max-w-3xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="font-semibold text-black">Select a product</div>
+              <div>
+                <div className="font-semibold text-black">Select a product</div>
+                {shopProducts.length > 0 && !pickerLoading && (
+                  <div className="text-xs text-green-600 mt-1">
+                    ✓ Loaded {shopProducts.length} product{shopProducts.length !== 1 ? 's' : ''} from connected Shopify stores
+                  </div>
+                )}
+              </div>
               <button onClick={() => setIsPickerOpen(false)} className="text-gray-600">✕</button>
             </div>
-            <div className="flex items-center gap-2 mb-3">
-              <label className="text-sm text-gray-700">Source</label>
-              <select value={pickerMode} onChange={e => { setPickerMode(e.target.value as any); setShopProducts([]); setShopCursor(null); }} className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black">
-                <option value="oauth">Admin OAuth (connected shops)</option>
-                <option value="storefront">Storefront (token saved)</option>
-              </select>
-            </div>
-
-            {pickerMode === 'oauth' ? (
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <select value={selectedShop} onChange={e => { setSelectedShop(e.target.value); setShopProducts([]); setShopCursor(null); }} className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black">
-                    <option value="">Select a connected shop (Admin OAuth)</option>
-                    {adminShops.map((s, i) => (<option key={i} value={s.shop}>{s.shop}</option>))}
-                  </select>
-                  <button onClick={() => selectedShop && loadProducts(selectedShop)} disabled={!selectedShop || pickerLoading} className="px-3 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">{pickerLoading ? 'Loading…' : 'Load products'}</button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <select value={selectedShop} onChange={e => { setSelectedShop(e.target.value); setShopProducts([]); setShopCursor(null); }} className="bg-white border border-black/20 rounded-lg px-3 py-2 text-black">
-                    <option value="">Select a storefront shop</option>
-                    {sfShops.map((s, i) => (<option key={i} value={s.shop}>{s.shop}</option>))}
-                  </select>
-                  <button onClick={() => selectedShop && loadStorefrontProducts(selectedShop)} disabled={!selectedShop || pickerLoading} className="px-3 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">{pickerLoading ? 'Loading…' : 'Load products'}</button>
-                </div>
-                <div className="text-xs text-gray-600">Requires a saved Storefront token for this shop in Settings → Integrations.</div>
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                  <span>Or use public sitemap (no auth):</span>
-                  <button onClick={async () => { if (!selectedShop) return; setPickerLoading(true); try { const res:any = await apiService.listPublicShopifyProducts((selectedShop||'').trim()); const items = (res?.items||[]).map((i:any)=>({ id:i.url, title:i.title, handle:i.handle })); setShopProducts(items); setShopCursor(null);} finally { setPickerLoading(false);} }} className="px-2 py-1 border rounded">Load public products</button>
-                </div>
-              </div>
-            )}
 
             <div className="mt-3">
               <input
@@ -760,8 +795,13 @@ export function EcommerceContentAnalysis() {
             </div>
 
             <div className="max-h-80 overflow-auto border rounded bg-white">
-              {shopProducts.length === 0 ? (
-                <div className="text-sm text-gray-600 p-3">No products loaded.</div>
+              {pickerLoading ? (
+                <div className="text-sm text-gray-600 p-3 flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  Loading products...
+                </div>
+              ) : shopProducts.length === 0 ? (
+                <div className="text-sm text-gray-600 p-3">No products loaded. Connect Shopify in Dashboard to see products.</div>
               ) : (
                 <div className="divide-y">
                   {(pickerSearch
@@ -771,7 +811,7 @@ export function EcommerceContentAnalysis() {
                       })
                     : shopProducts
                   ).map((p) => (
-                    <button key={p.id} onClick={() => onChooseProduct(selectedShop, p.handle)} className="w-full text-left p-3 bg-white hover:bg-gray-50 focus:bg-white focus:outline-none">
+                    <button key={p.id} onClick={() => onChooseProduct(p.shop || selectedShop, p.handle)} className="w-full text-left p-3 bg-white hover:bg-gray-50 focus:bg-white focus:outline-none">
                       <div className="font-medium text-black">{p.title}</div>
                       <div className="text-xs text-gray-600">/{p.handle}</div>
                     </button>
@@ -799,17 +839,50 @@ export function EcommerceContentAnalysis() {
         <div className="space-y-6">
           {/* Overview */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="text-base text-green-800 mb-1">AI Readiness Score</div>
-              <div className="text-4xl font-extrabold text-green-900">{results.overall}%</div>
+            <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                  <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />
+                </div>
+                <h3 className="text-base font-semibold" style={{ color: '#000000' }}>AI Readiness Score</h3>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl font-bold text-gray-900 mb-1">{results.overall}</div>
+                <div className="text-sm text-gray-600 mb-2">out of 100</div>
+                <div className={`text-lg font-bold mb-4 ${
+                  results.overall >= 80 ? 'text-emerald-600' :
+                  results.overall >= 60 ? 'text-blue-600' :
+                  results.overall >= 40 ? 'text-amber-600' :
+                  results.overall >= 20 ? 'text-orange-600' :
+                  'text-red-600'
+                }`}>
+                  {results.overall >= 80 ? 'Excellent' :
+                   results.overall >= 60 ? 'Good' :
+                   results.overall >= 40 ? 'Fair' :
+                   results.overall >= 20 ? 'Poor' :
+                   'Very Poor'}
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className={`h-2 rounded-full ${
+                      results.overall >= 80 ? 'bg-emerald-500' :
+                      results.overall >= 60 ? 'bg-blue-500' :
+                      results.overall >= 40 ? 'bg-amber-500' :
+                      results.overall >= 20 ? 'bg-orange-500' :
+                      'bg-red-500'
+                    }`}
+                    style={{ width: `${results.overall}%` }}
+                  ></div>
+                </div>
+              </div>
             </div>
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="text-base text-gray-700">Title</div>
-              <div className="font-medium text-black truncate" title={extracted.title || ''}>{extracted.title || '—'}</div>
+              <div className="text-lg font-semibold mb-2" style={{ color: '#000000' }}>Title</div>
+              <div className="text-base font-medium text-black break-words">{extracted.title || '—'}</div>
             </div>
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="text-base text-gray-700">Description</div>
-              <div className="text-black line-clamp-2" title={extracted.metaDescription || ''}>{extracted.metaDescription || '—'}</div>
+              <div className="text-lg font-semibold mb-2" style={{ color: '#000000' }}>Description</div>
+              <div className="text-base text-black break-words">{extracted.metaDescription || '—'}</div>
             </div>
           </div>
 
@@ -818,7 +891,12 @@ export function EcommerceContentAnalysis() {
             {results.pillars.map(p => (
               <div key={p.name} className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="font-semibold text-black">{p.name}</div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                      {getPillarIcon(p.name)}
+                    </div>
+                    <div className="text-lg font-semibold" style={{ color: '#000000' }}>{p.name}</div>
+                  </div>
                   <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">{p.score}%</span>
                 </div>
                 <div className="divide-y">
@@ -842,7 +920,12 @@ export function EcommerceContentAnalysis() {
           {priceOffers && priceOffers.length > 0 && (
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-4">
-                <div className="font-semibold text-black">Price Comparison</div>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                    <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  </div>
+                  <div className="text-lg font-semibold" style={{ color: '#000000' }}>Price Comparison</div>
+                </div>
                 <span className="text-sm text-gray-600">Typically {(() => {
                   const prices = priceOffers.map(o => o.price).filter(Boolean);
                   const min = Math.min(...prices);
@@ -942,13 +1025,23 @@ export function EcommerceContentAnalysis() {
           {/* Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="font-semibold text-black mb-2">Structure</div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                  <FileText className="w-5 h-5" style={{ color: '#2563eb' }} />
+                </div>
+                <div className="text-lg font-semibold" style={{ color: '#000000' }}>Structure</div>
+              </div>
               <div className="text-base text-black"><strong>H1</strong>: {extracted.h1.join(' | ') || '—'}</div>
               <div className="text-base text-black mt-1"><strong>H2</strong>: {extracted.h2.slice(0,6).join(' | ') || '—'}</div>
               <div className="text-base text-black mt-1"><strong>H3</strong>: {extracted.h3.slice(0,6).join(' | ') || '—'}</div>
             </div>
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="font-semibold text-black mb-2">Schema & Media</div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                  <ImageIcon className="w-5 h-5" style={{ color: '#2563eb' }} />
+                </div>
+                <div className="text-lg font-semibold" style={{ color: '#000000' }}>Schema & Media</div>
+              </div>
               <div className="text-base text-black">Product schema: {extracted.productSchemaFound ? 'Yes' : 'No'}</div>
               <div className="text-base text-black">FAQ schema: {extracted.faqSchemaFound ? 'Yes' : 'No'}</div>
               <div className="text-base text-black">Breadcrumb: {extracted.breadcrumbSchemaFound ? 'Yes' : 'No'}</div>
@@ -959,7 +1052,12 @@ export function EcommerceContentAnalysis() {
 
           {/* Suggestions */}
           <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-            <div className="font-semibold text-black mb-2">Actionable Suggestions</div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                <ListChecks className="w-5 h-5" style={{ color: '#2563eb' }} />
+              </div>
+              <div className="text-lg font-semibold" style={{ color: '#000000' }}>Actionable Suggestions</div>
+            </div>
             {results.suggestions.length === 0 ? (
               <div className="text-base text-green-700">No critical issues found. Great job!</div>
             ) : (
@@ -975,7 +1073,12 @@ export function EcommerceContentAnalysis() {
           {offsite && (
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-3">
-                <div className="font-semibold text-black">Off‑Site & Trust Signals</div>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                    <ShieldCheck className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  </div>
+                  <div className="text-lg font-semibold" style={{ color: '#000000' }}>Off‑Site & Trust Signals</div>
+                </div>
                 <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">
                   {(() => { const p = results.pillars.find(pp => pp.name === 'Off-Site & Trust Signals'); return p ? p.score : 0; })()}%
                 </span>
@@ -1017,7 +1120,12 @@ export function EcommerceContentAnalysis() {
           {/* Competitors (Google CSE) - render only when data ready */}
           {(brandCompetitors.length > 0 || (competitors && competitors.length > 0)) && (
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="font-semibold text-black mb-2">Product Competitors</div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                  <Network className="w-5 h-5" style={{ color: '#2563eb' }} />
+                </div>
+                <div className="text-lg font-semibold" style={{ color: '#000000' }}>Product Competitors</div>
+              </div>
               {brandCompetitors.length > 0 && (
                 <div className="mb-3 text-base text-black">
                   <div className="font-medium mb-1">Similar brands</div>

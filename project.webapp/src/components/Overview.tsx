@@ -3018,6 +3018,7 @@ function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
 
 export function Overview() {
   const { user } = useAuth();
+  const stableUserId = user?.id || (user as any)?.email || (user as any)?.name || 'anonymous';
   const navigate = useNavigate();
   
   // Unified analysis state (restored from original)
@@ -3059,6 +3060,40 @@ export function Overview() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+
+  // Restore latest saved session via SessionManager (cross-page persistence)
+  useEffect(() => {
+    // Only restore if we don't already have MEANINGFUL analysis data
+    const hasMeaningfulData = analysisResult && 
+                               analysisResult.competitors && 
+                               Array.isArray(analysisResult.competitors) && 
+                               analysisResult.competitors.length > 0;
+    
+    if (hasMeaningfulData) {
+      console.log('[Overview] Already have meaningful analysis data, skipping restoration');
+      return;
+    }
+    
+    try {
+      const session = sessionManager.getLatestAnalysisSession('overview', stableUserId);
+      if (session) {
+        console.log('[Overview] Restoring cached analysis data:', session);
+        console.log('[Overview] Session has competitors:', session.data?.competitors?.length || 0);
+        if (session.inputValue) setInputValue(session.inputValue);
+        if (session.inputType) setInputType((session.inputType as 'company' | 'url') || 'company');
+        if (session.analysisType) setAnalysisType((session.analysisType as 'root-domain' | 'exact-url') || 'root-domain');
+        if (session.data) {
+          setAnalysisResult(session.data);
+          console.log('[Overview] Analysis result set with', session.data?.competitors?.length || 0, 'competitors');
+        }
+        console.log('[Overview] Cached data restored successfully');
+      } else {
+        console.log('[Overview] No session found for user');
+      }
+    } catch (e) {
+      console.error('[Overview] Failed to restore session:', e);
+    }
+  }, [stableUserId]);
   
   // Modal states
   const [showShopifyModal, setShowShopifyModal] = useState(false);
@@ -3257,6 +3292,20 @@ export function Overview() {
             data: enhancedResult,
             timestamp: Date.now()
           }));
+          // Persist using SessionManager for cross-page restore
+          try {
+            sessionManager.saveAnalysisSession(
+              'overview',
+              enhancedResult,
+              inputValue,
+              analysisType,
+              detectedInputType,
+              detectedIndustry,
+              stableUserId
+            );
+          } catch (err) {
+            console.warn('[Overview] SessionManager save failed:', err);
+          }
         } catch (e) {
           console.warn('Failed to save analysis:', e);
         }
@@ -3488,6 +3537,20 @@ export function Overview() {
             data: enhancedResult,
             timestamp: Date.now()
           }));
+          // Persist using SessionManager for cross-page restore
+          try {
+            sessionManager.saveAnalysisSession(
+              'overview',
+              enhancedResult,
+              product.title,
+              analysisType,
+              detectedInputType,
+              detectedIndustry,
+              stableUserId
+            );
+          } catch (err) {
+            console.warn('[Overview] SessionManager save failed:', err);
+          }
         } catch (e) {
           console.warn('Failed to save analysis:', e);
         }
@@ -3712,35 +3775,29 @@ export function Overview() {
   if (!analysisResult) {
     return (
       <>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              AI Visibility Product Tracker
-            </h1>
-            <p className="text-xl text-gray-600 max-w-4xl mx-auto">
-              Track product visibility across AI assistants and shopping search with actionable insights.
-            </p>
-          </div>
-
+      <div className="min-h-screen bg-gray-50" style={{ 
+        marginLeft: '-2rem',
+        marginRight: '-2rem',
+        marginTop: '-2rem',
+        marginBottom: 0,
+        width: 'calc(100% + 4rem)',
+        maxWidth: 'none'
+      }}>
+        <div className="w-full px-0 py-8">
           {/* Start Your Analysis Section */}
-          <div className="bg-white rounded-3xl shadow-lg p-8 md:p-12 mb-12">
+          <div className="bg-white rounded-none shadow-lg p-6 sm:p-8 lg:p-12 xl:p-16 mb-0">
+            {/* Header */}
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">
-                Start Your Analysis
-              </h2>
-              <p className="text-lg text-gray-600">
-                Choose how you'd like to analyze your products
-              </p>
+              <h2 className="text-4xl font-bold text-gray-900 mb-3">AI Visibility Product Tracker</h2>
+              <p className="text-gray-600 text-lg">Track product visibility across AI assistants and shopping search with actionable insights.</p>
             </div>
-
             {/* URL/Product Name Input Section */}
-            <div className="mb-8">
-              <label htmlFor="website-input" className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="bg-gray-50 border border-gray-300 rounded-xl p-4 sm:p-6 mb-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+                <div className="flex flex-col gap-1 lg:col-span-10">
+                  <label htmlFor="website-input" className="text-xs font-semibold text-gray-700">
                 Website URL or Product Name
               </label>
-              <div className="flex flex-col sm:flex-row gap-4">
                 <input
                   id="website-input"
                   type="text"
@@ -3766,17 +3823,20 @@ export function Overview() {
                     }
                   }}
                   placeholder="Enter website URL or product name..."
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="h-11 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm w-full"
                   disabled={isAnalyzing}
                 />
+                </div>
+                <div className="flex flex-col gap-1 lg:col-span-2">
+                  <label className="text-xs font-semibold text-gray-700 opacity-0">Action</label>
                 <button
                   onClick={startAnalysis}
                   disabled={isAnalyzing || !inputValue.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-8 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors shadow-lg min-w-[180px]"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white h-11 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
                 >
                   {isAnalyzing ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                       Analyzing...
                     </>
                   ) : (
@@ -3786,6 +3846,7 @@ export function Overview() {
                     </>
                   )}
                 </button>
+                </div>
               </div>
             </div>
 
@@ -3989,7 +4050,7 @@ export function Overview() {
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
             Welcome {user?.displayName?.split(' ')[0] || user?.name?.split(' ')[0] || 'User'}
           </h1>
-          <p className="text-gray-600 mt-2">Welcome to kabini.ai - Your AI-Powered Content Enhancement Platform</p>
+          <p className="text-gray-600 mt-2">Welcome to Kabini.ai - Your AI-Powered Content Enhancement Platform</p>
         </div>
         <button
           onClick={() => {

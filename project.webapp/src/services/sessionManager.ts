@@ -14,7 +14,7 @@ interface AnalysisSession {
 class SessionManager {
   private readonly SESSION_PREFIX = 'kabini_analysis_session_';
   private readonly SESSION_EXPIRY_DAYS = 7; // Sessions expire after 7 days
-  private readonly MAX_SESSIONS_PER_TYPE = 5; // Keep max 5 sessions per analysis type
+  private readonly MAX_SESSIONS_PER_TYPE = 2; // Keep max 2 sessions per analysis type (reduced to save space)
 
   /**
    * Save analysis data with proper session management
@@ -45,8 +45,29 @@ class SessionManager {
       industry
     };
 
-    // Save the session
-    localStorage.setItem(this.SESSION_PREFIX + sessionId, JSON.stringify(session));
+    // Try to save the session
+    try {
+      localStorage.setItem(this.SESSION_PREFIX + sessionId, JSON.stringify(session));
+      console.log(`[SessionManager] Saved ${type} session:`, sessionId);
+    } catch (error: any) {
+      if (error.name === 'QuotaExceededError') {
+        console.warn('[SessionManager] localStorage quota exceeded, clearing old sessions...');
+        
+        // Aggressively clear old sessions
+        this.emergencyCleanup();
+        
+        // Try again after cleanup
+        try {
+          localStorage.setItem(this.SESSION_PREFIX + sessionId, JSON.stringify(session));
+          console.log(`[SessionManager] Saved ${type} session after cleanup:`, sessionId);
+        } catch (retryError) {
+          console.error('[SessionManager] Failed to save session even after cleanup:', retryError);
+          throw retryError;
+        }
+      } else {
+        throw error;
+      }
+    }
 
     // Update session index
     this.updateSessionIndex(type, sessionId);
@@ -54,7 +75,6 @@ class SessionManager {
     // Clean up old sessions
     this.cleanupOldSessions(type);
 
-    console.log(`[SessionManager] Saved ${type} session:`, sessionId);
     return sessionId;
   }
 
@@ -267,6 +287,55 @@ class SessionManager {
     const now = Date.now();
     const ageMs = now - session.timestamp;
     return Math.floor(ageMs / (1000 * 60 * 60)); // Convert to hours
+  }
+
+  /**
+   * Emergency cleanup when localStorage quota is exceeded
+   */
+  private emergencyCleanup(): void {
+    console.log('[SessionManager] Starting emergency cleanup...');
+    
+    // 1. Clear ALL old analysis sessions (keep only the most recent 2 per type)
+    const types: AnalysisSession['type'][] = ['overview', 'ai-visibility', 'content-structure', 'competitor', 'product-insights'];
+    types.forEach(type => {
+      const sessionIds = this.getSessionIndex(type);
+      // Sort by timestamp (oldest first) and keep only 2 most recent
+      const sorted = sessionIds.sort();
+      const toDelete = sorted.slice(0, Math.max(0, sorted.length - 2));
+      toDelete.forEach(sessionId => {
+        try {
+          localStorage.removeItem(this.SESSION_PREFIX + sessionId);
+        } catch (e) {
+          console.error('[SessionManager] Error removing session:', e);
+        }
+      });
+      // Update index with remaining sessions
+      const remaining = sorted.slice(Math.max(0, sorted.length - 2));
+      this.setSessionIndex(type, remaining);
+      console.log(`[SessionManager] Cleared ${toDelete.length} old ${type} sessions, kept ${remaining.length}`);
+    });
+    
+    // 2. Clear other large localStorage items that might be taking up space
+    const keysToCheck = [
+      'comprehensive_history',
+      'llm_qa_sessions',
+      'overview_market_analysis',
+      'contentAnalysisResults'
+    ];
+    
+    keysToCheck.forEach(key => {
+      try {
+        const item = localStorage.getItem(key);
+        if (item && item.length > 50000) { // If larger than 50KB
+          localStorage.removeItem(key);
+          console.log(`[SessionManager] Removed large item: ${key} (${Math.round(item.length / 1024)}KB)`);
+        }
+      } catch (e) {
+        console.error(`[SessionManager] Error checking/removing ${key}:`, e);
+      }
+    });
+    
+    console.log('[SessionManager] Emergency cleanup completed');
   }
 }
 
