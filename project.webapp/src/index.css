@@ -760,13 +760,15 @@ svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: white !important;
   flex-shrink: 0;
 }
 
 .user-avatar svg {
   width: 1.25rem;
   height: 1.25rem;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 .user-details {
@@ -799,7 +801,7 @@ svg {
   background: #2563eb; /* Blue-600 instead of black */
   border: 1px solid #2563eb; /* Blue-600 instead of black */
   border-radius: 0.5rem;
-  color: #ffffff;
+  color: #ffffff !important;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -813,12 +815,14 @@ svg {
 .logout-button:hover {
   background: #1d4ed8; /* Blue-700 instead of grey-800 */
   border-color: #1d4ed8; /* Blue-700 instead of grey-800 */
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 .logout-button svg {
   width: 1rem;
   height: 1rem;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* Left align all page content - FIXED LAYOUT */

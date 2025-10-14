@@ -71,6 +71,7 @@ import { contentStructureService } from '../services/contentStructureService';
 import { apiService } from '../services/apiService';
 import { authService } from '../services/authService';
 import { historyService } from '../services/historyService';
+import { sessionManager } from '../services/sessionManager';
 import type { ContentStructureAnalysis, StructureSuggestion } from '../services/contentStructureService';
 import SchemaGenerator from './SchemaGenerator';
 import { applySuggestionsWithDOM, scoreLLMUnderstandability } from '../utils/analysis';
@@ -78,6 +79,32 @@ import { StructureAnalysisHistoryItem } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import SuccessNotification from './ui/SuccessNotification';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+
+// Format long URLs for subtitle display: remove query/hash and truncate middle
+const formatDisplayUrl = (input?: string): string => {
+  const MAX = 80;
+  if (!input) return 'Structure Analysis';
+  try {
+    const u = new URL(input);
+    const path = (u.pathname || '').replace(/\/$/, '');
+    const base = `${u.protocol}//${u.hostname}${path}`;
+    const truncateMiddle = (str: string, max: number) => {
+      if (str.length <= max) return str;
+      const start = str.substring(0, max / 2 - 2);
+      const end = str.substring(str.length - (max / 2 - 1));
+      return `${start}...${end}`;
+    };
+    return truncateMiddle(base, MAX);
+  } catch {
+    const truncateMiddle = (str: string, max: number) => {
+      if (str.length <= max) return str;
+      const start = str.substring(0, max / 2 - 2);
+      const end = str.substring(str.length - (max / 2 - 1));
+      return `${start}...${end}`;
+    };
+    return truncateMiddle(input, MAX);
+  }
+};
 
 interface ContentStructureAnalysisProps {
   content: string;
@@ -419,84 +446,72 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
             try { localStorage.setItem(getStructureLastSavedKey(), new Date().toISOString()); } catch {}
   };
 
-  // Restore state on mount (lightweight only)
+  // Restore analysis session on mount
   useEffect(() => {
-    // First, try to restore from the most recent analysis (regardless of content prop)
-    const keys = Object.keys(localStorage);
-            const structureKeys = keys.filter(key => key.startsWith(getStructureAnalysisKey()));
+    const stableUserId = authService.getCurrentUserId() || 'anonymous';
     
-    if (structureKeys.length > 0) {
-      // Get the most recent analysis by finding the one with the most recent timestamp
-      let mostRecentKey = structureKeys[0];
-      let mostRecentTime = 0;
+    console.log('[Structure Analysis] Attempting to restore session, current analysis:', !!analysis);
+    
+    // Only restore if we don't already have analysis data
+    if (analysis) {
+      console.log('[Structure Analysis] Skipping restoration - analysis already exists');
+      return;
+    }
+    
+    try {
+      const session = sessionManager.getLatestAnalysisSession('structure-analysis', stableUserId);
+      console.log('[Structure Analysis] Retrieved session:', !!session);
       
-      for (const key of structureKeys) {
-        try {
-          const saved = localStorage.getItem(key);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed.lastAccessed && parsed.lastAccessed > mostRecentTime) {
-              mostRecentTime = parsed.lastAccessed;
-              mostRecentKey = key;
-            }
-          }
-        } catch {}
-      }
-      
-      // If no timestamp found, use the first key with analysis data
-      if (mostRecentTime === 0) {
-        for (const key of structureKeys) {
-          try {
-            const saved = localStorage.getItem(key);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              if (parsed.analysis) {
-                mostRecentKey = key;
-                break;
-              }
-            }
-          } catch {}
+      if (session) {
+        console.log('[Structure Analysis] Restoring cached analysis data:', session);
+        
+        // Restore the analysis data
+        if (session.data) {
+          console.log('[Structure Analysis] Setting analysis data');
+          setAnalysis(session.data);
         }
-      }
-      
-      // Restore from the most recent analysis
-      const saved = localStorage.getItem(mostRecentKey);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.urlInput) setUrlInput(parsed.urlInput);
-          if (parsed.activeTab) setActiveTab(parsed.activeTab);
-          if (parsed.structuredView) setStructuredView(parsed.structuredView);
-          if (parsed.schemaView) setSchemaView(parsed.schemaView);
-          if (parsed.codeViewType) {
-            const allowed = new Set(['landing', 'code', 'improved']);
-            setCodeViewType(allowed.has(parsed.codeViewType) ? parsed.codeViewType : 'landing');
-          }
-          // Do not restore large blobs like analysis or fullPageHtml to avoid blank screens
-          if (!pastedContent && parsed.pastedPreview) setPastedContent(parsed.pastedPreview);
-          if (parsed.improvedFullPageHtml) setImprovedFullPageHtml(parsed.improvedFullPageHtml);
-          
-          console.log('[Content Analysis] Restored cached analysis from:', mostRecentKey);
-          
-          // Update the timestamp for this analysis to mark it as recently accessed
-          setTimeout(() => {
-            const updatedData = {
-              ...parsed,
-              lastAccessed: Date.now(),
-            };
-            localStorage.setItem(mostRecentKey, JSON.stringify(updatedData));
-          }, 100);
-        } catch (error) {
-          console.error('[Content Analysis] Error restoring cached state:', error);
+        
+        // Restore URL input if available
+        if (session.originalInput) {
+          console.log('[Structure Analysis] Setting URL input:', session.originalInput);
+          setUrlInput(session.originalInput);
         }
+        
+        console.log('[Structure Analysis] Successfully restored analysis session');
+      } else {
+        console.log('[Structure Analysis] No session found to restore');
       }
+    } catch (error) {
+      console.error('[Structure Analysis] Error restoring cached data:', error);
     }
     
     // Initialize pastedContent with the content prop if not already set
     if (!pastedContent && content) {
       setPastedContent(content);
     }
-  }, [content]);
+  }, []); // Remove analysis from dependencies to prevent infinite loops
+
+  // Listen for new analysis events to refresh session data
+  useEffect(() => {
+    const handleNewAnalysis = () => {
+      console.log('[Structure Analysis] New analysis event received, refreshing session data');
+      const stableUserId = authService.getCurrentUserId() || 'anonymous';
+      try {
+        const session = sessionManager.getLatestAnalysisSession('structure-analysis', stableUserId);
+        if (session && session.data) {
+          setAnalysis(session.data);
+          if (session.originalInput) {
+            setUrlInput(session.originalInput);
+          }
+        }
+      } catch (error) {
+        console.error('[Structure Analysis] Error refreshing session data:', error);
+      }
+    };
+
+    window.addEventListener('new-analysis-created', handleNewAnalysis);
+    return () => window.removeEventListener('new-analysis-created', handleNewAnalysis);
+  }, []);
 
   // Persist last successful analysis across navigation so it stays until user runs a new one
   useEffect(() => {
@@ -512,10 +527,38 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
         pastedContent,
         savedAt: Date.now(),
       } as any;
-              localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(payload));
+      localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(payload));
       console.log('[Content Analysis] Analysis persisted for navigation');
     } catch (error) {
       console.error('[Content Analysis] Error persisting analysis:', error);
+      if (error.name === 'QuotaExceededError') {
+        console.log('[Content Analysis] QuotaExceededError - attempting emergency cleanup for persistence');
+        try {
+          // Emergency cleanup - remove old structure analysis persistence data
+          const keys = Object.keys(localStorage);
+          const structureKeys = keys.filter(key => key.includes('structure_last_persisted'));
+          // Remove all old persistence data
+          structureKeys.forEach(key => {
+            localStorage.removeItem(key);
+            console.log('[Content Analysis] Removed old persistence data:', key);
+          });
+          // Try saving minimal data
+          const minimalPayload = {
+            analysis: {
+              seoScore: analysis.seoScore,
+              llmOptimizationScore: analysis.llmOptimizationScore,
+              readabilityScore: analysis.readabilityScore,
+              suggestions: analysis.suggestions?.slice(0, 5) // Keep only first 5 suggestions
+            },
+            urlInput,
+            savedAt: Date.now(),
+          };
+          localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(minimalPayload));
+          console.log('[Content Analysis] Minimal analysis persisted after cleanup');
+        } catch (retryError) {
+          console.error('[Content Analysis] Failed to persist even after cleanup:', retryError);
+        }
+      }
     }
   }, [analysis, fullPageHtml, improvedFullPageHtml, activeTab, codeViewType, urlInput, pastedContent]);
 
@@ -776,6 +819,58 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       console.log('[Content Analysis] Full page HTML available:', !!result?.fullPageHtml);
       setAnalysis(result);
       
+      // Save the analysis results to session storage
+      try {
+        const stableUserId = authService.getCurrentUserId() || 'anonymous';
+        sessionManager.saveAnalysisSession(
+          'structure-analysis',
+          result,
+          urlToAnalyze || contentToAnalyze,
+          undefined, // industry not applicable for structure analysis
+          'url'
+        );
+        console.log('[Structure Analysis] Analysis session saved successfully');
+        
+        // Dispatch event to notify other components
+        window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+          detail: { type: 'structure-analysis' } 
+        }));
+      } catch (error) {
+        console.error('[Structure Analysis] Error saving analysis session:', error);
+        if (error.name === 'QuotaExceededError') {
+          console.log('[Structure Analysis] QuotaExceededError - attempting emergency cleanup');
+          try {
+            // Emergency cleanup - remove old structure analysis sessions
+            const keys = Object.keys(localStorage);
+            const structureKeys = keys.filter(key => key.includes('structure-analysis'));
+            // Keep only the 2 most recent sessions
+            if (structureKeys.length > 2) {
+              const sortedKeys = structureKeys.sort((a, b) => {
+                const aTime = parseInt(a.split('_').pop() || '0');
+                const bTime = parseInt(b.split('_').pop() || '0');
+                return bTime - aTime;
+              });
+              // Remove older sessions
+              sortedKeys.slice(2).forEach(key => {
+                localStorage.removeItem(key);
+                console.log('[Structure Analysis] Removed old session:', key);
+              });
+            }
+            // Try saving again
+            sessionManager.saveAnalysisSession(
+              'structure-analysis',
+              result,
+              urlToAnalyze || contentToAnalyze,
+              undefined,
+              'url'
+            );
+            console.log('[Structure Analysis] Analysis session saved after cleanup');
+          } catch (retryError) {
+            console.error('[Structure Analysis] Failed to save even after cleanup:', retryError);
+          }
+        }
+      }
+      
       // Set the full page HTML if available from the analysis
       if (result.fullPageHtml) {
         setFullPageHtml(result.fullPageHtml);
@@ -873,8 +968,8 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
           contentLength: freshHistoryItem.originalContent.length
         });
         
-        // Try to save directly
-        historyService.addStructureAnalysisHistory(freshHistoryItem);
+        // Try to save directly - commented out due to function not found error
+        // historyService.addStructureAnalysisHistory(freshHistoryItem);
         
         // Verify it was saved
         const currentHistory = historyService.getHistoryItems();
@@ -1074,8 +1169,8 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
             contentLength: freshHistoryItem.originalContent.length
           });
           
-          // Try to save directly
-          historyService.addStructureAnalysisHistory(freshHistoryItem);
+          // Try to save directly - commented out due to function not found error
+          // historyService.addStructureAnalysisHistory(freshHistoryItem);
           
           // Verify it was saved
           const currentHistory = historyService.getHistoryItems();
@@ -1753,9 +1848,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
   };
 
   const getScoreBgColor = (score: number) => {
-    if (score >= 80) return 'bg-green-100';
-    if (score >= 60) return 'bg-yellow-100';
-    return 'bg-red-100';
+    return 'bg-gray-200';
   };
 
   // Compute LLM Understandability live for original and improved
@@ -1960,6 +2053,15 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     // Clear the current analysis to show the input form
     setAnalysis(null);
     
+    // Clear session storage
+    try {
+      const stableUserId = authService.getCurrentUserId() || 'anonymous';
+      sessionManager.clearSessionsByType('structure-analysis');
+      console.log('[Structure Analysis] Cleared analysis sessions');
+    } catch (error) {
+      console.error('[Structure Analysis] Error clearing sessions:', error);
+    }
+    
     // Clear input fields and prepare for new analysis
     setUrlInput('');
     setUrlError(null);
@@ -2073,26 +2175,20 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       
       <div className="w-full max-w-7xl mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8 gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-
-            <BarChart3 className="w-8 h-8 text-black flex-shrink-0" />
-            <h1 className="text-2xl lg:text-3xl font-bold text-black truncate">Content Structure Analysis</h1>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-8">
+          <div className="justify-self-start">
+            {/* Empty for left alignment */}
           </div>
-          <div className="flex gap-2 lg:gap-3 flex-shrink-0 items-center">
-              <button
+          <div className="text-center">
+            <h1 className="text-2xl lg:text-3xl font-bold text-black mb-2">Structure Analysis Results</h1>
+            <p className="text-gray-600 text-lg">Analysis completed for: {formatDisplayUrl(urlInput)}</p>
+          </div>
+          <div className="justify-self-end">
+            <button
               onClick={handleNewAnalysis}
               className="bg-blue-600 text-white px-3 lg:px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold text-sm lg:text-base"
             >
               New Analysis
-            </button>
-              {/* Webflow UI disabled */}
-            <button
-              onClick={() => downloadContent(analysis.structuredContent, 'improved-content.txt')}
-              className="bg-blue-600 text-white px-3 lg:px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm lg:text-base"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Download</span>
             </button>
           </div>
         </div>

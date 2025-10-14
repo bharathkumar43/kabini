@@ -15,7 +15,7 @@ export interface ContentStructureAnalysis {
 }
 
 export interface StructureSuggestion {
-  type: 'heading' | 'paragraph' | 'list' | 'table' | 'quote' | 'code' | 'link' | 'image' | 'schema' | 'meta_description' | 'title' | 'meta_keywords' | 'meta_viewport' | 'og_title' | 'og_description' | 'canonical' | 'lang_attribute' | 'replace_b_with_strong' | 'semantic_html';
+  type: 'heading' | 'paragraph' | 'list' | 'table' | 'quote' | 'code' | 'link' | 'image' | 'schema' | 'meta_description' | 'title' | 'meta_keywords' | 'meta_viewport' | 'og_title' | 'og_description' | 'canonical' | 'lang_attribute' | 'replace_b_with_strong' | 'semantic_html' | 'sentence_replacement' | 'content_enhancement' | 'keyword_optimization';
   priority: 'high' | 'medium' | 'low';
   description: string;
   implementation: string;
@@ -23,6 +23,10 @@ export interface StructureSuggestion {
   currentContent?: string;
   enhancedContent?: string;
   exactReplacement?: {
+    find: string;
+    replace: string;
+  };
+  sentenceReplacement?: {
     find: string;
     replace: string;
   };
@@ -55,6 +59,8 @@ export interface StructuredData {
   articleSchema?: ArticleSchema;
   howToSchema?: HowToSchema;
   breadcrumbSchema?: BreadcrumbSchema;
+  productSchema?: ProductSchema;
+  itemListSchema?: ItemListSchema;
 }
 
 export interface FAQSchema {
@@ -120,6 +126,48 @@ export interface BreadcrumbItem {
   position: number;
   name: string;
   item: string;
+}
+
+// Ecommerce schemas
+export interface OfferSchema {
+  '@type': 'Offer';
+  price: string | number;
+  priceCurrency: string;
+  availability?: string; // e.g., https://schema.org/InStock
+  url?: string;
+}
+
+export interface AggregateRatingSchema {
+  '@type': 'AggregateRating';
+  ratingValue: string | number;
+  reviewCount: string | number;
+}
+
+export interface ProductSchema {
+  '@context': 'https://schema.org';
+  '@type': 'Product';
+  name: string;
+  description?: string;
+  image?: string | string[];
+  sku?: string;
+  brand?: {
+    '@type': 'Brand';
+    name: string;
+  };
+  offers?: OfferSchema | OfferSchema[];
+  aggregateRating?: AggregateRatingSchema;
+}
+
+export interface ItemListSchema {
+  '@context': 'https://schema.org';
+  '@type': 'ItemList';
+  itemListElement: Array<{
+    '@type': 'ListItem';
+    position: number;
+    url: string;
+    name?: string;
+    image?: string;
+  }>;
 }
 
 class ContentStructureService {

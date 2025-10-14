@@ -1,6 +1,17 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Loader2, Link as LinkIcon, Globe, FileText, Upload, BarChart3, CheckCircle2, XCircle, HelpCircle, Image as ImageIcon, ListChecks, Network, ShieldCheck, AlertTriangle, ExternalLink, Check, X, Package, BookOpen, Award, Settings, Shield } from 'lucide-react';
 import { apiService } from '../services/apiService';
+import { useNavigate } from 'react-router-dom';
+
+// CTA Button component for navigation
+const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+  <button 
+    onClick={onClick} 
+    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+  >
+    {children}
+  </button>
+);
 
 type ExtractedContent = {
   url?: string;
@@ -19,6 +30,28 @@ type ExtractedContent = {
   imageAltCoverage: { withAlt: number; total: number };
   internalLinks: Array<{ text: string; href: string }>;
   reviewsOrTestimonialsMentioned: boolean;
+};
+
+// Format long URLs for subtitle display: remove query/hash and truncate middle
+const formatDisplayUrl = (input?: string): string => {
+  const MAX = 80;
+  if (!input) return 'Content Analysis';
+  try {
+    const u = new URL(input);
+    const path = (u.pathname || '').replace(/\/$/, '');
+    const base = `${u.protocol}//${u.hostname}${path}`;
+    const truncateMiddle = (str: string, max: number) => {
+      if (str.length <= max) return str;
+      const half = Math.floor((max - 3) / 2);
+      return `${str.slice(0, half)}...${str.slice(-half)}`;
+    };
+    return truncateMiddle(base, MAX);
+  } catch {
+    const s = String(input);
+    if (s.length <= MAX) return s;
+    const half = Math.floor((MAX - 3) / 2);
+    return `${s.slice(0, half)}...${s.slice(-half)}`;
+  }
 };
 
 type PillarScore = {
@@ -301,6 +334,7 @@ const getPillarIcon = (pillarName: string) => {
 };
 
 export function EcommerceContentAnalysis() {
+  const navigate = useNavigate();
   const [inputMode, setInputMode] = useState<'url' | 'content'>('url');
   const [urlInput, setUrlInput] = useState('');
   const [contentInput, setContentInput] = useState('');
@@ -351,7 +385,59 @@ export function EcommerceContentAnalysis() {
         inputMode,
         timestamp: Date.now()
       };
-      localStorage.setItem('contentAnalysisResults', JSON.stringify(analysisData));
+      
+      try {
+        localStorage.setItem('contentAnalysisResults', JSON.stringify(analysisData));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          console.warn('[EcommerceContentAnalysis] localStorage quota exceeded, performing emergency cleanup...');
+          
+          // Emergency cleanup: remove old analysis sessions
+          try {
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (
+                key.startsWith('kabini_analysis_session_') ||
+                key.startsWith('overview_market_analysis') ||
+                key.startsWith('contentAnalysisResults')
+              )) {
+                keysToRemove.push(key);
+              }
+            }
+            
+            // Remove old sessions (keep only the most recent 2)
+            keysToRemove.sort();
+            keysToRemove.slice(0, -2).forEach(key => {
+              try {
+                localStorage.removeItem(key);
+                console.log(`[EcommerceContentAnalysis] Removed old session: ${key}`);
+              } catch (e) {
+                console.error(`[EcommerceContentAnalysis] Failed to remove ${key}:`, e);
+              }
+            });
+            
+            // Try saving again
+            localStorage.setItem('contentAnalysisResults', JSON.stringify(analysisData));
+            console.log('[EcommerceContentAnalysis] Successfully saved after cleanup');
+          } catch (retryError) {
+            console.error('[EcommerceContentAnalysis] Failed to save even after cleanup:', retryError);
+            // Last resort: save only critical data
+            try {
+              const minimalData = {
+                extracted: { title: extracted?.title, h1: extracted?.h1?.[0] },
+                urlInput,
+                timestamp: Date.now()
+              };
+              localStorage.setItem('contentAnalysisResults', JSON.stringify(minimalData));
+            } catch (finalError) {
+              console.error('[EcommerceContentAnalysis] Could not save even minimal data:', finalError);
+            }
+          }
+        } else {
+          console.error('[EcommerceContentAnalysis] Error saving to localStorage:', error);
+        }
+      }
     }
   }, [extracted, offsite, competitors, brandCompetitors, priceOffers, urlInput, contentInput, inputMode]);
 
@@ -684,22 +770,15 @@ export function EcommerceContentAnalysis() {
     return !!(extracted && !isAnalyzing);
   }, [extracted, isAnalyzing]);
 
-  return (
-    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
-        <div className="flex-1 min-w-0">
+  // Conditional rendering: Show input form when no analysis, show results when analysis exists
+  if (!extracted) {
+    return (
+      <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
+          <div className="flex-1 min-w-0">
+          </div>
         </div>
-        {extracted && (
-          <button
-            onClick={clearAnalysis}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
-          >
-            <FileText className="w-4 h-4" />
-            New Analysis
-          </button>
-        )}
-      </div>
 
       {/* Content Analysis Dashboard Section */}
     <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
@@ -833,6 +912,32 @@ export function EcommerceContentAnalysis() {
           </div>
         )}
       </div>
+      </div>
+    );
+  }
+
+  // Show results when analysis exists
+  return (
+    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
+      {/* Analysis Results Section */}
+      <div className="mb-8">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-4">
+          <div></div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Content Analysis Results</h2>
+            <p className="text-gray-600 text-lg">Analysis completed for: {formatDisplayUrl(urlInput)}</p>
+          </div>
+          <div className="justify-self-end">
+            <button
+              onClick={clearAnalysis}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+            >
+              <FileText className="w-4 h-4" />
+              New Analysis
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Results Section */}
       {isResultsReady && (
@@ -840,11 +945,14 @@ export function EcommerceContentAnalysis() {
           {/* Overview */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                  <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                    <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  </div>
+                  <h3 className="text-base font-semibold" style={{ color: '#000000' }}>AI Readiness Score</h3>
                 </div>
-                <h3 className="text-base font-semibold" style={{ color: '#000000' }}>AI Readiness Score</h3>
+                {/* CTA removed per request */}
               </div>
               <div className="text-center">
                 <div className="text-4xl font-bold text-gray-900 mb-1">{results.overall}</div>
@@ -897,7 +1005,10 @@ export function EcommerceContentAnalysis() {
                     </div>
                     <div className="text-lg font-semibold" style={{ color: '#000000' }}>{p.name}</div>
                   </div>
-                  <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">{p.score}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">{p.score}%</span>
+                    {/* Linking buttons removed per request */}
+                  </div>
                 </div>
                 <div className="divide-y">
                   {p.checks.map(c => (
@@ -1025,11 +1136,16 @@ export function EcommerceContentAnalysis() {
           {/* Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                  <FileText className="w-5 h-5" style={{ color: '#2563eb' }} />
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                    <FileText className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  </div>
+                  <div className="text-lg font-semibold" style={{ color: '#000000' }}>Structure</div>
                 </div>
-                <div className="text-lg font-semibold" style={{ color: '#000000' }}>Structure</div>
+                <CtaButton onClick={() => navigate('/content-structure-analysis', { state: { url: urlInput } })}>
+                  Audit Structure
+                </CtaButton>
               </div>
               <div className="text-base text-black"><strong>H1</strong>: {extracted.h1.join(' | ') || '—'}</div>
               <div className="text-base text-black mt-1"><strong>H2</strong>: {extracted.h2.slice(0,6).join(' | ') || '—'}</div>
@@ -1079,9 +1195,14 @@ export function EcommerceContentAnalysis() {
                   </div>
                   <div className="text-lg font-semibold" style={{ color: '#000000' }}>Off‑Site & Trust Signals</div>
                 </div>
-                <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">
-                  {(() => { const p = results.pillars.find(pp => pp.name === 'Off-Site & Trust Signals'); return p ? p.score : 0; })()}%
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 text-sm rounded-full bg-gray-100 text-gray-700 font-semibold">
+                    {(() => { const p = results.pillars.find(pp => pp.name === 'Off-Site & Trust Signals'); return p ? p.score : 0; })()}%
+                  </span>
+                  <CtaButton onClick={() => navigate('/ai-visibility-analysis', { state: { originalInput: urlInput } })}>
+                    Competitor Insight
+                  </CtaButton>
+                </div>
               </div>
               <div className="divide-y text-base">
                 {[
@@ -1120,11 +1241,16 @@ export function EcommerceContentAnalysis() {
           {/* Competitors (Google CSE) - render only when data ready */}
           {(brandCompetitors.length > 0 || (competitors && competitors.length > 0)) && (
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                  <Network className="w-5 h-5" style={{ color: '#2563eb' }} />
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                    <Network className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  </div>
+                  <div className="text-lg font-semibold" style={{ color: '#000000' }}>Product Competitors</div>
                 </div>
-                <div className="text-lg font-semibold" style={{ color: '#000000' }}>Product Competitors</div>
+                <CtaButton onClick={() => navigate('/product-insights', { state: { originalInput: urlInput } })}>
+                  Product Insights
+                </CtaButton>
               </div>
               {brandCompetitors.length > 0 && (
                 <div className="mb-3 text-base text-black">

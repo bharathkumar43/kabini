@@ -482,6 +482,33 @@ if (ENABLE_LOCAL_AUTH) {
 
       };
 
+      // Fallback path: basic ecommerce enrichment when clearly a product page
+      try {
+        const hasProductSchema = /"@type"\s*:\s*"Product"/i.test(fullPageHtml);
+        const hasPrice = /(?:[$₹€£]|INR|USD|EUR|GBP)\s?\d[\d.,]*/i.test(fullPageHtml) || /product:price:amount/i.test(fullPageHtml);
+        const hasAddToCart = /add to (cart|bag|basket)|buy now|checkout/i.test(fullPageHtml);
+        if (hasProductSchema || (hasPrice && hasAddToCart)) {
+          const h1Match = fullPageHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+          const name = (h1Match && h1Match[1]) || (pageTitle || '').trim();
+          const currencyMatch = fullPageHtml.match(/product:price:currency[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:priceCurrency|currency)"?\s*[:=]\s*"([A-Z]{3})"/i);
+          const amountMatch = fullPageHtml.match(/product:price:amount[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:price|priceAmount)"?\s*[:=]\s*"?([0-9][0-9.,]*)"?/i);
+          const priceCurrency = (currencyMatch && currencyMatch[1]) || 'USD';
+          const priceAmountRaw = (amountMatch && amountMatch[1]) || '';
+          const priceNumeric = priceAmountRaw.replace(/[^0-9.]/g, '');
+          if (name && priceNumeric) {
+            structuredData.productSchema = {
+              '@context': 'https://schema.org',
+              '@type': 'Product',
+              name,
+              description: pageDescription || content.substring(0,160),
+              offers: { '@type': 'Offer', price: priceNumeric, priceCurrency, url }
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('[Content Analysis] Fallback ecommerce enrichment failed:', e?.message);
+      }
+
       
 
       await db.createUser(userData);
@@ -10056,6 +10083,56 @@ app.post('/api/extract/fullpage', authenticateToken, async (req, res) => {
 
 });
 
+// E-commerce Content Analysis Endpoints
+
+app.post('/api/ecommerce-content/competitors', authenticateToken, async (req, res) => {
+  try {
+    const { brandOrProduct, currentUrl } = req.body;
+    console.log('[Ecommerce Content] Get competitors request:', { brandOrProduct, currentUrl });
+    
+    // Return empty competitors for now - this endpoint would need full implementation
+    res.json({ 
+      competitors: [],
+      success: true 
+    });
+  } catch (error) {
+    console.error('[Ecommerce Content] Competitors error:', error);
+    res.status(500).json({ error: 'Failed to fetch competitors', details: error.message });
+  }
+});
+
+app.post('/api/ecommerce-content/product-competitors', authenticateToken, async (req, res) => {
+  try {
+    const { productQuery, currentUrl } = req.body;
+    console.log('[Ecommerce Content] Product competitors request:', { productQuery, currentUrl });
+    
+    // Return empty competitors for now
+    res.json({ 
+      competitors: [],
+      success: true 
+    });
+  } catch (error) {
+    console.error('[Ecommerce Content] Product competitors error:', error);
+    res.status(500).json({ error: 'Failed to fetch product competitors', details: error.message });
+  }
+});
+
+app.post('/api/ecommerce-content/price-compare', authenticateToken, async (req, res) => {
+  try {
+    const { productQuery, currentUrl } = req.body;
+    console.log('[Ecommerce Content] Price compare request:', { productQuery, currentUrl });
+    
+    // Return empty offers for now
+    res.json({ 
+      offers: [],
+      success: true 
+    });
+  } catch (error) {
+    console.error('[Ecommerce Content] Price compare error:', error);
+    res.status(500).json({ error: 'Failed to fetch price comparison', details: error.message });
+  }
+});
+
 
 
 // Forgot Password Endpoint
@@ -10840,6 +10917,21 @@ app.post('/api/structural-content/crawl', authenticateToken, async (req, res) =>
 
     console.log('[Structural Content Crawler] Keywords found:', pageKeywords.length);
 
+    // Ecommerce/blog page detection heuristics
+    const hostForAbs = (() => { try { return new URL(url).origin; } catch { return ''; } })();
+    const hasProductSchema = /"@type"\s*:\s*"Product"/i.test(fullPageHtml);
+    const hasOgTypeProduct = /property=["']og:type["'][^>]*content=["']product["']/i.test(fullPageHtml);
+    const pricePattern = /(?:[$₹€£]|INR|USD|EUR|GBP)\s?\d[\d.,]*/i;
+    const hasPrice = pricePattern.test(fullPageHtml) || /product:price:amount/i.test(fullPageHtml);
+    const hasAddToCart = /add to (cart|bag|basket)|buy now|checkout/i.test(fullPageHtml);
+    const pathLooksProduct = /\/(?:product|products)\//i.test(url || '');
+    const manyPrices = (fullPageHtml.match(new RegExp(pricePattern, 'gi')) || []).length >= 5;
+    const manyProductCards = (fullPageHtml.match(/class=\"[^\"]*(product-card|grid-item|product-item)[^\"]*\"/gi) || []).length >= 3;
+    const pathLooksCategory = /\/(?:category|categories|collection|collections|shop)\//i.test(url || '');
+
+    const isProductPage = !!(hasProductSchema || hasOgTypeProduct || (hasPrice && hasAddToCart) || pathLooksProduct);
+    const isCategoryPage = !isProductPage && !!(manyPrices || manyProductCards || pathLooksCategory);
+
 
 
     // Enhanced content improvement suggestions using AI analysis
@@ -11167,6 +11259,141 @@ Only suggest replacements that significantly improve the content.`;
     }
 
 
+
+    // 2a. Ecommerce-specific suggestions
+    if (isProductPage) {
+      const h1 = (pageHeadings.find(h => (h.level||'').toLowerCase() === 'h1') || {}).text || pageTitle || '';
+      const currencyMatch = fullPageHtml.match(/product:price:currency[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:priceCurrency|currency)"?\s*[:=]\s*"([A-Z]{3})"/i);
+      const amountMatch = fullPageHtml.match(/product:price:amount[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:price|priceAmount)"?\s*[:=]\s*"?([0-9][0-9.,]*)"?/i) || fullPageHtml.match(/(?:[$₹€£]|INR|USD|EUR|GBP)\s?\d[\d.,]*/i);
+      const availabilityMatch = fullPageHtml.match(/availability[^>]*\b(InStock|OutOfStock)\b/i);
+      const brandMeta = fullPageHtml.match(/\"brand\"\s*:\s*\{[\s\S]*?\"name\"\s*:\s*\"([^\"]+)\"/i);
+      const brand = (brandMeta && brandMeta[1]) || '';
+      const priceCurrency = (currencyMatch && currencyMatch[1]) || 'USD';
+      const priceAmountRaw = (amountMatch && amountMatch[1]) || '';
+      const priceNumeric = priceAmountRaw.replace(/[^0-9.]/g, '');
+      const availability = availabilityMatch ? `https://schema.org/${availabilityMatch[1]}` : undefined;
+
+      const productSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: h1 || 'Product',
+        description: pageDescription || (extractedContent || '').slice(0,160),
+        ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}),
+        ...(priceNumeric ? { offers: { '@type': 'Offer', price: priceNumeric, priceCurrency, ...(availability ? { availability } : {}), url } } : {})
+      };
+      const productJson = JSON.stringify(productSchema, null, 2);
+      suggestions.push({
+        type: 'schema',
+        priority: 'high',
+        description: 'Add Product JSON-LD with offers, brand, and availability',
+        implementation: `<script type=\"application/ld+json\">\n${productJson}\n</script>`,
+        impact: 'Enables rich product results and improves ecommerce SEO',
+        currentContent: 'No Product schema detected',
+        enhancedContent: 'Inject Product JSON-LD into <head>',
+        exactReplacement: { find: '</head>', replace: `  <script type=\"application/ld+json\">\n${productJson}\n</script>\n</head>` }
+      });
+
+      if ((pageLists || []).length === 0 && !/(specifications|specs|features)/i.test(extractedContent)) {
+        suggestions.push({
+          type: 'list',
+          priority: 'medium',
+          description: 'Add a concise specifications list (size, material, care, warranty)',
+          implementation: '<ul>\n  <li>Size: </li>\n  <li>Material: </li>\n  <li>Care: </li>\n  <li>Warranty: </li>\n</ul>',
+          impact: 'Improves scannability and conversion for product pages'
+        });
+      }
+    }
+
+    if (isCategoryPage) {
+      const linkRegex = /<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>([\s\S]*?)<\/a>/gi;
+      const items = [];
+      const seen = new Set();
+      let m;
+      while ((m = linkRegex.exec(fullPageHtml)) && items.length < 10) {
+        const href = m[1] || '';
+        if (!\/(product|products|item)\//i.test(href)) continue;
+        let abs = href;
+        try { abs = new URL(href, hostForAbs || url || 'https://example.com').href; } catch {}
+        if (seen.has(abs)) continue;
+        seen.add(abs);
+        items.push({ '@type': 'ListItem', position: items.length + 1, url: abs });
+      }
+      if (items.length >= 2) {
+        const itemListSchema = {
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          itemListElement: items
+        };
+        const itemListJson = JSON.stringify(itemListSchema, null, 2);
+        suggestions.push({
+          type: 'schema',
+          priority: 'medium',
+          description: 'Add ItemList JSON-LD for category/listing pages',
+          implementation: `<script type=\"application/ld+json\">\n${itemListJson}\n</script>`,
+          impact: 'Improves search understanding of product listings',
+          currentContent: 'No ItemList schema detected',
+          enhancedContent: 'Inject ItemList JSON-LD into <head>',
+          exactReplacement: { find: '</head>', replace: `  <script type=\"application/ld+json\">\n${itemListJson}\n</script>\n</head>` }
+        });
+      }
+    }
+
+    if (!isProductPage && !isCategoryPage && (extractedContent || '').split(/\s+/).length > 600 && !/tl;dr|tldr|summary/i.test(extractedContent)) {
+      const tldr = 'TL;DR: Summarize the key takeaways in 2-3 sentences here.';
+      suggestions.push({
+        type: 'paragraph',
+        priority: 'medium',
+        description: 'Add a TL;DR summary near the top of the article',
+        implementation: `<p>${tldr}</p>`,
+        impact: 'Improves user engagement and AI answerability',
+        exactReplacement: { find: '<body>', replace: `<body>\n  <p>${tldr}</p>` }
+      });
+
+      // Also propose a content-level sentence replacement for weak openings
+      try {
+        const sentences = (extractedContent || '').split(/[.!?]+\s/).map(s => s.trim()).filter(s => s.length > 20);
+        const weakOpeners = [/^in this (article|blog|post)/i, /^this (article|post) (discusses|talks)/i, /^we will (discuss|talk)/i];
+        const idx = sentences.findIndex(s => weakOpeners.some(r => r.test(s)));
+        if (idx >= 0) {
+          const original = sentences[idx];
+          const topic = (pageTitle || sentences[0] || '').replace(/[:\-].*$/, '').trim().slice(0, 90);
+          const improved = `This article explains ${topic || 'the key points'} with clear, step-by-step details and examples.`;
+          suggestions.push({
+            type: 'sentence_replacement',
+            priority: 'medium',
+            description: 'Replace a weak opening sentence with a specific, informative one',
+            implementation: `Replace: "${original}" WITH: "${improved}"`,
+            impact: 'Improves clarity and AI answerability',
+            currentContent: original,
+            enhancedContent: improved,
+            exactReplacement: { find: original, replace: improved },
+            sentenceReplacement: { find: original, replace: improved }
+          });
+        }
+      } catch {}
+    }
+
+    // Additional precise sentence-level replacement for long run-on sentences
+    try {
+      const sentences = (extractedContent || '').split(/[.!?]+\s/).map(s => s.trim()).filter(Boolean);
+      const longIdx = sentences.findIndex(s => s.split(/\s+/).length > 35);
+      if (longIdx >= 0) {
+        const original = sentences[longIdx];
+        const firstHalf = original.split(/,|;|\sand\s/i)[0]?.trim() || original.slice(0, 120).trim();
+        const improved = `${firstHalf}. ${isProductPage ? 'Key features are listed below.' : 'The main takeaways are outlined below.'}`;
+        suggestions.push({
+          type: 'sentence_replacement',
+          priority: 'low',
+          description: 'Split an overly long sentence to improve readability',
+          implementation: `Replace: "${original}" WITH: "${improved}"`,
+          impact: 'Improves readability and structure',
+          currentContent: original,
+          enhancedContent: improved,
+          exactReplacement: { find: original, replace: improved },
+          sentenceReplacement: { find: original, replace: improved }
+        });
+      }
+    } catch {}
 
     // 2. Check for missing meta description
 
@@ -12305,6 +12532,54 @@ RESTRUCTURE: [improved content that replaces the original]`;
       }
 
     };
+
+    // Enrich structured data for ecommerce contexts
+    try {
+      if (isProductPage) {
+        const h1 = (pageHeadings.find(h => (h.level||'').toLowerCase() === 'h1') || {}).text || pageTitle || '';
+        const currencyMatch = fullPageHtml.match(/product:price:currency[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:priceCurrency|currency)"?\s*[:=]\s*"([A-Z]{3})"/i);
+        const amountMatch = fullPageHtml.match(/product:price:amount[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:price|priceAmount)"?\s*[:=]\s*"?([0-9][0-9.,]*)"?/i) || fullPageHtml.match(/(?:[$₹€£]|INR|USD|EUR|GBP)\s?\d[\d.,]*/i);
+        const availabilityMatch = fullPageHtml.match(/availability[^>]*\b(InStock|OutOfStock)\b/i);
+        const brandMeta = fullPageHtml.match(/\"brand\"\s*:\s*\{[\s\S]*?\"name\"\s*:\s*\"([^\"]+)\"/i);
+        const brand = (brandMeta && brandMeta[1]) || '';
+        const priceCurrency = (currencyMatch && currencyMatch[1]) || 'USD';
+        const priceAmountRaw = (amountMatch && amountMatch[1]) || '';
+        const priceNumeric = priceAmountRaw.replace(/[^0-9.]/g, '');
+        const availability = availabilityMatch ? `https://schema.org/${availabilityMatch[1]}` : undefined;
+
+        structuredData.productSchema = {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: h1 || 'Product',
+          description: pageDescription || (extractedContent || '').slice(0,160),
+          ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}),
+          ...(priceNumeric ? { offers: { '@type': 'Offer', price: priceNumeric, priceCurrency, ...(availability ? { availability } : {}), url } } : {})
+        };
+      } else if (isCategoryPage) {
+        const linkRegex = /<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>([\s\S]*?)<\/a>/gi;
+        const items = [];
+        const seen = new Set();
+        let m;
+        while ((m = linkRegex.exec(fullPageHtml)) && items.length < 10) {
+          const href = m[1] || '';
+          if (!\/(product|products|item)\//i.test(href)) continue;
+          let abs = href;
+          try { abs = new URL(href, hostForAbs || url || 'https://example.com').href; } catch {}
+          if (seen.has(abs)) continue;
+          seen.add(abs);
+          items.push({ '@type': 'ListItem', position: items.length + 1, url: abs });
+        }
+        if (items.length >= 2) {
+          structuredData.itemListSchema = {
+            '@context': 'https://schema.org',
+            '@type': 'ItemList',
+            itemListElement: items
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[Structural Content Crawler] Failed to enrich ecommerce structured data:', e?.message);
+    }
 
 
 

@@ -12,6 +12,16 @@ import AIVisibilityTable from './AIVisibilityTable';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
 
+// CTA Button component for navigation
+const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+  <button 
+    onClick={onClick} 
+    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+  >
+    {children}
+  </button>
+);
+
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
 
@@ -961,6 +971,7 @@ export function CompetitorInsight() {
   };
 
   const VisibilityPlacementSection: React.FC<{ result: any }> = ({ result }) => {
+    const navigate = useNavigate();
     const [showInfo, setShowInfo] = useState(false);
     const data = computePlacementData(result);
 
@@ -971,15 +982,15 @@ export function CompetitorInsight() {
             <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
               <PieChart className="w-5 h-5" style={{ color: '#2563eb' }} />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900">Share of Visibility</h3>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-gray-900">Share of Visibility</h3>
+                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows overall brand presence in AI answers and how prominently each competitor is positioned (1st, 2nd, or 3rd). Helps identify who dominates brand presence and wins prime recommendation slots.">i</button>
+              </div>
+              <div className="text-xs text-gray-600">Shows overall brand presence and how often brands appear in top positions across AI answers.</div>
+            </div>
           </div>
-          <button
-            onClick={() => setShowInfo(!showInfo)}
-            className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            title="Shows overall brand presence in AI answers and how prominently each competitor is positioned (1st, 2nd, or 3rd). Green = 1st place mentions, Yellow = 2nd place, Blue = 3rd+ place. Helps identify who dominates brand presence and wins prime recommendation slots."
-          >
-            i
-          </button>
+          {/* CTA removed per request */}
         </div>
 
         {showInfo && (
@@ -1084,6 +1095,7 @@ export function CompetitorInsight() {
   };
 
   const ShoppingVisibilitySection: React.FC<{ result: any }> = ({ result }) => {
+    const navigate = useNavigate();
     const [showInfo, setShowInfo] = useState(false);
     const data = computeShoppingVisibilityData(result);
     const maxCount = Math.max(1, ...data.map(d => d.count));
@@ -1096,17 +1108,14 @@ export function CompetitorInsight() {
               <Target className="w-5 h-5" style={{ color: '#2563eb' }} />
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-900">Shopping Visibility</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-gray-900">Shopping Visibility</h3>
+                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows how often competitors are cited as buying destinations in AI answers to transactional queries (like 'where to buy X'). Higher bars indicate stronger shopping intent and conversion potential. Only transactional prompts are considered.">i</button>
+              </div>
               <div className="text-xs text-gray-600">Measures how often a competitor is cited as a buying destination in AI answers to transactional queries.</div>
             </div>
           </div>
-          <button
-            onClick={() => setShowInfo(!showInfo)}
-            className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            title="Shows how often competitors are cited as buying destinations in AI answers to transactional queries (like 'where to buy X'). Higher bars indicate stronger shopping intent and conversion potential. Only transactional prompts are considered."
-          >
-            i
-          </button>
+          {/* CTA removed per request */}
         </div>
 
         {showInfo && (
@@ -1191,6 +1200,7 @@ export function CompetitorInsight() {
   };
 
   const CompetitorMentionsSection: React.FC<{ result: any }> = ({ result }) => {
+    const navigate = useNavigate();
     const [showInfo, setShowInfo] = useState(false);
     const rows = computeCompetitorMentions(result).filter(r => (r.total || 0) > 0);
     const maxTotal = Math.max(1, ...rows.map(r => r.total));
@@ -1209,17 +1219,14 @@ export function CompetitorInsight() {
               <Users className="w-5 h-5" style={{ color: '#2563eb' }} />
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-900">Competitor Mentions</h3>
-              <div className="text-xs text-gray-600">Bar graph of competitors by number of mentions across prompts.</div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-gray-900">Competitor Mentions</h3>
+                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows total mentions of each competitor across all AI tools and prompts. Higher bars indicate stronger brand presence and recognition. This measures overall visibility and frequency of mentions in AI responses.">i</button>
+              </div>
+              <div className="text-xs text-gray-600">Shows which competitors are mentioned most often across prompts.</div>
             </div>
           </div>
-          <button
-            onClick={() => setShowInfo(!showInfo)}
-            className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            title="Shows total mentions of each competitor across all AI tools and prompts. Higher bars indicate stronger brand presence and recognition. This measures overall visibility and frequency of mentions in AI responses."
-          >
-            i
-          </button>
+          {/* CTA removed per request */}
         </div>
 
         {showInfo && (
@@ -1350,10 +1357,10 @@ export function CompetitorInsight() {
             </div>
             <div>
               <h3 className="text-xl font-semibold text-gray-900">Product Attribute Mentions (GEO)</h3>
-              <div className="text-xs text-gray-600">Highlights which attributes the AI links to each brand in location‑aware queries (e.g., luxury, affordable, organic, sustainable) so you can see how competitors are positioned.</div>
+              <div className="text-xs text-gray-600">Highlights which attributes AI associates with each brand in location‑aware queries (e.g., luxury, affordable, organic, sustainable) to reveal positioning.</div>
             </div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows which product attributes (luxury, affordable, organic, sustainable) AI links to each competitor in location-aware queries. Bubble size indicates frequency. Helps understand how competitors are positioned in the market.">i</button>
+          <button className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows which product attributes (luxury, affordable, organic, sustainable) AI links to each competitor in location-aware queries. Bubble size indicates frequency. Helps understand how competitors are positioned in the market.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1502,6 +1509,7 @@ export function CompetitorInsight() {
   };
 
   const SourceCitedSection: React.FC<{ result: any }> = ({ result }) => {
+    const navigate = useNavigate();
     const [showInfo, setShowInfo] = useState(false);
     // Prefer backend aggregated domain-based counts when present
     const backendAgg = aggregateBackendSources(result);
@@ -1529,11 +1537,14 @@ export function CompetitorInsight() {
               <Network className="w-5 h-5" style={{ color: '#2563eb' }} />
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-900">Sources Cited in AI Responses</h3>
-              <div className="text-xs text-gray-600">Donut charts show which source types each AI tool relies on (Blogs, Reviews/Forums, Marketplaces, PR, Directories).</div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-gray-900">Sources Cited in AI Responses</h3>
+                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows which source types each AI tool relies on for competitor information. Donut charts display distribution across Blogs/Guides, Review Sites/Forums, Marketplaces, News/PR, and Directories. Helps understand AI's information sources.">i</button>
+              </div>
+              <div className="text-xs text-gray-600">Shows which source types each AI tool relies on (Blogs/Guides, Reviews/Forums, Marketplaces, PR, Directories).</div>
             </div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows which source types each AI tool relies on for competitor information. Donut charts display distribution across Blogs/Guides, Review Sites/Forums, Marketplaces, News/PR, and Directories. Helps understand AI's information sources.">i</button>
+          {/* CTA removed per request */}
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1548,7 +1559,7 @@ export function CompetitorInsight() {
                 {/* Hover info for exact domains */}
                 {backendHasData && (
                   <div className="relative group">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-xs cursor-default">i</span>
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-xs normal-case cursor-default">i</span>
                     <div className="absolute z-10 hidden group-hover:block -left-2 top-6 w-72 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-xs text-gray-800">
                       <div className="font-semibold mb-1">Domains cited</div>
                       {SOURCE_CATEGORIES.map(cat => (
@@ -1647,11 +1658,13 @@ export function CompetitorInsight() {
               <PieChart className="w-5 h-5" style={{ color: '#2563eb' }} />
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-900">Competitor Type Breakdown</h3>
-              <div className="text-xs text-gray-600">Donut shows distribution across Direct, Marketplace, Content, Authority, Indirect.</div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-gray-900">Competitor Type Breakdown</h3>
+                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows how competitors are classified: Direct (retail/brand stores), Indirect (substitutes/alternatives), Marketplaces (Amazon/Etsy), Content (reviews/guides), and Authority (PR/editorial). Helps understand competitive landscape structure.">i</button>
+              </div>
+              <div className="text-xs text-gray-600">Shows how competitors are classified: Direct, Marketplace, Content, Authority, Indirect.</div>
             </div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how competitors are classified: Direct (retail/brand stores), Indirect (substitutes/alternatives), Marketplaces (Amazon/Etsy), Content (reviews/guides), and Authority (PR/editorial). Helps understand competitive landscape structure.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1751,11 +1764,13 @@ export function CompetitorInsight() {
               <Activity className="w-5 h-5" style={{ color: '#2563eb' }} />
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-900">Content Styles in AI Mentions</h3>
-              <div className="text-xs text-gray-600">Stacked bars: List, Comparison, Recommendation, FAQ, Editorial per competitor.</div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-gray-900">Content Styles in AI Mentions</h3>
+                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows how each competitor is framed in AI responses: Lists (product lists), Comparisons (vs other brands), Recommendations (AI suggestions), FAQ (question-answer format), Editorial (opinion pieces). Helps understand presentation context.">i</button>
+              </div>
+              <div className="text-xs text-gray-600">Shows how each competitor is presented in answers: Lists, Comparisons, Recommendations, FAQ, Editorial per competitor.</div>
             </div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how each competitor is framed in AI responses: Lists (product lists), Comparisons (vs other brands), Recommendations (AI suggestions), FAQ (question-answer format), Editorial (opinion pieces). Helps understand presentation context.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1885,7 +1900,7 @@ export function CompetitorInsight() {
               <div className="text-xs text-gray-600">Tone, example mention, source, attribute/context, and key takeaway per competitor.</div>
             </div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation.">i</button>
+          <button className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -1929,7 +1944,7 @@ export function CompetitorInsight() {
     Reviews: ['trustpilot','google reviews','sitejabber','review','ratings','reddit','forum'],
     Backlinks: ['backlink','high da','wirecutter','forbes.com','allure.com','nytimes','domain authority','link profile'],
     'PR Coverage': ['forbes','techcrunch','press','pr','news','editorial','coverage','featured in'],
-    'Certifications/Awards': ['certified','certification','ssl','badge','award','best of beauty','editor’s choice','editors choice']
+    'Certifications/Awards': ['certified','certification','ssl','badge','award','best of beauty',"editor's choice",'editors choice']
   };
   const computeAuthoritySignals = (result: any) => {
     const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
@@ -1978,10 +1993,10 @@ export function CompetitorInsight() {
             </div>
             <div>
               <h3 className="text-xl font-semibold text-gray-900">Authority Signals</h3>
-              <div className="text-xs text-gray-600">Why AI trusted it — Reviews, Backlinks, PR, Certifications/Awards. Stacked bars by competitor plus an overall donut.</div>
+              <div className="text-xs text-gray-600">Explains why AI trusts each brand: Reviews, Backlinks, PR, Certifications/Awards, plus an overall breakdown.</div>
             </div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown, donut shows overall distribution.">i</button>
+          <button className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown, donut shows overall distribution.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
@@ -2127,14 +2142,14 @@ export function CompetitorInsight() {
             </div>
             <div>
               <h3 className="text-xl font-semibold text-gray-900">FAQ / Conversational Mentions</h3>
-              <div className="text-xs text-gray-600">Which competitors appear in FAQ-style answers, where those mentions come from, and common trust themes.</div>
+              <div className="text-xs text-gray-600">Shows competitors mentioned in Q&A‑style answers, where those mentions come from, and common trust themes.</div>
             </div>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50" title="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent.">i</button>
+          <button className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent.">i</button>
         </div>
         {showInfo && (
           <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
-            Captures Q&A-like or conversational answers (e.g., “Where can I buy X safely?”). We count FAQ-style competitor mentions, source breakdown (Reddit, Quora, Trustpilot, Forums), and highlight common themes like safe checkout and fast shipping.
+            Captures Q&A-like or conversational answers (e.g., "Where can I buy X safely?"). We count FAQ-style competitor mentions, source breakdown (Reddit, Quora, Trustpilot, Forums), and highlight common themes like safe checkout and fast shipping.
           </div>
         )}
 
@@ -2334,36 +2349,17 @@ export function CompetitorInsight() {
     );
   }
 
-  return (
-    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
-        <div className="flex-1 min-w-0">
+  // Conditional rendering: Show input form when no analysis, show results when analysis exists
+  if (!analysisResult) {
+    return (
+      <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
+          <div className="flex-1 min-w-0">
+          </div>
         </div>
-        {analysisResult && (
-          <button
-            onClick={() => {
-              setAnalysisResult(null);
-              setAnalysisError(null);
-              setShowSuccessMessage(false);
-              setWebsiteUrl('');
-              setProductName('');
-              setProductCategory('');
-              setCompetitorName('');
-              setCountry('');
-              setSelectedIndustry('auto');
-              try { localStorage.setItem(CLEARED_KEY, '1'); } catch {}
-              setHasClearedData(true);
-            }}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
-          >
-            <FileText className="w-4 h-4" />
-            New Analysis
-          </button>
-        )}
-      </div>
 
-      {/* Competitor Analysis Dashboard Section */}
+        {/* Competitor Analysis Dashboard Section */}
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-3">Competitor Analysis Dashboard</h2>
@@ -2509,14 +2505,48 @@ export function CompetitorInsight() {
         {analysisError && (
           <div className="mb-6 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{analysisError}</div>
         )}
-        {showSuccessMessage && (
-          <div className="mb-6 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">✅ Analysis completed successfully! Results are ready below.</div>
-        )}
+      </div>
+      </div>
+    );
+  }
 
-        {/* Dashboard Cards Removed - Keeping only the analysis results */}
+  // Show results when analysis exists
+  return (
+    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
+      {/* Analysis Results Section */}
+      <div className="mb-8">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-4">
+          <div></div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Competitor Analysis Results</h2>
+            <p className="text-gray-600 text-lg">Analysis completed for: {analysisResult?.originalInput || websiteUrl}</p>
+          </div>
+          <div className="justify-self-end">
+            <button
+              onClick={() => {
+                setAnalysisResult(null);
+                setAnalysisError(null);
+                setShowSuccessMessage(false);
+                setWebsiteUrl('');
+                setProductName('');
+                setProductCategory('');
+                setCompetitorName('');
+                setCountry('');
+                setSelectedIndustry('auto');
+                try { localStorage.setItem(CLEARED_KEY, '1'); } catch {}
+                setHasClearedData(true);
+              }}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+            >
+              <FileText className="w-4 h-4" />
+              New Analysis
+            </button>
+          </div>
+        </div>
+      </div>
 
-        {/* Analysis Results and Competitor Table (post-analysis) */}
-        {analysisResult && (
+      {/* Analysis Results and Competitor Table */}
+      {analysisResult && (
           <div className="space-y-6">
             {/* Share of Visibility & Placement Tracking */}
             <VisibilityPlacementSection result={analysisResult} />
@@ -2527,11 +2557,11 @@ export function CompetitorInsight() {
             {/* Competitor Mentions (Overall + Tool-specific) */}
             <CompetitorMentionsSection result={analysisResult} />
 
-            {/* Sources Cited (Donut per AI tool) */}
-            <SourceCitedSection result={analysisResult} />
-
             {/* Competitor Type Breakdown */}
             <CompetitorTypeBreakdownSection result={analysisResult} />
+
+            {/* Sources Cited (Donut per AI tool) */}
+            <SourceCitedSection result={analysisResult} />
 
             {/* Content Style Breakdown */}
             <ContentStyleSection result={analysisResult} />
@@ -2560,7 +2590,6 @@ export function CompetitorInsight() {
 
           </div>
         )}
-      </div>
     </div>
   );
 }

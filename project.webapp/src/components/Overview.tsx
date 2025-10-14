@@ -28,7 +28,7 @@ interface DashboardCardProps {
 
 function DashboardCard({ title, icon, iconBgColor, children, className = "", headerAction, subtitle }: DashboardCardProps) {
   return (
-    <div className={`group bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-xl hover:border-gray-300 transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col h-full${className}`}>
+    <div className={`group bg-white border border-gray-300 rounded-xl p-4 shadow-sm hover:shadow-xl hover:border-gray-400 transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col h-full${className}`}>
       <div className="flex items-start justify-between mb-3 flex-shrink-0">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
@@ -977,7 +977,7 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
   );
 }
 
-// Competitor Benchmark Card
+// Competitor Score Card
 function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
   const [showDescription, setShowDescription] = useState(false);
   
@@ -997,7 +997,7 @@ function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
 
   return (
     <DashboardCard
-      title="Competitor Benchmark"
+      title="Competitor Score"
       icon={<BarChartIcon className="w-4 h-4 text-black" />}
       headerAction={
         <div 
@@ -1030,6 +1030,7 @@ function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
 
 // Brand Sentiment Analysis Card with AI + Social + Reviews
 function SentimentAnalysisCard({ competitors, result }: { competitors: any[]; result?: any }) {
+  const navigate = useNavigate();
   const [timePeriod, setTimePeriod] = useState<'week' | 'month'>('week');
   const [trendData, setTrendData] = useState<any>(null);
   const [loadingTrend, setLoadingTrend] = useState(false);
@@ -1198,6 +1199,14 @@ function SentimentAnalysisCard({ competitors, result }: { competitors: any[]; re
     <DashboardCard
       title="Customer Sentiment"
       icon={<Heart className="w-4 h-4 text-black" />}
+      headerAction={
+        <button
+          onClick={() => navigate('/product-insights')}
+          className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold transition-colors"
+        >
+          View Details
+        </button>
+      }
     >
       {/* Overall Sentiment */}
       <div className="text-center mb-6">
@@ -1468,7 +1477,7 @@ function TopProductsKpiCard({ result, setShowShopifyModal }: { result?: any; set
             </div>
           ) : topSKUs.length > 0 ? (
             topSKUs.slice(0, 3).map((product, index) => (
-              <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4 group hover:bg-gray-100 transition-colors">
+              <div key={index} className="bg-gray-50 border border-gray-300 rounded-lg p-4 group hover:bg-gray-100 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <div className="font-semibold text-[#0F172A] text-sm mb-1">
@@ -3852,7 +3861,7 @@ export function Overview() {
 
 
             {analysisError && (
-              <div className="mb-6 text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">{analysisError}</div>
+              <div className="mb-6 text-gray-700 bg-gray-50 border border-gray-300 rounded-lg px-4 py-3">{analysisError}</div>
             )}
 
             {/* OR Divider */}
@@ -3865,7 +3874,7 @@ export function Overview() {
             {/* Method Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Shopify Sync Card */}
-                <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group flex flex-col">
+                <div className="bg-white border-2 border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors group flex flex-col">
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                       <Zap className="w-6 h-6 text-blue-600" />
@@ -3900,7 +3909,7 @@ export function Overview() {
                 </div>
 
               {/* CSV Upload Card */}
-              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-gray-400 transition-colors group flex flex-col">
+              <div className="bg-white border-2 border-gray-300 rounded-xl p-6 hover:border-gray-400 transition-colors group flex flex-col">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
                   <FileText className="w-6 h-6 text-gray-600" />
                 </div>
@@ -3917,7 +3926,7 @@ export function Overview() {
               </div>
 
               {/* Manual Add Card */}
-              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors group flex flex-col">
+              <div className="bg-white border-2 border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors group flex flex-col">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                   <Target className="w-6 h-6 text-blue-600" />
                 </div>
@@ -3957,7 +3966,7 @@ export function Overview() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {fetchedProducts.map((product, index) => (
-                    <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:shadow-md transition-shadow">
+                    <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-300 hover:shadow-md transition-shadow">
                       {product.images?.edges?.[0]?.node?.url && (
                         <img
                           src={product.images.edges[0].node.url}
@@ -4077,7 +4086,7 @@ export function Overview() {
       </div>
 
       {/* Analysis Results Section */}
-      <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6 shadow-sm">
+      <div className="bg-white border border-gray-300 rounded-lg p-3 sm:p-4 lg:p-6 shadow-sm">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">AI Visibility Analysis Results</h2>
           {analysisResult?.sourceProduct ? (
@@ -4143,7 +4152,12 @@ export function Overview() {
         {/* Competitor Analysis */}
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-900">Competitor Analysis</h2>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
+          <button
+            onClick={() => navigate('/ai-visibility-analysis')}
+            className="inline-flex items-center px-4 py-3 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-sm"
+          >
+            View Details
+          </button>
         </div>
 
         {/* Competitor Performance Overview Chart */}

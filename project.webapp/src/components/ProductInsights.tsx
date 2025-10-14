@@ -6,22 +6,58 @@ import { apiService } from '../services/apiService';
 import { sessionManager } from '../services/sessionManager';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 
-function DashboardCard({ title, icon, iconBgColor, children, tooltip }: { title: string; icon: React.ReactNode; iconBgColor: string; children: React.ReactNode; tooltip?: string }) {
+// CTA Button component for navigation
+const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+  <button 
+    onClick={onClick} 
+    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+  >
+    {children}
+  </button>
+);
+
+function DashboardCard({ title, icon, iconBgColor, children, tooltip, action }: { title: string; icon: React.ReactNode; iconBgColor: string; children: React.ReactNode; tooltip?: string; action?: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-300 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
       <div className="flex items-center justify-between p-4 border-b border-gray-100">
         <div className="flex items-center gap-3">
           <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${iconBgColor}`}>{icon}</div>
-          <h2 className="text-base sm:text-lg font-semibold text-gray-900">{title}</h2>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900">{title}</h2>
+              {tooltip && (
+                <button
+                  className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center"
+                  title={tooltip}
+                >
+                  i
+                </button>
+              )}
+            </div>
+            {/* Optional subtitle slot via tooltip fallback: we keep tooltip on the button; here we render a generic description only when title matches known cards */}
+            {title === 'AI Visibility Score' && (
+              <div className="text-xs text-gray-600">Estimated visibility based on share of mentions across AI tools.</div>
+            )}
+            {title === 'AI Readiness Score' && (
+              <div className="text-xs text-gray-600">How well your content is optimized for AI understanding and recommendations.</div>
+            )}
+            {title === 'Product Analysis by Platforms' && (
+              <div className="text-xs text-gray-600">Which product attributes each platform associates with every brand to reveal positioning.</div>
+            )}
+            {title === 'Sentiment Analysis' && (
+              <div className="text-xs text-gray-600">How competitors are perceived in AI responses and what drives that perception.</div>
+            )}
+            {title === 'Authority Signals' && (
+              <div className="text-xs text-gray-600">Trust factors AI uses to recommend brands: reviews, backlinks, PR, certifications.</div>
+            )}
+            {title === 'FAQ / Conversational Mentions' && (
+              <div className="text-xs text-gray-600">Competitors referenced in Q&A‑style answers and common themes behind those mentions.</div>
+            )}
+          </div>
         </div>
-        {tooltip && (
-          <button
-            className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            title={tooltip}
-          >
-            i
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {action}
+        </div>
       </div>
       <div className="p-4 sm:p-6">{children}</div>
     </div>
@@ -53,7 +89,7 @@ function AIVisibilityScoreCard({ score }: { score: number }) {
   };
   
   return (
-    <DashboardCard title="AI Visibility Score" icon={<Eye className="w-5 h-5 text-blue-600" />} iconBgColor="bg-gray-200" tooltip="Shows estimated visibility percentage based on share of mentions across AI tools. Higher scores indicate stronger brand presence and recognition in AI responses. This metric helps understand how visible your brand is compared to competitors in AI-generated content.">
+    <DashboardCard title="AI Visibility Score" icon={<Eye className="w-5 h-5" style={{ color: '#2563eb' }} />} iconBgColor="bg-gray-200" tooltip="Shows estimated visibility percentage based on share of mentions across AI tools. Higher scores indicate stronger brand presence and recognition in AI responses. This metric helps understand how visible your brand is compared to competitors in AI-generated content.">
       <div className="text-center">
         <div className="text-4xl font-bold text-gray-900 mb-1">{pct}</div>
         <div className="text-sm text-gray-600 mb-2">out of 100</div>
@@ -93,7 +129,7 @@ function AIReadinessScoreCard({ score }: { score: number }) {
   };
   
   return (
-    <DashboardCard title="AI Readiness Score" icon={<BarChartIcon className="w-5 h-5 text-blue-600" />} iconBgColor="bg-gray-200" tooltip="Measures how well your content is optimized for AI understanding and recommendations. Based on schema markup, content quality, trust signals, and technical SEO. Higher scores indicate better AI readiness and higher chances of being recommended by AI tools.">
+    <DashboardCard title="AI Readiness Score" icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} iconBgColor="bg-gray-200" tooltip="Measures how well your content is optimized for AI understanding and recommendations. Based on schema markup, content quality, trust signals, and technical SEO. Higher scores indicate better AI readiness and higher chances of being recommended by AI tools.">
       <div className="text-center">
         <div className="text-4xl font-bold text-gray-900 mb-1">{score}</div>
         <div className="text-sm text-gray-600 mb-2">out of 100</div>
@@ -188,31 +224,38 @@ function computeAttributeMatrix(result: any): AttributeMatrix {
 }
 
 function ProductGeoBubbleChart({ result }: { result: any }) {
+  const navigate = useNavigate();
   const matrix = computeAttributeMatrix(result);
   const maxVal = Math.max(1, ...matrix.attributes.flatMap(a => Object.values(matrix.counts[a] || {})));
   return (
-    <DashboardCard title="Product Analysis by GEO" icon={<BarChartIcon className="w-5 h-5 text-blue-600" />} iconBgColor="bg-gray-200" tooltip="Shows which product attributes (luxury, affordable, organic, sustainable) AI associates with each competitor in location-aware queries. Bubble size indicates frequency of association. Helps understand how competitors are positioned in the market and identify attribute gaps.">
+    <DashboardCard 
+      title="Product Analysis by Platforms" 
+      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
+      iconBgColor="bg-gray-200" 
+      tooltip="Shows which product attributes (luxury, affordable, organic, sustainable) AI associates with each competitor across platforms. Bubble size indicates frequency of association. Helps understand how competitors are positioned in the market and identify attribute gaps."
+      // action removed per request
+    >
       <div className="overflow-x-auto">
         <table className="min-w-[720px] w-full text-sm">
           <thead>
             <tr>
-              <th className="text-left p-2 text-xs text-black font-semibold">Attribute</th>
+              <th className="text-left p-2 text-xs text-blue-600 font-semibold">Attribute</th>
               {matrix.competitors.map(c => (
-                <th key={c} className="text-center p-2 text-xs text-black font-semibold">{c}</th>
+                <th key={c} className="text-center p-2 text-xs font-semibold whitespace-nowrap" style={{ color: '#0f172a' }}>{c}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {matrix.attributes.map(attr => (
               <tr key={attr} className="border-t">
-                <td className="p-2 font-semibold text-black">{attr}</td>
+                <td className="p-2 font-semibold text-blue-600">{attr}</td>
                 {matrix.competitors.map(c => {
                   const v = (matrix.counts[attr] && matrix.counts[attr][c]) || 0;
                   const size = 16 + Math.round((v / maxVal) * 28);
                   return (
                     <td key={c} className="p-2 text-center">
                       {v > 0 ? (
-                        <div className="mx-auto rounded-full bg-sky-400/70" style={{ width: size, height: size }} title={`${attr} – ${c}: ${v}`} />
+                        <div className="mx-auto rounded-full bg-sky-400/70" style={{ width: size, height: size }} title={`AI Mentions – ${v}`} />
                       ) : (
                         <span className="text-gray-300">–</span>
                       )}
@@ -240,6 +283,7 @@ const toneColor = (tone: ToneKey): string => {
 };
 
 function SentimentFromCompetitor({ result }: { result: any }) {
+  const navigate = useNavigate();
   const [showInfo, setShowInfo] = useState(false);
   
   // Use real competitors from the API response
@@ -286,7 +330,13 @@ function SentimentFromCompetitor({ result }: { result: any }) {
     };
   });
   return (
-    <DashboardCard title="Sentiment Analysis" icon={<BarChartIcon className="w-5 h-5 text-blue-600" />} iconBgColor="bg-gray-200" tooltip="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation in AI-generated content.">
+    <DashboardCard 
+      title="Sentiment Analysis" 
+      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
+      iconBgColor="bg-gray-200" 
+      tooltip="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation in AI-generated content."
+      // action removed per request
+    >
       <div className="mb-3">
         <div className="text-xs text-gray-600">Tone, example mention, source, attribute/context, and takeaway per competitor.</div>
       </div>
@@ -306,7 +356,7 @@ function SentimentFromCompetitor({ result }: { result: any }) {
           <tbody>
             {rows.map(r => (
               <tr key={`sent-${r.name}`} className="border-b border-gray-100">
-                <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{r.name}</td>
+                <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ color: '#0f172a' }}>{r.name}</td>
                 <td className="px-3 py-2"><span className={`px-2 py-1 rounded ${toneColor(r.tone)}`}>{r.tone}</span></td>
                 <td className="px-3 py-2 text-gray-800">{r.quote}</td>
                 <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.source}</td>
@@ -331,6 +381,7 @@ const SIGNAL_KEYWORDS: Record<SignalKey, string[]> = {
 };
 
 function AuthorityFromCompetitor({ result }: { result: any }) {
+  const navigate = useNavigate();
   const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
   
   // Use real competitors from the API response
@@ -386,7 +437,13 @@ function AuthorityFromCompetitor({ result }: { result: any }) {
   const max = Math.max(1, ...Object.values(totals));
   const color: Record<SignalKey, string> = { Reviews: 'bg-sky-400', Backlinks: 'bg-emerald-400', 'PR Coverage': 'bg-amber-400', 'Certifications/Awards': 'bg-rose-400' };
   return (
-    <DashboardCard title="Authority Signals" icon={<BarChartIcon className="w-5 h-5 text-blue-600" />} iconBgColor="bg-gray-200" tooltip="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown, donut shows overall distribution. Helps understand what builds AI trust.">
+    <DashboardCard 
+      title="Authority Signals" 
+      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
+      iconBgColor="bg-gray-200" 
+      tooltip="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown, donut shows overall distribution. Helps understand what builds AI trust."
+      // action removed per request
+    >
       <div className="flex items-center gap-4 text-sm mb-3">
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1 text-gray-800"><span className="inline-block w-3 h-3 rounded bg-sky-400" /> Reviews</span>
@@ -447,6 +504,7 @@ const FAQ_THEME_KWS: Record<typeof FAQ_THEMES[number], string[]> = {
 };
 
 function FAQFromCompetitor({ result }: { result: any }) {
+  const navigate = useNavigate();
   const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
   const competitorCounts: Record<string, number> = {};
   const sourceCounts: Record<string, number> = { Reddit: 0, Quora: 0, Trustpilot: 0, Forums: 0 };
@@ -455,8 +513,8 @@ function FAQFromCompetitor({ result }: { result: any }) {
   // Use real competitors from the API response
   // Process FAQ data if available in backend
   if (comps.length > 0) {
-    comps.forEach(c => {
-      const name = c?.name || 'Unknown';
+  comps.forEach(c => {
+    const name = c?.name || 'Unknown';
       
       // Use backend FAQ data if available
       if (c?.faq && Array.isArray(c.faq) && c.faq.length > 0) {
@@ -485,18 +543,18 @@ function FAQFromCompetitor({ result }: { result: any }) {
         });
       } else {
         // Otherwise, extract from text analysis
-        const texts = [
-          c?.analysis,
-          c?.breakdowns?.gemini?.analysis,
-          c?.breakdowns?.chatgpt?.analysis,
-          c?.breakdowns?.perplexity?.analysis,
-          c?.breakdowns?.claude?.analysis
-        ]
-          .filter((v) => v !== undefined && v !== null)
-          .map((t: any) => String(t || '').toLowerCase());
+    const texts = [
+      c?.analysis,
+      c?.breakdowns?.gemini?.analysis,
+      c?.breakdowns?.chatgpt?.analysis,
+      c?.breakdowns?.perplexity?.analysis,
+      c?.breakdowns?.claude?.analysis
+    ]
+      .filter((v) => v !== undefined && v !== null)
+      .map((t: any) => String(t || '').toLowerCase());
         
-        let count = 0;
-        texts.forEach(t => {
+    let count = 0;
+    texts.forEach(t => {
           if (t.includes('where can i') || t.includes('where to buy') || t.includes('faq') || t.includes('question')) {
             count += 1;
           }
@@ -510,10 +568,10 @@ function FAQFromCompetitor({ result }: { result: any }) {
               themeCounts[theme as any] += 1;
             }
           });
-        });
-        competitorCounts[name] = count;
-      }
     });
+    competitorCounts[name] = count;
+      }
+  });
   }
   
   const rows = Object.entries(competitorCounts).sort((a,b) => b[1]-a[1]);
@@ -521,7 +579,13 @@ function FAQFromCompetitor({ result }: { result: any }) {
   const maxS = Math.max(1, ...Object.values(sourceCounts));
   const maxT = Math.max(1, ...Object.values(themeCounts));
   return (
-    <DashboardCard title="FAQ / Conversational Mentions" icon={<BarChartIcon className="w-5 h-5 text-blue-600" />} iconBgColor="bg-gray-200" tooltip="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent and trust-building mentions.">
+    <DashboardCard 
+      title="FAQ / Conversational Mentions" 
+      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
+      iconBgColor="bg-gray-200" 
+      tooltip="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent and trust-building mentions."
+      // action removed per request
+    >
       <div className="text-xs text-gray-600 mb-3">Counts of FAQ-style mentions, sources referenced, and common themes.</div>
       <div className="space-y-6">
         {/* Competitor bars on top - no horizontal scroll */}
@@ -766,22 +830,15 @@ export function ProductInsights() {
   // - After clicking New Analysis (hasClearedData === true), hide results entirely
   const resultData = analysisResult;
 
+  // Conditional rendering: Show input form when no analysis, show results when analysis exists
+  if (!analysisResult) {
   return (
     <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
         <div className="flex-1 min-w-0">
-          <button className="text-sm text-gray-900 hover:underline mb-2" onClick={() => navigate('/ai-visibility-analysis')}>← Back to Competitor Insight</button>
+          <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-1 transition-colors shadow-sm mb-2 text-sm" onClick={() => navigate('/ai-visibility-analysis')}>← Back to Competitor Insight</button>
         </div>
-        {resultData && (
-          <button 
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
-            onClick={clearAnalysisData}
-          >
-            <FileText className="w-4 h-4" />
-            New Analysis
-          </button>
-        )}
       </div>
 
       {/* Product Analysis Dashboard Section */}
@@ -918,6 +975,36 @@ export function ProductInsights() {
           </div>
           {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
         </div>
+      </div>
+    );
+  }
+
+  // Show results when analysis exists
+  return (
+    <div className="w-full max-w-full mx-auto space-y-6 lg:space-y-8 px-2 sm:px-4 lg:px-6">
+      {/* Analysis Results Section */}
+      <div className="mb-8">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-4">
+          <div className="justify-self-start">
+            <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-1 transition-colors shadow-sm text-sm" onClick={() => navigate('/ai-visibility-analysis')}>← Back to Competitor Insight</button>
+          </div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Analysis Results</h2>
+            <p className="text-gray-600 text-lg">Analysis completed for: {resultData?.originalInput || websiteUrl}</p>
+          </div>
+          <div className="justify-self-end">
+            <button 
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+              onClick={clearAnalysisData}
+            >
+              <FileText className="w-4 h-4" />
+              New Analysis
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Analysis Results */}
       {resultData && (
         <div className="space-y-6">
 
