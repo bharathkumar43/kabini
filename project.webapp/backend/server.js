@@ -11311,7 +11311,7 @@ Only suggest replacements that significantly improve the content.`;
       let m;
       while ((m = linkRegex.exec(fullPageHtml)) && items.length < 10) {
         const href = m[1] || '';
-        if (!\/(product|products|item)\//i.test(href)) continue;
+        if (!/\/(product|products|item)\//i.test(href)) continue;
         let abs = href;
         try { abs = new URL(href, hostForAbs || url || 'https://example.com').href; } catch {}
         if (seen.has(abs)) continue;
@@ -12562,7 +12562,7 @@ RESTRUCTURE: [improved content that replaces the original]`;
         let m;
         while ((m = linkRegex.exec(fullPageHtml)) && items.length < 10) {
           const href = m[1] || '';
-          if (!\/(product|products|item)\//i.test(href)) continue;
+          if (!/\/(product|products|item)\//i.test(href)) continue;
           let abs = href;
           try { abs = new URL(href, hostForAbs || url || 'https://example.com').href; } catch {}
           if (seen.has(abs)) continue;
