@@ -16,12 +16,9 @@ import type { HistoryItem, QAHistoryItem } from '../types';
 
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
-<<<<<<< HEAD
 import { userStateManager } from '../utils/userStateManager';
-=======
 import HighlightedLink from './ui/HighlightedLink';
 import { ChatGPTIcon, GeminiIcon, PerplexityIcon, ClaudeIcon } from './ui/AIPlatformIcons';
->>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -511,20 +508,8 @@ function OverallAIVisibilityScoreCard({ result }: { result: any }) {
   return (
     <DashboardCard
       title="AI Visibility Score"
-<<<<<<< HEAD
       tooltip="How well your brand appears in AI assistant responses"
       icon={<Eye className="w-4 h-4 text-blue-600" />}
-=======
-      icon={<Eye className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
-          title="How well your brand appears in AI assistant responses"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
->>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="flex items-center justify-center h-32">
         <div className="text-center w-full px-6">
@@ -859,20 +844,8 @@ function AIPlatformPresenceBreakdown({ result }: { result: any }) {
   return (
     <DashboardCard
       title="LLM Presence"
-<<<<<<< HEAD
       tooltip="Which AI platforms recognize your brand"
       icon={<Globe className="w-4 h-4 text-blue-600" />}
-=======
-      icon={<Globe className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
-          title="Which AI platforms recognize your brand"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
->>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="space-y-3">
         {platforms.map((platform, index) => (
@@ -943,20 +916,8 @@ function ShareOfAIVoiceCard({ result }: { result: any }) {
   return (
     <DashboardCard
       title="Share of AI Voice"
-<<<<<<< HEAD
       tooltip="Measure your brand's share of voice across AI platforms"
       icon={<PieChart className="w-4 h-4 text-blue-600" />}
-=======
-      icon={<PieChart className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
-          title="Measure your brand's share of voice across AI platforms"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
->>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="flex items-center justify-center h-32">
         <div className="text-center w-full px-6">
@@ -1071,20 +1032,8 @@ function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
   return (
     <DashboardCard
       title="Competitor Score"
-<<<<<<< HEAD
       tooltip="Compare your performance against industry competitors"
       icon={<BarChartIcon className="w-4 h-4 text-blue-600" />}
-=======
-      icon={<BarChartIcon className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
-          title="Compare your performance against industry competitors"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
->>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="flex items-center justify-center h-32">
         <div className="text-center w-full px-6">
@@ -4436,13 +4385,8 @@ export function Overview() {
               </div>
             </div>
           ) : (
-<<<<<<< HEAD
-            <p className="text-sm text-gray-600">
-              Analysis completed for: <span className="font-semibold text-black">{analysisResult?.originalInput}</span>
-=======
             <p className="text-gray-600 text-lg">
               Analysis completed for: <HighlightedLink value={analysisResult?.originalInput || ''} />
->>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
             </p>
           )}
         </div>
