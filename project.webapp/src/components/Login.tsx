@@ -60,7 +60,10 @@ const Login = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       console.log('[Login] User is authenticated via AuthContext, redirecting to overview...');
-      navigate('/overview', { replace: true });
+      // Force immediate redirect with a small delay to ensure state is updated
+      setTimeout(() => {
+        navigate('/overview', { replace: true });
+      }, 100);
     }
   }, [navigate, isAuthenticated, user]);
 
@@ -557,7 +560,7 @@ const Login = () => {
         </div>
       </div>
       
-      {/* Error Notification */}
+      {/* Error Notification - Shows success in green, errors in red */}
       <ErrorNotification
         error={authError || (error && typeof error === 'string' ? error : null)}
         onClose={() => {
@@ -566,6 +569,7 @@ const Login = () => {
         }}
         autoClose={true}
         autoCloseDelay={5000}
+        type={authError?.includes('successfully') || authError?.includes('created') || authError?.includes('verified') ? 'success' : 'error'}
       />
     </div>
   );

@@ -447,17 +447,17 @@ class Database {
     const client = await this.pool.connect();
     
     try {
+      // First, delete any existing token for this user
+      await client.query('DELETE FROM email_verification_tokens WHERE user_id = $1', [userId]);
+      
+      // Then insert the new token with a proper ID
+      const id = uuidv4();
       const query = `
-        INSERT INTO email_verification_tokens (user_id, token, expires_at, created_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (user_id) DO UPDATE SET
-        token = EXCLUDED.token,
-        expires_at = EXCLUDED.expires_at,
-        used = false,
-        created_at = NOW()
+        INSERT INTO email_verification_tokens (id, user_id, token, expires_at, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
       `;
 
-      await client.query(query, [userId, token, expiresAt]);
+      await client.query(query, [id, userId, token, expiresAt]);
       return true;
     } finally {
       client.release();

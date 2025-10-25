@@ -16,7 +16,11 @@ import type { HistoryItem, QAHistoryItem } from '../types';
 import AIVisibilityTable from './AIVisibilityTable';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
+<<<<<<< HEAD
 import { userStateManager } from '../utils/userStateManager';
+=======
+import HighlightedLink from './ui/HighlightedLink';
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
 
 // CTA Button component for navigation
 const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
@@ -2667,9 +2671,17 @@ export function CompetitorInsight() {
       <div className="mb-8">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-4">
           <div></div>
+<<<<<<< HEAD
           <div className="text-left">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Competitor Analysis</h2>
             <p className="text-gray-600 text-sm">Analysis completed for: {analysisResult?.originalInput || websiteUrl}</p>
+=======
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Competitor Analysis Results</h2>
+            <p className="text-gray-600 text-lg">
+              Analysis completed for: <HighlightedLink value={(analysisResult?.originalInput || websiteUrl) as string} />
+            </p>
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
           </div>
           <div className="justify-self-end flex gap-2">
             <button

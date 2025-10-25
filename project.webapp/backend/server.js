@@ -24,7 +24,7 @@ const JSONStorage = require('./jsonStorage');
 
 const MemoryStorage = require('./memoryStorage');
 
-const EmailService = require('./emailService');
+const emailService = require('./emailService');
 
 const emailVerificationService = require('./emailVerificationService');
 
@@ -156,7 +156,7 @@ const localAuthService = new LocalAuthService();
 
 const googleAuthService = new GoogleAuthService();
 
-const emailService = new EmailService();
+// emailService is already imported as a singleton instance above
 
 const llmService = new LLMService();
 
@@ -286,23 +286,20 @@ const authenticateToken = async (req, res, next) => {
 
 
 
-// Initialize database connection
+// Initialize database connection and create default admin user
 
-db.connect().catch(console.error);
-
-
+db.connect().then(async () => {
+  console.log('✅ Database connected successfully');
 
 // Create default admin user if local auth is enabled
-
 if (ENABLE_LOCAL_AUTH) {
-
-  db.connect().then(() => {
-
-    localAuthService.createDefaultAdmin(db);
-
-  }).catch(console.error);
-
-}
+    console.log('🔐 Local authentication enabled, creating default admin user...');
+    await localAuthService.createDefaultAdmin(db);
+  }
+}).catch((error) => {
+  console.error('❌ Database connection failed:', error);
+  process.exit(1);
+});
 
 
 
@@ -609,7 +606,7 @@ if (ENABLE_LOCAL_AUTH) {
 
       
 
-      // Create user with email_verified = false
+      // Create user with email_verified = false (email verification required)
 
       const userData = {
 

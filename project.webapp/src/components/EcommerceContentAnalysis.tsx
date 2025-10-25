@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Loader2, Link as LinkIcon, Globe, FileText, Upload, BarChart3, CheckCircle2, XCircle, HelpCircle, Image as ImageIcon, ListChecks, Network, ShieldCheck, AlertTriangle, ExternalLink, Check, X, Package, BookOpen, Award, Settings, Shield } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { useNavigate } from 'react-router-dom';
+import HighlightedLink from './ui/HighlightedLink';
 
 // CTA Button component for navigation
 const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
@@ -925,7 +926,9 @@ export function EcommerceContentAnalysis() {
           <div></div>
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Content Analysis Results</h2>
-            <p className="text-gray-600 text-lg">Analysis completed for: {formatDisplayUrl(urlInput)}</p>
+            <p className="text-gray-600 text-lg">
+              Analysis completed for: <HighlightedLink value={formatDisplayUrl(urlInput)} />
+            </p>
           </div>
           <div className="justify-self-end">
             <button

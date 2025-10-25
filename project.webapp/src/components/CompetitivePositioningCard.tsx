@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Loader2, TrendingUp, TrendingDown, Activity, Info } from 'lucide-react';
+import { ChatGPTIcon, GeminiIcon, ClaudeIcon, PerplexityIcon } from './ui/AIPlatformIcons';
 
 interface DashboardCardProps {
   title: string;
@@ -113,25 +114,25 @@ export function MarketShareGrowthCard({ result }: { result: any }) {
       name: 'ChatGPT', 
       mentions: currentMentions.byPlatform.chatgpt, 
       color: 'bg-green-500',
-      icon: '🤖'
+      icon: <ChatGPTIcon size={16} className="text-white" />
     },
     { 
       name: 'Gemini', 
       mentions: currentMentions.byPlatform.gemini, 
       color: 'bg-blue-500',
-      icon: '💎'
+      icon: <GeminiIcon size={16} className="text-white" />
     },
     { 
       name: 'Claude', 
       mentions: currentMentions.byPlatform.claude, 
       color: 'bg-purple-500',
-      icon: '🧠'
+      icon: <ClaudeIcon size={16} className="text-white" />
     },
     { 
       name: 'Perplexity', 
       mentions: currentMentions.byPlatform.perplexity, 
       color: 'bg-orange-500',
-      icon: '🔍'
+      icon: <PerplexityIcon size={16} className="text-white" />
     }
   ];
 

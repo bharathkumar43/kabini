@@ -6,7 +6,7 @@ import { authService } from '../services/authService';
 import ErrorNotification from './ui/ErrorNotification';
 import PasswordStrengthIndicator from './ui/PasswordStrengthIndicator';
 import { useEmojiBlocking } from '../utils/useEmojiBlocking';
-import { validateProfessionalEmail, getEmailValidationMessage, formatEmail } from '../utils/emailValidation';
+import { validateEmail, getEmailValidationMessage, formatEmail } from '../utils/emailValidation';
 
 const SignUp = () => {
   const [formData, setFormData] = useState({
@@ -60,10 +60,8 @@ const SignUp = () => {
     // Check immediately
     checkAuthAndRedirect();
 
-    // Set up an interval to check authentication status (more frequent for better responsiveness)
-    const interval = setInterval(checkAuthAndRedirect, 100);
-
-    return () => clearInterval(interval);
+    // Removed frequent polling to avoid infinite logs and re-renders
+    return () => {};
   }, [navigate, isAuthenticated]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +89,7 @@ const SignUp = () => {
         setEmailValidationError('');
       } else {
         // Use comprehensive Gmail email validation for real-time feedback
-        const emailValidation = validateProfessionalEmail(value);
+        const emailValidation = validateEmail(value);
         if (!emailValidation.isValid) {
           // Show real-time validation error
           setEmailValidationError(getEmailValidationMessage(value, emailValidation));
@@ -128,60 +126,75 @@ const SignUp = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[SignUp] Submit clicked with data:', {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email,
+      passwordLength: formData.password.length,
+      confirmPasswordLength: formData.confirmPassword.length
+    });
     setValidationError('');
     setEmailValidationError('');
     setAuthError(null);
     
     // Validate all required fields
     if (!formData.firstName.trim()) {
+      console.log('[SignUp] Validation failed: First name is required');
       setValidationError('First name is required');
       return;
     }
     if (!formData.lastName.trim()) {
+      console.log('[SignUp] Validation failed: Last name is required');
       setValidationError('Last name is required');
       return;
     }
     if (!formData.email.trim()) {
+      console.log('[SignUp] Validation failed: Email is required');
       setValidationError('Email is required');
       return;
     }
     if (!formData.password.trim()) {
+      console.log('[SignUp] Validation failed: Password is required');
       setValidationError('Password is required');
       return;
     }
     if (!formData.confirmPassword.trim()) {
+      console.log('[SignUp] Validation failed: Confirm password is required');
       setValidationError('Please confirm your password');
       return;
     }
     
-    // Enhanced name validation: letters only, no emojis, no special characters
-    const nameRegex = /^[A-Za-z]+$/;
+    // Enhanced name validation: letters, spaces, apostrophes, hyphens
+    const nameRegex = /^[A-Za-z][A-Za-z\s'\-]{0,29}$/;
+    
+    console.log('[SignUp] Validating names:', {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      firstNameValid: nameRegex.test(formData.firstName),
+      lastNameValid: nameRegex.test(formData.lastName)
+    });
     
     // Check for emojis and special characters in first name
     if (!nameRegex.test(formData.firstName)) {
       if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(formData.firstName)) {
+        console.log('[SignUp] Validation failed: First name contains emojis');
         setValidationError('First name cannot contain emojis');
         return;
       }
-      if (/[^A-Za-z]/.test(formData.firstName)) {
-        setValidationError('First name can only contain letters (A-Z, a-z). No numbers, spaces, or special characters allowed.');
-        return;
-      }
-      setValidationError('First name can contain only letters (A-Z, a-z)');
+      console.log('[SignUp] Validation failed: First name invalid characters');
+      setValidationError('First name can contain letters, spaces, apostrophes, and hyphens only.');
       return;
     }
     
     // Check for emojis and special characters in last name
     if (!nameRegex.test(formData.lastName)) {
       if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(formData.lastName)) {
+        console.log('[SignUp] Validation failed: Last name contains emojis');
         setValidationError('Last name cannot contain emojis');
         return;
       }
-      if (/[^A-Za-z]/.test(formData.lastName)) {
-        setValidationError('Last name can only contain letters (A-Z, a-z). No numbers, spaces, or special characters allowed.');
-        return;
-      }
-      setValidationError('Last name can contain only letters (A-Z, a-z)');
+      console.log('[SignUp] Validation failed: Last name invalid characters');
+      setValidationError('Last name can contain letters, spaces, apostrophes, and hyphens only.');
       return;
     }
     
@@ -204,8 +217,10 @@ const SignUp = () => {
     }
     
     // Use comprehensive email validation for professional domains
-    const emailValidation = validateProfessionalEmail(formData.email);
+    const emailValidation = validateEmail(formData.email);
+    console.log('[SignUp] Email validation result:', emailValidation);
     if (!emailValidation.isValid) {
+      console.log('[SignUp] Validation failed: Email invalid');
       setEmailValidationError(getEmailValidationMessage(formData.email, emailValidation));
       return;
     }
@@ -216,68 +231,90 @@ const SignUp = () => {
     // Enhanced password validation with comprehensive checks
     const password = formData.password;
     
+    console.log('[SignUp] Validating password:', {
+      length: password.length,
+      hasUpper: /[A-Z]/.test(password),
+      hasLower: /[a-z]/.test(password),
+      hasNumber: /\d/.test(password),
+      hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+      passwordsMatch: formData.password === formData.confirmPassword
+    });
+    
     // Check password length
-    if (password.length < 4) {
-      setValidationError('Password must be at least 4 characters long');
+    if (password.length < 8) {
+      console.log('[SignUp] Validation failed: Password too short');
+      setValidationError('Password must be at least 8 characters long');
       return;
     }
     if (password.length > 128) {
+      console.log('[SignUp] Validation failed: Password too long');
       setValidationError('Password cannot exceed 128 characters');
       return;
     }
     
     // Check for required character types
     if (!/[A-Z]/.test(password)) {
+      console.log('[SignUp] Validation failed: No uppercase letter');
       setValidationError('Password must contain at least one uppercase letter (A-Z)');
       return;
     }
     if (!/[a-z]/.test(password)) {
+      console.log('[SignUp] Validation failed: No lowercase letter');
       setValidationError('Password must contain at least one lowercase letter (a-z)');
       return;
     }
     if (!/\d/.test(password)) {
+      console.log('[SignUp] Validation failed: No number');
       setValidationError('Password must contain at least one number (0-9)');
       return;
     }
     if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      console.log('[SignUp] Validation failed: No special character');
       setValidationError('Password must contain at least one special character (!@#$%^&*()_+-=[]{};\':"\\|,.<>/?`)');
       return;
     }
     
     // Check for common weak patterns
     if (/(.)\1{2,}/.test(password)) {
+      console.log('[SignUp] Validation failed: Repeated characters');
       setValidationError('Password cannot contain 3 or more repeated characters');
       return;
     }
     
     // Check for sequential characters
     if (/abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz/i.test(password)) {
+      console.log('[SignUp] Validation failed: Sequential characters');
       setValidationError('Password cannot contain sequential characters (abc, 123, etc.)');
       return;
     }
     
     // Check for keyboard patterns
     if (/qwerty|asdfgh|zxcvbn|123456|654321/i.test(password)) {
+      console.log('[SignUp] Validation failed: Keyboard pattern');
       setValidationError('Password cannot contain common keyboard patterns');
       return;
     }
     
     // Check password confirmation match
     if (formData.password !== formData.confirmPassword) {
+      console.log('[SignUp] Validation failed: Passwords do not match');
       setValidationError('Passwords do not match');
       return;
     }
 
+    console.log('[SignUp] All validations passed! Calling API...');
     setIsLoading(true);
     clearError();
     
     try {
+      console.log('[SignUp] Sending registration request to backend...');
       const response = await authService.register({
         email: formData.email,
         password: formData.password,
         name: `${formData.firstName} ${formData.lastName}`,
         displayName: `${formData.firstName} ${formData.lastName}`
       });
+      console.log('[SignUp] Backend response:', response);
 
       if (response.success) {
         console.log('[SignUp] Sign up successful');
@@ -380,7 +417,7 @@ const SignUp = () => {
 
 
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} noValidate className="space-y-8">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">First Name <span className="text-red-600">*</span></label>
@@ -390,7 +427,7 @@ const SignUp = () => {
                 value={formData.firstName}
                 onChange={(e) => handleEmojiFilteredInput(e, (value) => {
                   // Allow only letters for first name - no emojis, no special characters
-                  const filteredValue = value.replace(/[^A-Za-z]/g, '');
+                  const filteredValue = value.replace(/[^A-Za-z\s'\-]/g, '');
                   
                   // Check for emojis specifically
                   if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(value)) {
@@ -405,7 +442,7 @@ const SignUp = () => {
                   // Don't clear authError - let it remain as toggle notification
                 })}
                 onPaste={(e) => handlePaste(e, (value) => {
-                  const filteredValue = value.replace(/[^A-Za-z]/g, '');
+                  const filteredValue = value.replace(/[^A-Za-z\s'\-]/g, '');
                   setFormData(prev => ({ ...prev, firstName: filteredValue }));
                 })}
                 onKeyDown={handleKeyDown}
@@ -414,7 +451,6 @@ const SignUp = () => {
                 onCompositionEnd={(e) => e.preventDefault()}
                 required
                 placeholder="Enter your first name *"
-                pattern="[A-Za-z]+"
                 autoComplete="off"
                 data-form-type="other"
                 readOnly={preventAutofill}
@@ -429,7 +465,7 @@ const SignUp = () => {
                 value={formData.lastName}
                 onChange={(e) => handleEmojiFilteredInput(e, (value) => {
                   // Allow only letters for last name - no emojis, no special characters
-                  const filteredValue = value.replace(/[^A-Za-z]/g, '');
+                  const filteredValue = value.replace(/[^A-Za-z\s'\-]/g, '');
                   
                   // Check for emojis specifically
                   if (/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(value)) {
@@ -444,7 +480,7 @@ const SignUp = () => {
                   // Don't clear authError - let it remain as toggle notification
                 })}
                 onPaste={(e) => handlePaste(e, (value) => {
-                  const filteredValue = value.replace(/[^A-Za-z]/g, '');
+                  const filteredValue = value.replace(/[^A-Za-z\s'\-]/g, '');
                   setFormData(prev => ({ ...prev, lastName: filteredValue }));
                 })}
                 onKeyDown={handleKeyDown}
@@ -453,7 +489,6 @@ const SignUp = () => {
                 onCompositionEnd={(e) => e.preventDefault()}
                 required
                 placeholder="Enter your last name *"
-                pattern="[A-Za-z]+"
                 autoComplete="off"
                 data-form-type="other"
                 readOnly={preventAutofill}
@@ -480,7 +515,7 @@ const SignUp = () => {
                 if (!formattedEmail.trim()) {
                   setEmailValidationError('');
                 } else {
-                  const emailValidation = validateProfessionalEmail(formattedEmail);
+                  const emailValidation = validateEmail(formattedEmail);
                   if (!emailValidation.isValid) {
                     setEmailValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
                   } else {
@@ -492,7 +527,7 @@ const SignUp = () => {
                 const formattedEmail = formatEmail(value);
                 setFormData(prev => ({ ...prev, email: formattedEmail }));
                 // Trigger validation after paste
-                const emailValidation = validateProfessionalEmail(formattedEmail);
+                const emailValidation = validateEmail(formattedEmail);
                 if (!emailValidation.isValid) {
                   setEmailValidationError(getEmailValidationMessage(formattedEmail, emailValidation));
                 } else {
@@ -653,15 +688,17 @@ const SignUp = () => {
           </div>
       </div>
       
-      {/* Error Notification - Only for authentication errors, not email validation */}
+      {/* Error Notification - Shows success in green, errors in red */}
       <ErrorNotification
-        error={authError || error}
+        error={authError || validationError || error}
         onClose={() => {
           setAuthError(null);
+          setValidationError('');
           clearError();
         }}
         autoClose={true}
         autoCloseDelay={5000}
+        type={authError?.includes('successfully') || authError?.includes('Account created') ? 'success' : 'error'}
       />
     </div>
   );

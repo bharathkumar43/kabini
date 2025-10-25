@@ -16,7 +16,12 @@ import type { HistoryItem, QAHistoryItem } from '../types';
 
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
+<<<<<<< HEAD
 import { userStateManager } from '../utils/userStateManager';
+=======
+import HighlightedLink from './ui/HighlightedLink';
+import { ChatGPTIcon, GeminiIcon, PerplexityIcon, ClaudeIcon } from './ui/AIPlatformIcons';
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -309,10 +314,10 @@ function AIPlatformPresenceCard() {
   const [viewMode, setViewMode] = useState<'radar' | 'grid'>('radar');
   
   const platformData = [
-    { name: 'ChatGPT', value: 10, icon: <Bot className="w-3 h-3" /> },
-    { name: 'Perplexity', value: 10, icon: <Search className="w-3 h-3" /> },
-    { name: 'Gemini', value: 10, icon: <Star className="w-3 h-3" /> },
-    { name: 'Claude', value: 10, icon: <Brain className="w-3 h-3" /> }
+    { name: 'ChatGPT', value: 10, icon: <ChatGPTIcon size={12} /> },
+    { name: 'Perplexity', value: 10, icon: <PerplexityIcon size={12} /> },
+    { name: 'Gemini', value: 10, icon: <GeminiIcon size={12} /> },
+    { name: 'Claude', value: 10, icon: <ClaudeIcon size={12} /> }
   ];
 
   const strongestPlatform = platformData.reduce((max, platform) => 
@@ -397,7 +402,6 @@ function AIPlatformPresenceCard() {
 function OverallAIVisibilityScoreCard({ result }: { result: any }) {
   const [weeklyTrend, setWeeklyTrend] = useState<number | null>(null);
   const [loadingTrend, setLoadingTrend] = useState(false);
-  const [showDescription, setShowDescription] = useState(false);
 
   // Get main company data
   const mainCompany = result?.competitors?.find((comp: any) => 
@@ -507,8 +511,20 @@ function OverallAIVisibilityScoreCard({ result }: { result: any }) {
   return (
     <DashboardCard
       title="AI Visibility Score"
+<<<<<<< HEAD
       tooltip="How well your brand appears in AI assistant responses"
       icon={<Eye className="w-4 h-4 text-blue-600" />}
+=======
+      icon={<Eye className="w-4 h-4 text-black" />}
+      headerAction={
+        <div 
+          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
+          title="How well your brand appears in AI assistant responses"
+        >
+          <span className="text-xs text-gray-600 font-medium">i</span>
+        </div>
+      }
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="flex items-center justify-center h-32">
         <div className="text-center w-full px-6">
@@ -804,7 +820,6 @@ function ProductPerformanceAnalysisCard({ result, setShowShopifyModal }: { resul
 
 // LLM Presence Component (Updated to match image design)
 function AIPlatformPresenceBreakdown({ result }: { result: any }) {
-  const [showDescription, setShowDescription] = useState(false);
   
   // Get main company data
   const mainCompany = result?.competitors?.find((comp: any) => 
@@ -835,17 +850,29 @@ function AIPlatformPresenceBreakdown({ result }: { result: any }) {
   const platformAvailability = getPlatformAvailability();
   
   const platforms = [
-    { name: 'ChatGPT', available: platformAvailability.chatgpt, icon: <Bot className="w-4 h-4" /> },
-    { name: 'Gemini', available: platformAvailability.gemini, icon: <Star className="w-4 h-4" /> },
-    { name: 'Perplexity', available: platformAvailability.perplexity, icon: <Search className="w-4 h-4" /> },
-    { name: 'Claude', available: platformAvailability.claude, icon: <Brain className="w-4 h-4" /> }
+    { name: 'ChatGPT', available: platformAvailability.chatgpt, icon: <ChatGPTIcon size={16} /> },
+    { name: 'Gemini', available: platformAvailability.gemini, icon: <GeminiIcon size={16} /> },
+    { name: 'Perplexity', available: platformAvailability.perplexity, icon: <PerplexityIcon size={16} /> },
+    { name: 'Claude', available: platformAvailability.claude, icon: <ClaudeIcon size={16} /> }
   ];
 
   return (
     <DashboardCard
       title="LLM Presence"
+<<<<<<< HEAD
       tooltip="Which AI platforms recognize your brand"
       icon={<Globe className="w-4 h-4 text-blue-600" />}
+=======
+      icon={<Globe className="w-4 h-4 text-black" />}
+      headerAction={
+        <div 
+          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
+          title="Which AI platforms recognize your brand"
+        >
+          <span className="text-xs text-gray-600 font-medium">i</span>
+        </div>
+      }
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="space-y-3">
         {platforms.map((platform, index) => (
@@ -868,7 +895,6 @@ function AIPlatformPresenceBreakdown({ result }: { result: any }) {
 
 // Share of AI Voice Card
 function ShareOfAIVoiceCard({ result }: { result: any }) {
-  const [showDescription, setShowDescription] = useState(false);
   
   const computeShare = (analysisResult: any): number => {
     try {
@@ -917,8 +943,20 @@ function ShareOfAIVoiceCard({ result }: { result: any }) {
   return (
     <DashboardCard
       title="Share of AI Voice"
+<<<<<<< HEAD
       tooltip="Measure your brand's share of voice across AI platforms"
       icon={<PieChart className="w-4 h-4 text-blue-600" />}
+=======
+      icon={<PieChart className="w-4 h-4 text-black" />}
+      headerAction={
+        <div 
+          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
+          title="Measure your brand's share of voice across AI platforms"
+        >
+          <span className="text-xs text-gray-600 font-medium">i</span>
+        </div>
+      }
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="flex items-center justify-center h-32">
         <div className="text-center w-full px-6">
@@ -943,10 +981,10 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
   aiScores?: any
 }) {
   const llmServices = [
-    { name: 'ChatGPT', key: 'chatgpt', icon: <CheckCircle className="w-3 h-3" /> },
-    { name: 'Gemini', key: 'gemini', icon: <CheckCircle className="w-3 h-3" /> },
-    { name: 'Perplexity', key: 'perplexity', icon: <CheckCircle className="w-3 h-3" /> },
-    { name: 'Claude', key: 'claude', icon: <CheckCircle className="w-3 h-3" /> },
+    { name: 'ChatGPT', key: 'chatgpt', icon: <ChatGPTIcon size={12} /> },
+    { name: 'Gemini', key: 'gemini', icon: <GeminiIcon size={12} /> },
+    { name: 'Perplexity', key: 'perplexity', icon: <PerplexityIcon size={12} /> },
+    { name: 'Claude', key: 'claude', icon: <ClaudeIcon size={12} /> },
   ];
 
   const getLLMAvailability = () => {
@@ -1005,7 +1043,6 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
 
 // Competitor Score Card
 function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
-  const [showDescription, setShowDescription] = useState(false);
   
   // Relative competitor metric: rank, percentile, gap to leader (score 0..100)
   const getRelativeBenchmark = (competitors: any[]) => {
@@ -1034,8 +1071,20 @@ function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
   return (
     <DashboardCard
       title="Competitor Score"
+<<<<<<< HEAD
       tooltip="Compare your performance against industry competitors"
       icon={<BarChartIcon className="w-4 h-4 text-blue-600" />}
+=======
+      icon={<BarChartIcon className="w-4 h-4 text-black" />}
+      headerAction={
+        <div 
+          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors flex items-center justify-center"
+          title="Compare your performance against industry competitors"
+        >
+          <span className="text-xs text-gray-600 font-medium">i</span>
+        </div>
+      }
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
     >
       <div className="flex items-center justify-center h-32">
         <div className="text-center w-full px-6">
@@ -4387,8 +4436,13 @@ export function Overview() {
               </div>
             </div>
           ) : (
+<<<<<<< HEAD
             <p className="text-sm text-gray-600">
               Analysis completed for: <span className="font-semibold text-black">{analysisResult?.originalInput}</span>
+=======
+            <p className="text-gray-600 text-lg">
+              Analysis completed for: <HighlightedLink value={analysisResult?.originalInput || ''} />
+>>>>>>> 5478deb793fb04b1ff11d1a6b03fd06daa15181b
             </p>
           )}
         </div>

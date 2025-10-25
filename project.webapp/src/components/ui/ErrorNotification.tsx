@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertCircle } from 'lucide-react';
+import { X, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface ErrorNotificationProps {
   error: string | null;
   onClose: () => void;
   autoClose?: boolean;
   autoCloseDelay?: number;
-  type?: 'error' | 'warning' | 'info';
+  type?: 'error' | 'warning' | 'info' | 'success';
 }
 
 const ErrorNotification: React.FC<ErrorNotificationProps> = ({
@@ -51,6 +51,16 @@ const ErrorNotification: React.FC<ErrorNotificationProps> = ({
       progressBg: 'bg-red-200',
       progressBar: 'bg-red-500',
       titleText: 'Authentication Error'
+    },
+    success: {
+      container: 'bg-green-50 border-green-200',
+      icon: 'text-green-500',
+      title: 'text-green-800',
+      text: 'text-green-700',
+      closeButton: 'text-green-400 hover:text-green-600',
+      progressBg: 'bg-green-200',
+      progressBar: 'bg-green-500',
+      titleText: 'Success'
     },
     warning: {
       container: 'bg-yellow-50 border-yellow-200',
@@ -101,7 +111,11 @@ const ErrorNotification: React.FC<ErrorNotificationProps> = ({
           {/* Content */}
           <div className="flex items-start gap-3 pr-6">
             <div className="flex-shrink-0">
-              <AlertCircle className={`w-5 h-5 ${currentStyle.icon}`} />
+              {type === 'success' ? (
+                <CheckCircle className={`w-5 h-5 ${currentStyle.icon}`} />
+              ) : (
+                <AlertCircle className={`w-5 h-5 ${currentStyle.icon}`} />
+              )}
             </div>
             <div className="flex-1">
               <h3 className={`text-sm font-semibold mb-1 ${currentStyle.title}`}>
