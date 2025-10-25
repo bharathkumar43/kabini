@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, FileText, X, Upload, Heart, Frown, Meh, Package, DollarSign, BarChart, Lightbulb, Grid3X3, Radar, Brain, RefreshCw } from 'lucide-react';
+import { Search, Loader2, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, FileText, X, Upload, Heart, Frown, Meh, Package, DollarSign, BarChart, Lightbulb, Grid3X3, Radar, Brain, RefreshCw, BadgeCheck, Circle } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { SessionData } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -18,7 +18,7 @@ import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDo
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
 import { userStateManager } from '../utils/userStateManager';
 import HighlightedLink from './ui/HighlightedLink';
-import { ChatGPTIcon, GeminiIcon, PerplexityIcon, ClaudeIcon } from './ui/AIPlatformIcons';
+import { ChatGPTIcon, GeminiIcon, PerplexityIcon, ClaudeIcon, GenericChatGPTBadge, GenericGeminiBadge, GenericPerplexityBadge, GenericClaudeBadge } from './ui/AIPlatformIcons';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -936,16 +936,16 @@ function ShareOfAIVoiceCard({ result }: { result: any }) {
   );
 }
 
-// LLM Presence Card
+// LLM Presence Card - Updated icons
 function LLMPresenceCard({ serviceStatus, aiScores }: { 
   serviceStatus: any, 
   aiScores?: any
 }) {
   const llmServices = [
-    { name: 'ChatGPT', key: 'chatgpt', icon: <ChatGPTIcon size={12} /> },
-    { name: 'Gemini', key: 'gemini', icon: <GeminiIcon size={12} /> },
-    { name: 'Perplexity', key: 'perplexity', icon: <PerplexityIcon size={12} /> },
-    { name: 'Claude', key: 'claude', icon: <ClaudeIcon size={12} /> },
+    { name: 'ChatGPT', key: 'chatgpt', icon: <Circle className="w-4 h-4" /> },
+    { name: 'Gemini', key: 'gemini', icon: <Star className="w-4 h-4" /> },
+    { name: 'Perplexity', key: 'perplexity', icon: <Search className="w-4 h-4" /> },
+    { name: 'Claude', key: 'claude', icon: <Globe className="w-4 h-4" /> },
   ];
 
   const getLLMAvailability = () => {
@@ -980,11 +980,14 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
           
           return (
             <div key={service.key} className="flex items-center justify-between">
-              <span className="text-gray-700">{service.name}</span>
+              <div className="flex items-center gap-2">
+                {service.icon}
+                <span className="text-gray-700">{service.name}</span>
+              </div>
               <div className={`flex items-center ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
                 {isAvailable ? (
                   <>
-                    {service.icon}
+                    <CheckCircle className="w-3 h-3" />
                     <span className="ml-1 text-sm">Available</span>
                   </>
                 ) : (

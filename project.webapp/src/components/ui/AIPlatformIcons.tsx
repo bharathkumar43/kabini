@@ -102,3 +102,32 @@ export const AIPlatformIcon: React.FC<{ platform: string; className?: string; si
 
 export default AIPlatformIcon;
 
+// Generic badge-style icons to match dashboard visuals
+export const GenericChatGPTBadge: React.FC<AIIconProps> = ({ className = '', size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" className={className} fill="none">
+    <circle cx="12" cy="12" r="8.5" stroke="#111827" strokeWidth="1.6" fill="#fff" />
+    <circle cx="12" cy="12" r="1.6" fill="#111827" />
+  </svg>
+);
+
+export const GenericGeminiBadge: React.FC<AIIconProps> = ({ className = '', size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" className={className} fill="none">
+    <path d="M8 12l-3 3 3 3 3-3-3-3Z" fill="#9B72F2" />
+    <path d="M16 6l-3 3 3 3 3-3-3-3Z" fill="#9B72F2" opacity="0.8" />
+  </svg>
+);
+
+export const GenericPerplexityBadge: React.FC<AIIconProps> = ({ className = '', size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" className={className} fill="none">
+    <rect x="3" y="3" width="18" height="18" rx="4" fill="#1FB6FF" />
+    <path d="M8 8l8 8M16 8l-8 8" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+  </svg>
+);
+
+export const GenericClaudeBadge: React.FC<AIIconProps> = ({ className = '', size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" className={className} fill="none">
+    <rect x="3" y="3" width="18" height="18" rx="5" fill="#D4A574" />
+    <path d="M8 9.5c.9 1.2 2.1 1.8 4 1.8s3.1-.6 4-1.8M8 14.5c.9-1.2 2.1-1.8 4-1.8s3.1.6 4 1.8" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
