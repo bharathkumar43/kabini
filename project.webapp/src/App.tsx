@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, BarChart3, FileText, History as HistoryIcon, Zap, LogOut, Eye, Settings, Target } from 'lucide-react';
 // import { ContentInput } from './components/ContentInput';
 // import { historyService } from './services/historyService';
-import { Statistics } from './components/Statistics';
+// import { Statistics } from './components/Statistics';
 import Login from './components/Login';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { downloadFile } from './utils/fileUtils';
@@ -59,14 +59,14 @@ const NAV_ITEMS = [
   { label: 'Dashboard', icon: <Zap />, path: '/overview' },
   { label: 'Competitor Insight', icon: <Eye />, path: '/ai-visibility-analysis' },
   { label: 'Product Insights', icon: <BarChart3 />, path: '/product-insights' },
-  { label: 'Content Enhancement', icon: <FileText />, path: '/enhance-content' },
-  // { label: 'Content Analysis', icon: <BarChart3 />, path: '/content-analysis' },
-  { label: 'Structure Analysis', icon: <Target />, path: '/content-structure-analysis' },
+  // Requested UI order: Content Analysis directly below Product Insights
   { label: 'Content Analysis', icon: <BarChart3 />, path: '/ecommerce-content-analysis' },
-    { label: 'Settings', icon: <Settings />, path: '/configuration' },
+  // { label: 'Structure Analysis', icon: <Target />, path: '/content-structure-analysis' }, // temporarily hidden
+  { label: 'Content Enhancement', icon: <FileText />, path: '/enhance-content' },
+  // { label: 'Settings', icon: <Settings />, path: '/configuration' }, // temporarily hidden
   // { label: 'Smart Competitor Analysis', icon: <BarChart3 />, path: '/smart-competitor-analysis' },
   { label: 'History', icon: <HistoryIcon />, path: '/history' },
-  { label: 'Statistics', icon: <BarChart3 />, path: '/statistics' },
+  // { label: 'Statistics', icon: <BarChart3 />, path: '/statistics' },
 ];
 
 interface SidebarProps {
@@ -209,8 +209,8 @@ function Topbar({ setIsOpen, onLogout }: { setIsOpen: (open: boolean) => void; o
 
 function Footer() {
   return (
-    <footer className="w-full bg-white border-t border-primary/10 text-center text-primary py-3 text-sm">
-      © {new Date().getFullYear()} Kabini.ai. All rights reserved.
+    <footer className="w-full bg-white border-t border-gray-200 text-center py-3 text-sm">
+      <span className="text-black">© {new Date().getFullYear()} Kabini.ai. All rights reserved.</span>
     </footer>
   );
 }
@@ -394,10 +394,10 @@ function AppContent() {
               {/* <Route path="/content-analysis" element={<CompetitorBenchmarking competitorDomains={competitorDomains} />} /> */}
       
               {/* <Route path="/smart-competitor-analysis" element={<SmartCompetitorAnalysis />} /> */}
-              <Route path="/content-structure-analysis" element={<ContentStructureAnalysisRoute />} />
+              {/* <Route path="/content-structure-analysis" element={<ContentStructureAnalysisRoute />} /> */}
               <Route path="/ecommerce-content-analysis" element={<EcommerceContentAnalysis />} />
-              {/* E-commerce AI removed */}
-              <Route path="/configuration" element={<Configuration 
+              {/* Settings temporarily hidden */}
+              {/* <Route path="/configuration" element={<Configuration 
                 questionProvider={"gemini"}
                 questionModel={"gemini-2.0-flash"}
                 onQuestionProviderChange={() => {}}
@@ -408,12 +408,14 @@ function AppContent() {
                 onAnswerModelChange={() => {}}
                 questionCount={5}
                 onQuestionCountChange={() => {}}
-              />} />
+              />} /> */}
               {/* <Route path="/content-structure-landing" element={<ContentStructureLanding />} /> */}
               <Route path="/history" element={<History qaItems={sessions.flatMap(s => s.qaData)} onExport={downloadFile} />} />
-              <Route path="/statistics" element={<Statistics sessions={sessions} currentSession={currentSession} />} />
+              {/* Statistics temporarily removed */}
               <Route path="/CloudFuzeLLMQA" element={<Navigate to="/overview" replace />} />
+              <Route path="/login" element={<Navigate to="/overview" replace />} />
               <Route path="/" element={<Navigate to="/overview" replace />} />
+              <Route path="*" element={<Navigate to="/overview" replace />} />
             </Routes>
           </div>
         </main>

@@ -319,17 +319,17 @@ function computeScores(
 const getPillarIcon = (pillarName: string) => {
   switch (pillarName) {
     case 'Product Page Quality':
-      return <Package className="w-5 h-5" style={{ color: '#2563eb' }} />;
+      return <Package className="w-4 h-4 text-blue-600" />;
     case 'Category & Guides':
-      return <BookOpen className="w-5 h-5" style={{ color: '#2563eb' }} />;
+      return <BookOpen className="w-4 h-4 text-blue-600" />;
     case 'Content Depth & Authority':
-      return <Award className="w-5 h-5" style={{ color: '#2563eb' }} />;
+      return <Award className="w-4 h-4 text-blue-600" />;
     case 'Technical & Schema':
-      return <Settings className="w-5 h-5" style={{ color: '#2563eb' }} />;
+      return <Settings className="w-4 h-4 text-blue-600" />;
     case 'Off Site & Trust Signals':
-      return <Shield className="w-5 h-5" style={{ color: '#2563eb' }} />;
+      return <Shield className="w-4 h-4 text-blue-600" />;
     default:
-      return <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />;
+      return <BarChart3 className="w-4 h-4 text-blue-600" />;
   }
 };
 
@@ -947,8 +947,8 @@ export function EcommerceContentAnalysis() {
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                    <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                    <BarChart3 className="w-4 h-4 text-blue-600" />
                   </div>
                   <h3 className="text-base font-semibold" style={{ color: '#000000' }}>AI Readiness Score</h3>
                 </div>
@@ -1000,7 +1000,7 @@ export function EcommerceContentAnalysis() {
               <div key={p.name} className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
                       {getPillarIcon(p.name)}
                     </div>
                     <div className="text-lg font-semibold" style={{ color: '#000000' }}>{p.name}</div>
@@ -1032,8 +1032,8 @@ export function EcommerceContentAnalysis() {
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                    <BarChart3 className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                    <BarChart3 className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="text-lg font-semibold" style={{ color: '#000000' }}>Price Comparison</div>
                 </div>
@@ -1138,25 +1138,27 @@ export function EcommerceContentAnalysis() {
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                    <FileText className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                    <FileText className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="text-lg font-semibold" style={{ color: '#000000' }}>Structure</div>
                 </div>
-                <CtaButton onClick={() => navigate('/content-structure-analysis', { state: { url: urlInput } })}>
-                  Audit Structure
-                </CtaButton>
               </div>
               <div className="text-base text-black"><strong>H1</strong>: {extracted.h1.join(' | ') || '—'}</div>
               <div className="text-base text-black mt-1"><strong>H2</strong>: {extracted.h2.slice(0,6).join(' | ') || '—'}</div>
               <div className="text-base text-black mt-1"><strong>H3</strong>: {extracted.h3.slice(0,6).join(' | ') || '—'}</div>
             </div>
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                  <ImageIcon className="w-5 h-5" style={{ color: '#2563eb' }} />
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                    <ImageIcon className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="text-lg font-semibold" style={{ color: '#000000' }}>Schema & Media</div>
                 </div>
-                <div className="text-lg font-semibold" style={{ color: '#000000' }}>Schema & Media</div>
+                <CtaButton onClick={() => navigate('/enhance-content', { state: { tab: 'schema' } })}>
+                  Generate Schema
+                </CtaButton>
               </div>
               <div className="text-base text-black">Product schema: {extracted.productSchemaFound ? 'Yes' : 'No'}</div>
               <div className="text-base text-black">FAQ schema: {extracted.faqSchemaFound ? 'Yes' : 'No'}</div>
@@ -1169,8 +1171,8 @@ export function EcommerceContentAnalysis() {
           {/* Suggestions */}
           <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                <ListChecks className="w-5 h-5" style={{ color: '#2563eb' }} />
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                <ListChecks className="w-4 h-4 text-blue-600" />
               </div>
               <div className="text-lg font-semibold" style={{ color: '#000000' }}>Actionable Suggestions</div>
             </div>
@@ -1190,8 +1192,8 @@ export function EcommerceContentAnalysis() {
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                    <ShieldCheck className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                    <ShieldCheck className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="text-lg font-semibold" style={{ color: '#000000' }}>Off‑Site & Trust Signals</div>
                 </div>
@@ -1243,8 +1245,8 @@ export function EcommerceContentAnalysis() {
             <div className="bg-white border border-gray-300 rounded-lg p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-                    <Network className="w-5 h-5" style={{ color: '#2563eb' }} />
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                    <Network className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="text-lg font-semibold" style={{ color: '#000000' }}>Product Competitors</div>
                 </div>
@@ -1283,7 +1285,7 @@ export function EcommerceContentAnalysis() {
 
 function ShoppingCartBadge() {
   return (
-    <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-500 flex items-center justify-center">
+    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
       <ShoppingCartIcon />
     </div>
   );
@@ -1291,10 +1293,10 @@ function ShoppingCartBadge() {
 
 function ShoppingCartIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 3h2l.4 2M7 13h10l3-8H6.4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="9" cy="20" r="1" fill="white"/>
-      <circle cx="18" cy="20" r="1" fill="white"/>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 3h2l.4 2M7 13h10l3-8H6.4" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="9" cy="20" r="1" fill="#2563eb"/>
+      <circle cx="18" cy="20" r="1" fill="#2563eb"/>
     </svg>
   );
 }

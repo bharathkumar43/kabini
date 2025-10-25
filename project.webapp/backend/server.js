@@ -324,6 +324,162 @@ app.get('/api/health', (req, res) => {
 
 });
 
+// Unified Cache Storage - Backend persistence for cross-page analysis
+// In-memory store with 1-hour TTL and size limits
+const unifiedAnalysisCache = new Map();
+const CACHE_MAX_SIZE = 1000; // Max 1000 entries
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Auto-cleanup expired cache entries every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [key, value] of unifiedAnalysisCache.entries()) {
+    if (value.expiresAt < now) {
+      unifiedAnalysisCache.delete(key);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[Unified Cache] Auto-cleaned ${cleaned} expired entries. Remaining: ${unifiedAnalysisCache.size}`);
+  }
+  
+  // Also cleanup competitor cache
+  if (global.competitorCache) {
+    let competitorCleaned = 0;
+    for (const [key, value] of global.competitorCache.entries()) {
+      if (value.expiresAt < now) {
+        global.competitorCache.delete(key);
+        competitorCleaned++;
+      }
+    }
+    if (competitorCleaned > 0) {
+      console.log(`[Competitor Cache] Auto-cleaned ${competitorCleaned} expired entries. Remaining: ${global.competitorCache.size}`);
+    }
+  }
+}, 10 * 60 * 1000);
+
+// GET cached analysis
+app.get('/api/unified-cache/:target', authenticateToken, async (req, res) => {
+  try {
+    const { target } = req.params;
+    const normalizedKey = `${req.user.email}:${target.toLowerCase()}`;
+    
+    const cached = unifiedAnalysisCache.get(normalizedKey);
+    
+    if (!cached) {
+      return res.json({ success: true, cached: null });
+    }
+    
+    // Check if expired
+    if (cached.expiresAt < Date.now()) {
+      unifiedAnalysisCache.delete(normalizedKey);
+      return res.json({ success: true, cached: null });
+    }
+    
+    res.json({ success: true, cached });
+  } catch (error) {
+    console.error('[Unified Cache] GET error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST/PUT cached analysis
+app.post('/api/unified-cache', authenticateToken, async (req, res) => {
+  try {
+    const { target, originalInput, page, data } = req.body;
+    
+    if (!target || !page || !data) {
+      return res.status(400).json({ success: false, error: 'Missing required fields: target, page, data' });
+    }
+    
+    const normalizedKey = `${req.user.email}:${target.toLowerCase()}`;
+    const now = Date.now();
+    
+    // Get existing or create new
+    let cached = unifiedAnalysisCache.get(normalizedKey);
+    
+    if (!cached) {
+      cached = {
+        target: target.toLowerCase(),
+        targetOriginal: originalInput || target,
+        userId: req.user.email,
+        timestamp: now,
+        expiresAt: now + CACHE_TTL_MS,
+        dashboard: null,
+        competitorInsight: null,
+        productInsight: null
+      };
+    } else {
+      // Update expiration
+      cached.expiresAt = now + CACHE_TTL_MS;
+    }
+    
+    // Update specific page data
+    if (page === 'dashboard' || page === 'competitorInsight' || page === 'productInsight') {
+      cached[page] = data;
+    }
+    
+    unifiedAnalysisCache.set(normalizedKey, cached);
+    
+    // Size-based cleanup if over limit
+    if (unifiedAnalysisCache.size > CACHE_MAX_SIZE) {
+      // Remove oldest 10% of entries
+      const entries = Array.from(unifiedAnalysisCache.entries());
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const toRemove = Math.ceil(entries.length * 0.1);
+      for (let i = 0; i < toRemove; i++) {
+        unifiedAnalysisCache.delete(entries[i][0]);
+      }
+      console.log(`[Unified Cache] Size limit reached. Removed ${toRemove} oldest entries. New size: ${unifiedAnalysisCache.size}`);
+    }
+    
+    res.json({ success: true, cached });
+  } catch (error) {
+    console.error('[Unified Cache] POST error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE cached analysis
+app.delete('/api/unified-cache/:target', authenticateToken, async (req, res) => {
+  try {
+    const { target } = req.params;
+    const normalizedKey = `${req.user.email}:${target.toLowerCase()}`;
+    
+    const deleted = unifiedAnalysisCache.delete(normalizedKey);
+    
+    res.json({ success: true, deleted });
+  } catch (error) {
+    console.error('[Unified Cache] DELETE error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET cache stats
+app.get('/api/unified-cache-stats', authenticateToken, async (req, res) => {
+  try {
+    const now = Date.now();
+    const allEntries = Array.from(unifiedAnalysisCache.values());
+    const userEntries = allEntries.filter(e => e.userId === req.user.email);
+    const validEntries = userEntries.filter(e => e.expiresAt > now);
+    
+    res.json({
+      success: true,
+      stats: {
+        totalEntries: unifiedAnalysisCache.size,
+        userEntries: userEntries.length,
+        validUserEntries: validEntries.length,
+        maxSize: CACHE_MAX_SIZE,
+        ttlMinutes: CACHE_TTL_MS / 60000
+      }
+    });
+  } catch (error) {
+    console.error('[Unified Cache] STATS error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 
 
 // Simple test endpoint for AI visibility
@@ -373,9 +529,6 @@ app.get('/api/ai-visibility/test', (req, res) => {
   });
 
 });
-
-
-
 // Local Authentication Routes
 
 if (ENABLE_LOCAL_AUTH) {
@@ -978,9 +1131,6 @@ if (ENABLE_LOCAL_AUTH) {
   });
 
 }
-
-
-
 // Azure Authentication routes (existing)
 
 app.post('/api/auth/login', async (req, res) => {
@@ -1690,9 +1840,6 @@ app.post('/api/sessions', authenticateToken, async (req, res) => {
   }
 
 });
-
-
-
 app.get('/api/sessions/:type', authenticateToken, async (req, res) => {
 
   try {
@@ -2478,9 +2625,6 @@ app.get('/api/llm/providers', async (req, res) => {
   }
 
 });
-
-
-
 app.post('/api/llm/generate-questions', authenticateToken, async (req, res) => {
 
   try {
@@ -3272,9 +3416,6 @@ app.post('/api/ask', async (req, res) => {
   }
 
 });
-
-
-
 app.post('/api/llm/generate-answers-web', authenticateToken, async (req, res) => {
 
   console.log('Received request for /api/llm/generate-answers-web', req.body);
@@ -3926,9 +4067,6 @@ Provide answers that are factual, actionable, and evergreen (avoid vague marketi
 Ensure answers are FAQ schema–ready (plain text, no formatting issues).
 
 Make answers useful for both human readers and AI-driven engines (Google, ChatGPT, Gemini, Perplexity, etc.).
-
-
-
 Generate the Q&A pairs in this exact format:
 
 Q: ${selectedQuestions[0]}
@@ -4714,9 +4852,6 @@ app.post('/api/fanout-density/analyze', authenticateToken, async (req, res) => {
   }
 
 });
-
-
-
 // Generate Fanout Density Report
 
 app.get('/api/fanout-density/report', authenticateToken, async (req, res) => {
@@ -5488,9 +5623,6 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
 
 });
-
-
-
 // Server startup will be moved to the end of the file
 
 
@@ -6199,9 +6331,9 @@ function extractJSONFromMarkdown(text) {
 
 
 
-  // Try to extract JSON from markdown code blocks
+  // Try to extract JSON from markdown code blocks (handle both objects and arrays)
 
-  const jsonMatch = cleanedText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  const jsonMatch = cleanedText.match(/```(?:json)?\s*([\[\{][\s\S]*?[\]\}])\s*```/);
 
   let jsonBlock = null;
 
@@ -6211,11 +6343,17 @@ function extractJSONFromMarkdown(text) {
 
   } else {
 
-    // If no markdown blocks found, try to find JSON object in the text
+    // If no markdown blocks found, try to find JSON array first, then object
+
+    const jsonArrayMatch = cleanedText.match(/\[[\s\S]*\]/);
 
     const jsonObjectMatch = cleanedText.match(/\{[\s\S]*\}/);
 
-    if (jsonObjectMatch) {
+    if (jsonArrayMatch) {
+
+      jsonBlock = jsonArrayMatch[0].trim();
+
+    } else if (jsonObjectMatch) {
 
       jsonBlock = jsonObjectMatch[0].trim();
 
@@ -6263,27 +6401,31 @@ function extractJSONFromMarkdown(text) {
 
   console.error('[JSON Extraction] No valid JSON found in text');
 
-  return {};
+  // Return empty array for array context, empty object otherwise
+  return text.includes('[') ? [] : {};
 
 }
-
-
-
 // Improved JSON fixer for Gemini API responses
 
 function fixCommonJsonIssues(jsonText) {
 
   let fixed = jsonText;
 
+  // Fix smart quotes and apostrophes that break JSON
+  fixed = fixed.replace(/[\u2018\u2019]/g, "'"); // Smart single quotes
+  fixed = fixed.replace(/[\u201C\u201D]/g, '"'); // Smart double quotes
+  fixed = fixed.replace(/'/g, "'"); // Normalize apostrophes
 
+  // Remove any lines before the first { or [ and after the last } or ]
 
-  // Remove any lines before the first { and after the last }
+  const firstBrace = Math.min(
+    fixed.indexOf('{') !== -1 ? fixed.indexOf('{') : Infinity,
+    fixed.indexOf('[') !== -1 ? fixed.indexOf('[') : Infinity
+  );
 
-  const firstBrace = fixed.indexOf('{');
+  const lastBrace = Math.max(fixed.lastIndexOf('}'), fixed.lastIndexOf(']'));
 
-  const lastBrace = fixed.lastIndexOf('}');
-
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+  if (firstBrace !== Infinity && lastBrace !== -1 && lastBrace > firstBrace) {
 
     fixed = fixed.substring(firstBrace, lastBrace + 1);
 
@@ -6309,9 +6451,13 @@ function fixCommonJsonIssues(jsonText) {
 
 
 
-  // Fix single quotes to double quotes
-
+  // Fix single quotes to double quotes (but preserve apostrophes inside words)
+  // First, temporarily replace apostrophes in contractions
+  fixed = fixed.replace(/(\w)'(\w)/g, '$1___APOSTROPHE___$2');
+  // Now replace remaining single quotes with double quotes
   fixed = fixed.replace(/'/g, '"');
+  // Restore apostrophes
+  fixed = fixed.replace(/___APOSTROPHE___/g, "'");
 
 
 
@@ -6846,7 +6992,6 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
 <body>
 
     ${htmlContent}
-
 </body>
 
 </html>`;
@@ -6877,6 +7022,8 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
 
       
 
+      // All suggestions below are disabled (user wants only sentence replacements)
+      if (false) {
       // Check for missing H1 heading
 
       if (!fullPageHtml.includes('<h1>') && !originalContent.includes('# ')) {
@@ -6949,7 +7096,7 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
 
           currentContent: currentContent,
 
-          enhancedContent: `<h1>${suggestedTitle}</h1>\n\n${currentContent}`,
+          enhancedContent: `<h1>${suggestedTitle}</h1>`,
 
           exactReplacement: {
 
@@ -7347,11 +7494,129 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
 
 
 
+      // Check for product pages and add product-specific suggestions
+
+      const hasProductSchema = /"@type"\s*:\s*"Product"/i.test(fullPageHtml);
+
+      const hasPrice = /(?:[$₹€£]|INR|USD|EUR|GBP)\s?\d[\d.,]*/i.test(fullPageHtml) || /product:price:amount/i.test(fullPageHtml);
+
+      const hasAddToCart = /add to (cart|bag|basket)|buy now|checkout/i.test(fullPageHtml);
+
+      const isProductPage = hasProductSchema || (hasPrice && hasAddToCart);
+
+      
+
+      if (isProductPage && !hasProductSchema) {
+
+        // Extract product information
+
+        const h1Match = fullPageHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+
+        const productName = (h1Match && h1Match[1]) || pageTitle || 'Product';
+
+        const currencyMatch = fullPageHtml.match(/product:price:currency[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:priceCurrency|currency)"?\s*[:=]\s*"([A-Z]{3})"/i);
+
+        const amountMatch = fullPageHtml.match(/product:price:amount[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:price|priceAmount)"?\s*[:=]\s*"?([0-9][0-9.,]*)"?/i) || fullPageHtml.match(/(?:[$₹€£]|INR|USD|EUR|GBP)\s?\d[\d.,]*/i);
+
+        const brandMatch = fullPageHtml.match(/\"brand\"\s*:\s*\{[\s\S]*?\"name\"\s*:\s*\"([^\"]+)\"/i);
+
+        const brand = (brandMatch && brandMatch[1]) || '';
+
+        const priceCurrency = (currencyMatch && currencyMatch[1]) || 'USD';
+
+        const priceAmountRaw = (amountMatch && amountMatch[1]) || '';
+
+        const priceNumeric = priceAmountRaw.replace(/[^0-9.]/g, '');
+
+
+
+        if (productName && (priceNumeric || brand)) {
+
+          // Schema suggestions disabled - user wants only sentence replacements
+          const productPrice = priceNumeric ? `${priceCurrency} ${priceNumeric}` : '';
+          const productBrand = brand || '';
+
+          // Product-specific copy improvements (multiple plain-language replacements)
+
+          try {
+
+            const rawSentences = (extractedContent || '').split(/[.!?]+\s/).map(s => s.trim()).filter(Boolean);
+
+            const isRealContent = (s) => {
+
+              const codePatterns = /trackNode|getElementById|addEventListener|XMLHttpRequest|window\.|document\.|\.parse\(|\.json\(|function\s*\(/i;
+
+              const specialCharRatio = (s.match(/[(){}\[\]<>|&;]/g) || []).length / Math.max(s.length, 1);
+
+              return s.length > 25 && !codePatterns.test(s) && specialCharRatio < 0.15;
+
+            };
+
+            
+            // Get all real content sentences (up to 5)
+            const contentSentences = rawSentences.filter(isRealContent).slice(0, 5);
+            
+            // Generate multiple sentence replacement suggestions
+            contentSentences.forEach((candidate, index) => {
+              if (!candidate) return;
+              
+              let improved = '';
+              let description = '';
+              
+              // Suggestion 1: Product intro with brand and price
+              if (index === 0) {
+                improved = `${productName}${productBrand ? ` by ${productBrand}` : ''}${productPrice ? ` priced at ${productPrice}` : ''} — discover key features, fit, and care details to make the right choice.`;
+                description = `Replace opening text with product-specific intro: ${productName}`;
+              }
+              // Suggestion 2: Benefits and features
+              else if (index === 1) {
+                improved = `Experience premium quality with ${productName}. Designed for comfort and style, perfect for everyday wear.`;
+                description = `Add specific benefits and use case for ${productName}`;
+              }
+              // Suggestion 3: Call to action
+              else if (index === 2 && productPrice) {
+                improved = `Shop ${productName} now${productPrice ? ` for ${productPrice}` : ''}. Free shipping available. Perfect addition to your wardrobe.`;
+                description = `Transform generic text into actionable CTA for ${productName}`;
+              }
+              // Suggestion 4: Specifications
+              else if (index === 3) {
+                improved = `${productName} features: premium materials, expert craftsmanship, and attention to detail. Available in multiple sizes and colors.`;
+                description = `Replace vague description with specific product features`;
+              }
+              // Suggestion 5: Trust and social proof
+              else if (index === 4) {
+                improved = `Join thousands of satisfied customers who trust ${productBrand || 'us'} for quality${productName ? ` ${productName}` : ' products'}. Shop with confidence.`;
+                description = `Add trust signals and social proof`;
+              }
+              
+              if (improved) {
+                suggestions.push({
+                  type: 'sentence_replacement',
+                  priority: index === 0 ? 'high' : 'medium',
+                  description,
+                  implementation: `Replace: "${candidate.substring(0, 80)}..." WITH: "${improved.substring(0, 80)}..."`,
+                  impact: 'Makes content specific and conversion-focused for better AI visibility',
+                  currentContent: candidate,
+                  enhancedContent: improved,
+                  exactReplacement: { find: candidate, replace: improved },
+                  sentenceReplacement: { find: candidate, replace: improved }
+                });
+              }
+            });
+
+          } catch {}
+
+        }
+
+      }
+
+
+
       // Check for semantic HTML improvements
 
       if (content.includes('<b>') && !content.includes('<strong>')) {
 
-        suggestions.push({
+      suggestions.push({
 
           type: 'replace_b_with_strong',
 
@@ -7369,21 +7634,14 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
 
 
 
-      // Add schema markup suggestion
-
-      suggestions.push({
-
-        type: 'schema',
-
-        priority: 'high',
-
-        description: 'Add structured data markup for better search engine understanding',
-
-        implementation: 'Generate JSON-LD schema markup for the content',
-
-        impact: 'Improves search engine visibility and rich snippets'
-
-      });
+      // Schema markup suggestion DISABLED - user wants only content suggestions
+      // suggestions.push({
+      //   type: 'schema',
+      //   priority: 'high',
+      //   description: 'Add structured data markup for better search engine understanding',
+      //   implementation: 'Generate JSON-LD schema markup for the content',
+      //   impact: 'Improves search engine visibility and rich snippets'
+      // });
 
       
 
@@ -7430,6 +7688,8 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
         });
 
       });
+
+      } // End if (false) - all fallback suggestions disabled
 
 
 
@@ -7550,9 +7810,6 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
         faqs = [];
 
       }
-
-
-
       // Generate structured data
 
       const structuredData = {
@@ -7873,7 +8130,7 @@ app.post('/api/content/analyze-structure', authenticateToken, async (req, res) =
 
         readabilityScore: Math.min(readabilityScore, 100),
 
-        suggestions,
+        suggestions: suggestions.filter(s => s.type === 'sentence_replacement'),
 
         metadata: { ...metadata, faqs },
 
@@ -7948,7 +8205,6 @@ Respond in JSON format:
   "structureIssues": ["issue1", "issue2"],
 
   "improvementOpportunities": ["opportunity1", "opportunity2"]
-
 }`;
 
 
@@ -8001,6 +8257,8 @@ Respond in JSON format:
 
       const suggestions = [];
 
+      // ALL fallback suggestions DISABLED - user wants only AI-generated content suggestions
+      /* DISABLED FALLBACK SUGGESTIONS
       const fallbackLines = content.split('\n');
 
       const fallbackWords = content.split(/\s+/);
@@ -8377,7 +8635,7 @@ Respond in JSON format:
 
       }
 
-
+    END DISABLED FALLBACK SUGGESTIONS */
 
       // Calculate scores
 
@@ -8521,7 +8779,7 @@ Respond in JSON format:
 
         readabilityScore: Math.min(readabilityScore, 100),
 
-        suggestions,
+        suggestions: suggestions.filter(s => s.type === 'sentence_replacement'),
 
         metadata: { ...metadata, faqs: faqs2 },
 
@@ -8556,9 +8814,6 @@ ${content}
 Analysis:
 
 ${JSON.stringify(analysis, null, 2)}
-
-
-
 Please restructure the content with:
 
 1. Clear, hierarchical headings (H1, H2, H3)
@@ -8613,6 +8868,7 @@ Return the restructured content with proper HTML-like formatting.`;
 
     
 
+    /* All suggestions below are disabled (user wants only sentence replacements)
     // 1. Title/Heading Analysis
 
     if (!content.includes('<h1>') && !content.includes('# ')) {
@@ -8888,6 +9144,8 @@ Return the restructured content with proper HTML-like formatting.`;
       });
 
     }
+
+    */ // End disabled suggestions block - all LLM path suggestions disabled
 
 
 
@@ -9298,9 +9556,6 @@ Format as Article schema.`;
   }
 
 });
-
-
-
 app.post('/api/content/apply-suggestions', authenticateToken, async (req, res) => {
 
   try {
@@ -9765,7 +10020,7 @@ app.get('/api/ai-visibility/:company', async (req, res) => {
 
     let { company } = req.params;
 
-    const { industry, fast, product, category, competitor, country } = req.query;
+    const { industry, fast, product, category, competitor, country, pageType } = req.query;
 
 
 
@@ -9811,7 +10066,7 @@ app.get('/api/ai-visibility/:company', async (req, res) => {
 
     // Pass-through of extra context is future-ready; backend service can use it as needed
 
-    const result = await aiVisibilityService.getVisibilityData(company, industry, { fast: String(fast).toLowerCase() === 'true', product, category, competitor, country });
+    const result = await aiVisibilityService.getVisibilityData(company, industry, { fast: String(fast).toLowerCase() === 'true', product, category, competitor, country, pageType });
 
     res.json({ success: true, data: result });
 
@@ -10082,7 +10337,6 @@ app.post('/api/extract/fullpage', authenticateToken, async (req, res) => {
   }
 
 });
-
 // E-commerce Content Analysis Endpoints
 
 app.post('/api/ecommerce-content/competitors', authenticateToken, async (req, res) => {
@@ -10130,6 +10384,365 @@ app.post('/api/ecommerce-content/price-compare', authenticateToken, async (req, 
   } catch (error) {
     console.error('[Ecommerce Content] Price compare error:', error);
     res.status(500).json({ error: 'Failed to fetch price comparison', details: error.message });
+  }
+});
+
+// E-commerce Content Generation Endpoint
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+app.post('/api/ecommerce/generate-content', authenticateToken, async (req, res) => {
+  try {
+    const { type, inputs, provider, model } = req.body;
+    console.log('[Ecommerce Generate] Request:', { type, provider, model });
+    
+    let generatedContent = {};
+
+    // Prefer real Gemini generation when key is configured
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const useGemini = !!GEMINI_API_KEY;
+
+    async function callGeminiJson(prompt) {
+      try {
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const mdl = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const result = await mdl.generateContent([{ text: prompt }]);
+        const txt = result?.response?.text?.() || result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const first = txt.indexOf('{');
+        const last = txt.lastIndexOf('}');
+        const jsonStr = first >= 0 && last > first ? txt.substring(first, last + 1) : txt;
+        return JSON.parse(jsonStr);
+      } catch (e) {
+        console.log('[Ecommerce Generate] Gemini parse fallback:', e.message);
+        return null;
+      }
+    }
+    
+    // Generate content based on type
+    if (type === 'product') {
+      if (useGemini) {
+        const prompt = `You are an expert e-commerce copywriter. Create comprehensive product page content for: ${inputs?.name || 'Product'}
+
+Product Details:
+- Name: ${inputs?.name || ''}
+- Features: ${inputs?.features || ''}
+- Target Audience: ${inputs?.targetAudience || 'General consumers'}
+- Category: ${inputs?.category || 'General'}
+- Tone: ${inputs?.tone || 'professional'}
+
+Return STRICT JSON with ALL these keys (no markdown, just JSON):
+{
+  "shortDescription": "1-2 sentence catchy product intro (50-100 chars)",
+  "longDescription": "Detailed 3-4 paragraph product description (200-300 words)",
+  "features": ["feature 1", "feature 2", "feature 3", "feature 4", "feature 5"],
+  "benefits": ["benefit 1", "benefit 2", "benefit 3", "benefit 4"],
+  "comparison": "How this product compares to alternatives (100-150 words)",
+  "specs": {"Spec Name 1": "Value 1", "Spec Name 2": "Value 2", "Spec Name 3": "Value 3"},
+  "useCases": ["use case 1", "use case 2", "use case 3"],
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  "altText": ["alt text 1", "alt text 2", "alt text 3"],
+  "seoTitle": "SEO-optimized page title (50-60 chars)",
+  "seoDescription": "SEO meta description (150-160 chars)"
+}`;
+        const json = await callGeminiJson(prompt);
+        if (json) {
+          generatedContent = {
+            shortDescription: json.shortDescription || json.description || '',
+            longDescription: json.longDescription || json.description || '',
+            features: json.features || json.bullets || [],
+            benefits: json.benefits || json.highlights || [],
+            comparison: json.comparison || '',
+            specs: json.specs || {},
+            useCases: json.useCases || [],
+            keywords: json.keywords || [],
+            altText: json.altText || [],
+            metaTags: {
+              title: json.seoTitle || json.metaTags?.title || '',
+              description: json.seoDescription || json.metaTags?.description || '',
+              keywords: (json.keywords || []).join(', ')
+            },
+            seoRecommendations: {
+              schemaSuggestions: [
+                'Add Product schema with name, image, description, price, availability',
+                'Include AggregateRating schema if you have reviews',
+                'Add Breadcrumb schema for navigation',
+                'Include Organization schema on homepage'
+              ],
+              contentDepthScore: 85,
+              aiOptimizationTips: [
+                'Add detailed specifications table for better AI parsing',
+                'Include customer reviews and ratings',
+                'Add FAQ section with common questions',
+                'Use structured data for all key product attributes',
+                'Include comparison tables with competitors'
+              ],
+              technicalSeoReminders: [
+                'Optimize images with descriptive alt text',
+                'Use semantic HTML5 tags (article, section)',
+                'Ensure mobile-responsive design',
+                'Add structured data (JSON-LD)',
+                'Implement proper heading hierarchy (H1, H2, H3)'
+              ]
+            }
+          };
+        }
+      }
+      if (!generatedContent || Object.keys(generatedContent).length === 0) {
+        const name = inputs?.name || 'Product';
+        const features = inputs?.features || 'high-quality features';
+        generatedContent = {
+          shortDescription: `${name} - Premium quality with ${features}`,
+          longDescription: `${name} is a premium product designed to deliver exceptional performance and value. Featuring ${features}, this product combines cutting-edge technology with user-friendly design. Perfect for ${inputs?.targetAudience || 'anyone'} looking for reliability and quality.`,
+          features: [
+            `Advanced ${features}`,
+            'High-quality materials and construction',
+            'Designed for optimal performance',
+            'Easy to use and maintain',
+            'Backed by comprehensive warranty'
+          ],
+          benefits: [ 'Premium Quality', 'Fast Shipping', 'Easy Returns', 'Customer Support' ],
+          comparison: `Compared to alternatives, ${name} offers superior quality and value.`,
+          specs: {
+            'Brand': name,
+            'Category': inputs?.category || 'General',
+            'Warranty': '1 Year'
+          },
+          useCases: [
+            `Perfect for ${inputs?.targetAudience || 'everyday use'}`,
+            'Ideal for both beginners and professionals',
+            'Suitable for home and office environments'
+          ],
+          keywords: [name, inputs?.category || 'product', 'premium', 'quality', 'buy'],
+          altText: [`${name} product image`, `${name} in use`, `${name} details`],
+          metaTags: {
+            title: `${name} - Premium Quality Product`,
+            description: `Discover ${name} - ${features}. Shop now for the best deals and fast shipping.`,
+            keywords: `${name}, ${inputs?.category || 'product'}, premium, quality`
+          },
+          seoRecommendations: {
+            schemaSuggestions: [
+              'Add Product schema with name, image, description, price, availability',
+              'Include AggregateRating schema if you have reviews',
+              'Add Breadcrumb schema for navigation'
+            ],
+            contentDepthScore: 75,
+            aiOptimizationTips: [
+              'Add detailed product specifications',
+              'Include customer reviews section',
+              'Add related products section',
+              'Use structured data markup'
+            ],
+            technicalSeoReminders: [
+              'Optimize all images with alt text',
+              'Use proper heading hierarchy (H1, H2, H3)',
+              'Ensure mobile-responsive design',
+              'Add structured data (JSON-LD)'
+            ]
+          }
+        };
+      }
+    } else if (type === 'category') {
+      if (useGemini) {
+        const prompt = `You are an expert e-commerce category strategist. Create comprehensive category page content.
+
+Category Details:
+- Name: ${inputs?.categoryName || inputs?.name || ''}
+- Product Types: ${inputs?.productTypes || ''}
+- Target Audience: ${inputs?.audience || 'General shoppers'}
+
+Return STRICT JSON with ALL these keys (no markdown, just JSON):
+{
+  "intro": "Engaging 2-3 paragraph category introduction (150-200 words)",
+  "buyingGuide": "Helpful buying guide with tips (200-250 words)",
+  "comparisonChart": "Brief comparison of product types in this category",
+  "faqs": [{"question": "...", "answer": "..."}, {"question": "...", "answer": "..."}],
+  "internalLinks": ["related category 1", "related category 2", "related category 3"],
+  "seoTitle": "SEO-optimized category title (50-60 chars)",
+  "seoDescription": "SEO meta description (150-160 chars)"
+}`;
+        const json = await callGeminiJson(prompt);
+        if (json) {
+          generatedContent = {
+            intro: json.intro || json.description || '',
+            buyingGuide: json.buyingGuide || '',
+            comparisonChart: json.comparisonChart || '',
+            faqs: json.faqs || [],
+            internalLinks: json.internalLinks || [],
+            metaTags: {
+              title: json.seoTitle || '',
+              description: json.seoDescription || '',
+              keywords: ''
+            },
+            seoRecommendations: {
+              schemaSuggestions: [
+                'Add CollectionPage schema',
+                'Include BreadcrumbList schema',
+                'Add ItemList schema for products in category'
+              ],
+              contentDepthScore: 80,
+              aiOptimizationTips: [
+                'Add category comparison guides',
+                'Include buying tips and recommendations',
+                'Feature top products in the category',
+                'Add related categories section'
+              ],
+              technicalSeoReminders: [
+                'Use category-specific keywords in H1 and H2',
+                'Add filters for better navigation',
+                'Implement pagination for large catalogs',
+                'Add canonical tags to prevent duplication'
+              ]
+            }
+          };
+        }
+      }
+      if (!generatedContent || Object.keys(generatedContent).length === 0) {
+        const cat = inputs?.name || inputs?.categoryName || 'Category';
+        generatedContent = {
+          intro: `Explore our ${cat} collection featuring top brands and carefully curated products. ${inputs?.description || ''}`.trim(),
+          buyingGuide: `When shopping for ${cat}, consider quality, price, and customer reviews. Our collection features verified products from trusted brands.`,
+          comparisonChart: `Compare different ${cat} options based on features, price points, and customer ratings.`,
+          faqs: [],
+          internalLinks: ['Related Products', 'Best Sellers', 'New Arrivals'],
+          metaTags: {
+            title: `${cat} - Shop Premium ${cat} Products`,
+            description: `Browse our curated ${cat} collection. ${inputs?.description || ''}`.trim(),
+            keywords: cat
+          },
+          seoRecommendations: {
+            schemaSuggestions: [
+              'Add CollectionPage schema',
+              'Include BreadcrumbList schema',
+              'Add ItemList schema for products'
+            ],
+            contentDepthScore: 70,
+            aiOptimizationTips: [
+              'Add buying guides for the category',
+              'Include product comparisons',
+              'Feature bestsellers and new arrivals'
+            ],
+            technicalSeoReminders: [
+              'Use category keywords in headings',
+              'Add product filters',
+              'Implement proper pagination'
+            ]
+          }
+        };
+      }
+    } else if (type === 'faq') {
+      if (useGemini) {
+        const topic = inputs?.topic || inputs?.name || inputs?.categoryName || 'iPhone';
+        const features = inputs?.features || 'advanced features';
+        const audience = inputs?.targetAudience || inputs?.audience || 'tech enthusiasts';
+        
+        const prompt = `Generate EXACTLY 8 FAQ questions and answers for an e-commerce product page.
+
+Product: ${topic}
+Features: ${features}
+Target Audience: ${audience}
+
+Requirements:
+- Question 1-2: About the product itself (what makes it special, key features)
+- Question 3-4: About purchasing (comparison, pricing, availability)
+- Question 5-8: About policies (returns, shipping, warranty, tracking)
+- Each answer should be 2-3 sentences
+- Use specific product details from the context provided
+
+IMPORTANT: Return ONLY valid JSON with this EXACT structure (no explanations, no markdown):
+{"faqs":[{"question":"What makes ${topic} special?","answer":"Answer here"},{"question":"What are the key features of ${topic}?","answer":"Answer here"},{"question":"How does ${topic} compare to similar products?","answer":"Answer here"},{"question":"Who is ${topic} designed for?","answer":"Answer here"},{"question":"What is your return policy?","answer":"Answer here"},{"question":"How long does shipping take?","answer":"Answer here"},{"question":"Do you offer warranty on ${topic}?","answer":"Answer here"},{"question":"How can I track my order?","answer":"Answer here"}]}`;
+        
+        const json = await callGeminiJson(prompt);
+        if (json && Array.isArray(json.faqs) && json.faqs.length > 0) {
+          // Filter out invalid FAQs (descriptions, summaries, etc.)
+          const validFaqs = json.faqs.filter(faq => {
+            const q = String(faq.question || '').trim();
+            const a = String(faq.answer || '').trim();
+            // Reject if question is too long (likely a description)
+            if (q.length > 200) return false;
+            // Reject if question doesn't end with ? (not a question)
+            if (!q.endsWith('?')) return false;
+            // Reject if answer is too short
+            if (a.length < 10) return false;
+            // Reject if question contains phrases like "Here are" or "designed to"
+            if (/here are|designed to|following|below/i.test(q)) return false;
+            return true;
+          });
+          
+          if (validFaqs.length > 0) {
+            console.log(`[Ecommerce Generate] Filtered ${json.faqs.length - validFaqs.length} invalid FAQs, keeping ${validFaqs.length} valid ones`);
+            generatedContent = {
+              faqs: validFaqs,
+              seoRecommendations: {
+                schemaSuggestions: [
+                  'Add FAQPage schema markup',
+                  'Include Question schema for each FAQ',
+                  'Add AcceptedAnswer schema'
+                ],
+                contentDepthScore: 90,
+                aiOptimizationTips: [
+                  'Expand FAQs with more details',
+                  'Add links to related products in answers',
+                  'Include images where relevant',
+                  'Use conversational language for better AI parsing'
+                ],
+                technicalSeoReminders: [
+                  'Implement FAQ schema (JSON-LD)',
+                  'Use proper heading tags for questions',
+                  'Add jump links for easy navigation',
+                  'Ensure mobile-friendly accordion design'
+                ]
+              }
+            };
+          } else {
+            console.warn('[Ecommerce Generate] All FAQs filtered out as invalid, using fallback');
+          }
+        }
+      }
+      if (!generatedContent || Object.keys(generatedContent).length === 0) {
+        const topic = inputs?.topic || inputs?.name || inputs?.categoryName || 'this product';
+        generatedContent = {
+          faqs: [
+            { question: `What makes ${topic} special?`, answer: `Our ${topic} is carefully selected for quality and performance. ${inputs?.context || ''}`.trim() },
+            { question: 'What are the key features?', answer: `${inputs?.features || 'Premium quality construction, excellent performance, and reliable durability.'}` },
+            { question: 'Who is this for?', answer: `Perfect for ${inputs?.targetAudience || inputs?.audience || 'anyone'} looking for quality and value.` },
+            { question: 'What is your return policy?', answer: 'We offer a 30-day money-back guarantee on all products. If you\'re not satisfied, return it for a full refund.' },
+            { question: 'How long does shipping take?', answer: 'Standard shipping takes 3-5 business days. Express shipping options available at checkout for faster delivery.' },
+            { question: 'Do you offer warranties?', answer: 'Yes, all products include manufacturer warranties. Extended warranty options available for select items.' },
+            { question: 'How can I track my order?', answer: 'You will receive a tracking number via email once your order ships. Track orders anytime from your account dashboard.' },
+            { question: 'Are there bulk discounts?', answer: 'Yes, we offer competitive pricing for bulk orders. Contact our sales team for custom quotes.' }
+          ],
+          seoRecommendations: {
+            schemaSuggestions: [
+              'Add FAQPage schema markup',
+              'Include Question schema for each FAQ',
+              'Add AcceptedAnswer schema'
+            ],
+            contentDepthScore: 85,
+            aiOptimizationTips: [
+              'Expand each answer with more details',
+              'Add related product links in answers',
+              'Use natural question phrasing'
+            ],
+            technicalSeoReminders: [
+              'Implement FAQ schema (JSON-LD)',
+              'Use proper heading structure',
+              'Make FAQ section mobile-friendly'
+            ]
+          }
+        };
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: generatedContent
+    });
+    
+  } catch (error) {
+    console.error('[Ecommerce Generate] Error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to generate content', 
+      details: error.message 
+    });
   }
 });
 
@@ -10614,9 +11227,6 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 
 });
-
-
-
 // Dedicated Structural Content Crawling Endpoint
 
 app.post('/api/structural-content/crawl', authenticateToken, async (req, res) => {
@@ -10934,7 +11544,7 @@ app.post('/api/structural-content/crawl', authenticateToken, async (req, res) =>
 
 
 
-    // Enhanced content improvement suggestions using AI analysis
+    // Enhanced content improvement suggestions using AI analysis - DISABLED (user wants only sentence replacements)
 
     const generateContentImprovements = async (content, title, description) => {
 
@@ -10942,9 +11552,12 @@ app.post('/api/structural-content/crawl', authenticateToken, async (req, res) =>
 
       
 
-      // 1. Keyword optimization for AI visibility
+      // All keyword/meta suggestions disabled - returning empty array
+      return improvements;
 
-      if (content.length > 200) {
+      // 1. Keyword optimization for AI visibility - DISABLED
+
+      if (false && content.length > 200) {
 
         const keywordPrompt = `Analyze this content and suggest 5-8 relevant keywords that would improve AI visibility and search engine optimization. Focus on terms that are relevant to the topic but may be missing from the content.
 
@@ -10970,6 +11583,9 @@ Respond with only the keywords separated by commas, no explanations.`;
 
           if (suggestedKeywords.length > 0) {
 
+            // Extract current content snippet for better context
+            const contentSnippet = content.substring(0, 200).replace(/<[^>]*>/g, '').trim();
+
             improvements.push({
 
               type: 'keyword_optimization',
@@ -10982,7 +11598,7 @@ Respond with only the keywords separated by commas, no explanations.`;
 
               impact: 'Improves AI understanding and search engine visibility',
 
-              currentContent: `Content lacks specific keywords for AI optimization`,
+              currentContent: `Content: "${contentSnippet}${contentSnippet.length === 200 ? '...' : ''}"`,
 
               enhancedContent: `Enhanced with keywords: ${suggestedKeywords.join(', ')}`,
 
@@ -11105,7 +11721,6 @@ IMPROVEMENT 3: [complete replacement content for the third paragraph]`;
 1. Replacing vague or generic statements
 
 2. Adding specific details and context
-
 3. Making content more informative for AI
 
 
@@ -11198,203 +11813,374 @@ Only suggest replacements that significantly improve the content.`;
 
 
 
-    // Generate AI-powered content improvements
+    // Generate AI-powered content improvements - DISABLED (user wants only sentence replacements)
 
-    let contentImprovements = [];
+    // let contentImprovements = [];
 
-    try {
+    // try {
 
-      contentImprovements = await generateContentImprovements(extractedContent, pageTitle, pageDescription);
+    //   contentImprovements = await generateContentImprovements(extractedContent, pageTitle, pageDescription);
 
-      suggestions.push(...contentImprovements);
+    //   suggestions.push(...contentImprovements);
 
-      console.log('[Structural Content Crawler] Generated content improvements:', contentImprovements.length);
+    //   console.log('[Structural Content Crawler] Generated content improvements:', contentImprovements.length);
 
-    } catch (error) {
+    // } catch (error) {
 
-      console.warn('[Structural Content Crawler] Failed to generate content improvements:', error);
+    //   console.warn('[Structural Content Crawler] Failed to generate content improvements:', error);
 
-    }
+    // }
 
 
 
-    // 1. Check for missing H1 heading
+    // 1. Check for missing H1 heading - DISABLED (user wants only sentence replacements)
 
-    const h1Headings = pageHeadings.filter(h => h.level === 'h1');
+    // const h1Headings = pageHeadings.filter(h => h.level === 'h1');
 
-    if (h1Headings.length === 0) {
+    // if (h1Headings.length === 0) {
 
-      const suggestedTitle = pageTitle || extractedContent.split(' ').slice(0, 8).join(' ');
+    //   const suggestedTitle = pageTitle || extractedContent.split(' ').slice(0, 8).join(' ');
 
-      const currentContent = extractedContent.substring(0, 150);
+    //   const currentContent = extractedContent.substring(0, 150);
 
+    //   
       
+    //   suggestions.push({
 
-      suggestions.push({
+    //     type: 'heading',
 
-        type: 'heading',
+    //     priority: 'high',
 
-        priority: 'high',
+    //     description: 'Add a clear H1 heading to improve SEO and content structure',
 
-        description: 'Add a clear H1 heading to improve SEO and content structure',
+    //     implementation: `<h1>${suggestedTitle}</h1>`,
 
-        implementation: `<h1>${suggestedTitle}</h1>`,
+    //     impact: 'Improves SEO ranking and content readability',
 
-        impact: 'Improves SEO ranking and content readability',
+    //     currentContent: `Current page starts with: "${currentContent}${currentContent.length === 150 ? '...' : ''}"`,
 
-        currentContent: `Current page starts with: "${currentContent}${currentContent.length === 150 ? '...' : ''}"`,
+    //     enhancedContent: `<h1>${suggestedTitle}</h1>`,
 
-        enhancedContent: `Add H1: "${suggestedTitle}"`,
+    //     exactReplacement: {
 
-        exactReplacement: {
+    //       find: '<body>',
 
-          find: '<body>',
+    //       replace: `<body>\n    <h1>${suggestedTitle}</h1>`
 
-          replace: `<body>\n    <h1>${suggestedTitle}</h1>`
+    //     }
 
-        }
+    //   });
 
-      });
-
-    }
-
+    // }
 
 
-    // 2a. Ecommerce-specific suggestions
+
+    // NEW: AI-Powered Content Suggestions for AI Search Visibility
+
+    // Generate suggestions using Gemini AI for better visibility in AI search engines
     if (isProductPage) {
+      // PRODUCT PAGE: Generate AI-optimized content suggestions
       const h1 = (pageHeadings.find(h => (h.level||'').toLowerCase() === 'h1') || {}).text || pageTitle || '';
       const currencyMatch = fullPageHtml.match(/product:price:currency[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:priceCurrency|currency)"?\s*[:=]\s*"([A-Z]{3})"/i);
       const amountMatch = fullPageHtml.match(/product:price:amount[^>]*content=["']([^"']+)/i) || fullPageHtml.match(/(?:price|priceAmount)"?\s*[:=]\s*"?([0-9][0-9.,]*)"?/i) || fullPageHtml.match(/(?:[$₹€£]|INR|USD|EUR|GBP)\s?\d[\d.,]*/i);
-      const availabilityMatch = fullPageHtml.match(/availability[^>]*\b(InStock|OutOfStock)\b/i);
       const brandMeta = fullPageHtml.match(/\"brand\"\s*:\s*\{[\s\S]*?\"name\"\s*:\s*\"([^\"]+)\"/i);
       const brand = (brandMeta && brandMeta[1]) || '';
       const priceCurrency = (currencyMatch && currencyMatch[1]) || 'USD';
       const priceAmountRaw = (amountMatch && amountMatch[1]) || '';
       const priceNumeric = priceAmountRaw.replace(/[^0-9.]/g, '');
-      const availability = availabilityMatch ? `https://schema.org/${availabilityMatch[1]}` : undefined;
+      
+      const productName = h1 || pageTitle || 'Product';
+      const productPrice = priceNumeric ? `${priceCurrency} ${priceNumeric}` : '';
+      const productBrand = brand || '';
+      
+      // Extract clean, readable sentences from product page
+      const cleanSentences = (extractedContent || '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .split(/[.!?]+\s/)
+        .map(s => s.trim())
+        .filter(s => {
+          if (s.length < 30 || s.length > 500) return false;
+          const letterRatio = ((s.match(/[a-zA-Z]/g) || []).length) / s.length;
+          const specialCharRatio = ((s.match(/[{}\[\]<>|&;()]/g) || []).length) / s.length;
+          const hasCode = /trackNode|getElementById|window\.|document\.|function\s*\(|reviewId|imageUrl|uidx/i.test(s);
+          return letterRatio > 0.6 && specialCharRatio < 0.1 && !hasCode;
+        })
+        .slice(0, 10);
+      
+      console.log('[Product Suggestions] Extracted clean sentences:', cleanSentences.length);
+      console.log('[Product Suggestions] Sample sentences:', cleanSentences.slice(0, 3));
+      console.log('[Product Suggestions] Product context:', { productName, productBrand, productPrice });
+      
+      // Use AI to generate product-specific content improvements
+      if (cleanSentences.length > 0 && process.env.GEMINI_API_KEY) {
+        try {
+          const productContext = `Product: ${productName}${productBrand ? ` by ${productBrand}` : ''}${productPrice ? ` - ${productPrice}` : ''}`;
+          const prompt = `You are optimizing product page content for AI search engines (ChatGPT, Gemini, Perplexity).
 
-      const productSchema = {
-        '@context': 'https://schema.org',
-        '@type': 'Product',
-        name: h1 || 'Product',
-        description: pageDescription || (extractedContent || '').slice(0,160),
-        ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}),
-        ...(priceNumeric ? { offers: { '@type': 'Offer', price: priceNumeric, priceCurrency, ...(availability ? { availability } : {}), url } } : {})
-      };
-      const productJson = JSON.stringify(productSchema, null, 2);
-      suggestions.push({
-        type: 'schema',
-        priority: 'high',
-        description: 'Add Product JSON-LD with offers, brand, and availability',
-        implementation: `<script type=\"application/ld+json\">\n${productJson}\n</script>`,
-        impact: 'Enables rich product results and improves ecommerce SEO',
-        currentContent: 'No Product schema detected',
-        enhancedContent: 'Inject Product JSON-LD into <head>',
-        exactReplacement: { find: '</head>', replace: `  <script type=\"application/ld+json\">\n${productJson}\n</script>\n</head>` }
-      });
+${productContext}
 
-      if ((pageLists || []).length === 0 && !/(specifications|specs|features)/i.test(extractedContent)) {
-        suggestions.push({
-          type: 'list',
-          priority: 'medium',
-          description: 'Add a concise specifications list (size, material, care, warranty)',
-          implementation: '<ul>\n  <li>Size: </li>\n  <li>Material: </li>\n  <li>Care: </li>\n  <li>Warranty: </li>\n</ul>',
-          impact: 'Improves scannability and conversion for product pages'
-        });
-      }
-    }
+Current product page sentences:
+${cleanSentences.slice(0, 5).map((s, i) => `${i + 1}. "${s}"`).join('\n')}
 
-    if (isCategoryPage) {
-      const linkRegex = /<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>([\s\S]*?)<\/a>/gi;
-      const items = [];
-      const seen = new Set();
-      let m;
-      while ((m = linkRegex.exec(fullPageHtml)) && items.length < 10) {
-        const href = m[1] || '';
-        if (!/\/(product|products|item)\//i.test(href)) continue;
-        let abs = href;
-        try { abs = new URL(href, hostForAbs || url || 'https://example.com').href; } catch {}
-        if (seen.has(abs)) continue;
-        seen.add(abs);
-        items.push({ '@type': 'ListItem', position: items.length + 1, url: abs });
-      }
-      if (items.length >= 2) {
-        const itemListSchema = {
-          '@context': 'https://schema.org',
-          '@type': 'ItemList',
-          itemListElement: items
-        };
-        const itemListJson = JSON.stringify(itemListSchema, null, 2);
-        suggestions.push({
-          type: 'schema',
-          priority: 'medium',
-          description: 'Add ItemList JSON-LD for category/listing pages',
-          implementation: `<script type=\"application/ld+json\">\n${itemListJson}\n</script>`,
-          impact: 'Improves search understanding of product listings',
-          currentContent: 'No ItemList schema detected',
-          enhancedContent: 'Inject ItemList JSON-LD into <head>',
-          exactReplacement: { find: '</head>', replace: `  <script type=\"application/ld+json\">\n${itemListJson}\n</script>\n</head>` }
-        });
-      }
-    }
+Generate 3-5 content improvement suggestions. For each suggestion, provide:
+1. The EXACT current sentence to replace (copy from above)
+2. An improved version optimized for AI search visibility (include product name, specific benefits, clear features)
+3. Why this improves AI visibility
 
-    if (!isProductPage && !isCategoryPage && (extractedContent || '').split(/\s+/).length > 600 && !/tl;dr|tldr|summary/i.test(extractedContent)) {
-      const tldr = 'TL;DR: Summarize the key takeaways in 2-3 sentences here.';
-      suggestions.push({
-        type: 'paragraph',
-        priority: 'medium',
-        description: 'Add a TL;DR summary near the top of the article',
-        implementation: `<p>${tldr}</p>`,
-        impact: 'Improves user engagement and AI answerability',
-        exactReplacement: { find: '<body>', replace: `<body>\n  <p>${tldr}</p>` }
-      });
+IMPORTANT: In your JSON response, do NOT use contractions or apostrophes. Use full words only. For example: "it is" not "it's", "cannot" not "can't".
 
-      // Also propose a content-level sentence replacement for weak openings
-      try {
-        const sentences = (extractedContent || '').split(/[.!?]+\s/).map(s => s.trim()).filter(s => s.length > 20);
-        const weakOpeners = [/^in this (article|blog|post)/i, /^this (article|post) (discusses|talks)/i, /^we will (discuss|talk)/i];
-        const idx = sentences.findIndex(s => weakOpeners.some(r => r.test(s)));
-        if (idx >= 0) {
-          const original = sentences[idx];
-          const topic = (pageTitle || sentences[0] || '').replace(/[:\-].*$/, '').trim().slice(0, 90);
-          const improved = `This article explains ${topic || 'the key points'} with clear, step-by-step details and examples.`;
+Respond ONLY with a valid JSON array (no markdown code blocks, no extra text):
+[
+  {
+    "currentSentence": "exact sentence from above",
+    "improvedSentence": "AI-optimized version with product details",
+    "reason": "why this improves AI search visibility"
+  }
+]`;
+
+          console.log('[Product Suggestions] Calling AI with prompt length:', prompt.length);
+          const aiResponse = await llmService.callGeminiAPI(prompt, 'gemini-2.0-flash');
+          console.log('[Product Suggestions] AI response received:', aiResponse.text?.substring(0, 500));
+          
+          let aiSuggestions = [];
+          try {
+            // Try standard JSON extraction first
+            let rawJson = extractJSONFromMarkdown(aiResponse.text || '[]');
+            aiSuggestions = Array.isArray(rawJson) ? rawJson : [];
+            
+            // If that failed, try manual extraction as fallback
+            if (aiSuggestions.length === 0) {
+              console.log('[Product Suggestions] JSON extraction returned empty, trying manual parse...');
+              const text = aiResponse.text || '';
+              
+              // Extract each suggestion object manually
+              const suggestionMatches = text.matchAll(/"currentSentence"\s*:\s*"([^"]+)"\s*,\s*"improvedSentence"\s*:\s*"([^"]+)"\s*,\s*"reason"\s*:\s*"([^"]+)"/g);
+              
+              for (const match of suggestionMatches) {
+                aiSuggestions.push({
+                  currentSentence: match[1],
+                  improvedSentence: match[2],
+                  reason: match[3]
+                });
+              }
+              console.log('[Product Suggestions] Manual parse extracted:', aiSuggestions.length, 'suggestions');
+            }
+          } catch (parseError) {
+            console.error('[Product Suggestions] All parsing failed:', parseError);
+            aiSuggestions = [];
+          }
+          console.log('[Product Suggestions] Parsed AI suggestions:', aiSuggestions.length);
+          
+          if (Array.isArray(aiSuggestions) && aiSuggestions.length > 0) {
+            aiSuggestions.forEach((sug, index) => {
+              if (sug.currentSentence && sug.improvedSentence) {
+                console.log(`[Product Suggestions] Adding suggestion ${index + 1}:`, {
+                  current: sug.currentSentence.substring(0, 50),
+                  improved: sug.improvedSentence.substring(0, 50)
+                });
           suggestions.push({
             type: 'sentence_replacement',
-            priority: 'medium',
-            description: 'Replace a weak opening sentence with a specific, informative one',
-            implementation: `Replace: "${original}" WITH: "${improved}"`,
-            impact: 'Improves clarity and AI answerability',
-            currentContent: original,
-            enhancedContent: improved,
-            exactReplacement: { find: original, replace: improved },
-            sentenceReplacement: { find: original, replace: improved }
-          });
+                  priority: index === 0 ? 'high' : 'medium',
+                  description: sug.reason || `Improve product content for AI search visibility`,
+                  implementation: `Replace: "${sug.currentSentence.substring(0, 60)}..." WITH: "${sug.improvedSentence.substring(0, 60)}..."`,
+                  impact: 'Improves product visibility in AI search engines like ChatGPT, Gemini, Perplexity',
+                  currentContent: sug.currentSentence,
+                  enhancedContent: sug.improvedSentence,
+                  exactReplacement: { find: sug.currentSentence, replace: sug.improvedSentence },
+                  sentenceReplacement: { find: sug.currentSentence, replace: sug.improvedSentence }
+                });
+              }
+            });
+            console.log('[Product Suggestions] Total suggestions added:', suggestions.length);
+          } else {
+            console.warn('[Product Suggestions] No valid AI suggestions parsed');
+          }
+        } catch (error) {
+          console.error('[Product Suggestions] AI generation failed:', error);
         }
-      } catch {}
-    }
-
-    // Additional precise sentence-level replacement for long run-on sentences
-    try {
-      const sentences = (extractedContent || '').split(/[.!?]+\s/).map(s => s.trim()).filter(Boolean);
-      const longIdx = sentences.findIndex(s => s.split(/\s+/).length > 35);
-      if (longIdx >= 0) {
-        const original = sentences[longIdx];
-        const firstHalf = original.split(/,|;|\sand\s/i)[0]?.trim() || original.slice(0, 120).trim();
-        const improved = `${firstHalf}. ${isProductPage ? 'Key features are listed below.' : 'The main takeaways are outlined below.'}`;
-        suggestions.push({
-          type: 'sentence_replacement',
-          priority: 'low',
-          description: 'Split an overly long sentence to improve readability',
-          implementation: `Replace: "${original}" WITH: "${improved}"`,
-          impact: 'Improves readability and structure',
-          currentContent: original,
-          enhancedContent: improved,
-          exactReplacement: { find: original, replace: improved },
-          sentenceReplacement: { find: original, replace: improved }
+      } else {
+        console.warn('[Product Suggestions] Not generating AI suggestions:', {
+          hasCleanSentences: cleanSentences.length > 0,
+          hasGeminiKey: !!process.env.GEMINI_API_KEY
         });
       }
-    } catch {}
+    }
 
+    // Category page schema suggestions disabled (user wants only sentence replacements)
+    // if (isCategoryPage) {
+    //   const linkRegex = /<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>([\s\S]*?)<\/a>/gi;
+    //   const items = [];
+    //   const seen = new Set();
+    //   let m;
+    //   while ((m = linkRegex.exec(fullPageHtml)) && items.length < 10) {
+    //     const href = m[1] || '';
+    //     if (!/\/(product|products|item)\//i.test(href)) continue;
+    //     let abs = href;
+    //     try { abs = new URL(href, hostForAbs || url || 'https://example.com').href; } catch {}
+    //     if (seen.has(abs)) continue;
+    //     seen.add(abs);
+    //     items.push({ '@type': 'ListItem', position: items.length + 1, url: abs });
+    //   }
+    //   if (items.length >= 2) {
+    //     const itemListSchema = {
+    //       '@context': 'https://schema.org',
+    //       '@type': 'ItemList',
+    //       itemListElement: items
+    //     };
+    //     const itemListJson = JSON.stringify(itemListSchema, null, 2);
+    //     suggestions.push({
+    //       type: 'schema',
+    //       priority: 'medium',
+    //       description: 'Add ItemList JSON-LD for category/listing pages',
+    //       implementation: `<script type="application/ld+json">\n${itemListJson}\n</script>`,
+    //       impact: 'Improves search understanding of product listings',
+    //       currentContent: 'No ItemList schema detected',
+    //       enhancedContent: 'Inject ItemList JSON-LD into <head>',
+    //       exactReplacement: { find: '</head>', replace: `  <script type="application/ld+json">\n${itemListJson}\n</script>\n</head>` }
+    //     });
+    //   }
+    // }
+
+    // TL;DR paragraph suggestion disabled (user wants only sentence replacements)
+    // if (!isProductPage && !isCategoryPage && (extractedContent || '').split(/\s+/).length > 600 && !/tl;dr|tldr|summary/i.test(extractedContent)) {
+    //   const tldr = 'TL;DR: Summarize the key takeaways in 2-3 sentences here.';
+    //   suggestions.push({
+    //     type: 'paragraph',
+    //     priority: 'medium',
+    //     description: 'Add a TL;DR summary near the top of the article',
+    //     implementation: `<p>${tldr}</p>`,
+    //     impact: 'Improves user engagement and AI answerability',
+    //     exactReplacement: { find: '<body>', replace: `<body>\n  <p>${tldr}</p>` }
+    //   });
+    // }
+
+    // BLOG/ARTICLE PAGE: Generate AI-optimized content suggestions
+    if (!isProductPage && !isCategoryPage) {
+      // Extract clean, readable sentences from blog/article
+      const cleanSentences = (extractedContent || '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .split(/[.!?]+\s/)
+        .map(s => s.trim())
+        .filter(s => {
+          if (s.length < 30 || s.length > 500) return false;
+          const letterRatio = ((s.match(/[a-zA-Z]/g) || []).length) / s.length;
+          const specialCharRatio = ((s.match(/[{}\[\]<>|&;()]/g) || []).length) / s.length;
+          const hasCode = /trackNode|getElementById|window\.|document\.|function\s*\(/i.test(s);
+          return letterRatio > 0.6 && specialCharRatio < 0.1 && !hasCode;
+        })
+        .slice(0, 10);
+      
+      console.log('[Blog Suggestions] Extracted clean sentences:', cleanSentences.length);
+      console.log('[Blog Suggestions] Sample sentences:', cleanSentences.slice(0, 3));
+      
+      // Use AI to generate blog-specific content improvements for AI search visibility
+      if (cleanSentences.length > 0 && process.env.GEMINI_API_KEY) {
+        try {
+          const articleContext = `Article/Blog: ${pageTitle || 'Content'}`;
+          const prompt = `You are optimizing blog/article content for AI search engines (ChatGPT, Gemini, Perplexity).
+
+${articleContext}
+
+Current article sentences:
+${cleanSentences.slice(0, 5).map((s, i) => `${i + 1}. "${s}"`).join('\n')}
+
+Generate 3-5 content improvement suggestions. For each suggestion, provide:
+1. The EXACT current sentence to replace (copy from above)
+2. An improved version optimized for AI search visibility (more specific, clear, informative, includes key topics)
+3. Why this improves AI visibility
+
+Focus on:
+- Replacing vague statements with specific information
+- Adding clear, factual details
+- Making content more answerable by AI
+- Improving clarity and directness
+
+IMPORTANT: In your JSON response, do NOT use contractions or apostrophes. Use full words only. For example: "it is" not "it's", "cannot" not "can't".
+
+Respond ONLY with a valid JSON array (no markdown code blocks, no extra text):
+[
+  {
+    "currentSentence": "exact sentence from above",
+    "improvedSentence": "AI-optimized version with specific details",
+    "reason": "why this improves AI search visibility"
+  }
+]`;
+
+          console.log('[Blog Suggestions] Calling AI with prompt length:', prompt.length);
+          const aiResponse = await llmService.callGeminiAPI(prompt, 'gemini-2.0-flash');
+          console.log('[Blog Suggestions] AI response received:', aiResponse.text?.substring(0, 500));
+          
+          let aiSuggestions = [];
+          try {
+            // Try standard JSON extraction first
+            let rawJson = extractJSONFromMarkdown(aiResponse.text || '[]');
+            aiSuggestions = Array.isArray(rawJson) ? rawJson : [];
+            
+            // If that failed, try manual extraction as fallback
+            if (aiSuggestions.length === 0) {
+              console.log('[Blog Suggestions] JSON extraction returned empty, trying manual parse...');
+              const text = aiResponse.text || '';
+              
+              // Extract each suggestion object manually
+              const suggestionMatches = text.matchAll(/"currentSentence"\s*:\s*"([^"]+)"\s*,\s*"improvedSentence"\s*:\s*"([^"]+)"\s*,\s*"reason"\s*:\s*"([^"]+)"/g);
+              
+              for (const match of suggestionMatches) {
+                aiSuggestions.push({
+                  currentSentence: match[1],
+                  improvedSentence: match[2],
+                  reason: match[3]
+                });
+              }
+              console.log('[Blog Suggestions] Manual parse extracted:', aiSuggestions.length, 'suggestions');
+            }
+          } catch (parseError) {
+            console.error('[Blog Suggestions] All parsing failed:', parseError);
+            aiSuggestions = [];
+          }
+          console.log('[Blog Suggestions] Parsed AI suggestions:', aiSuggestions.length);
+          
+          if (Array.isArray(aiSuggestions) && aiSuggestions.length > 0) {
+            aiSuggestions.forEach((sug, index) => {
+              if (sug.currentSentence && sug.improvedSentence) {
+                console.log(`[Blog Suggestions] Adding suggestion ${index + 1}`);
+            suggestions.push({
+              type: 'sentence_replacement',
+                  priority: index === 0 ? 'high' : 'medium',
+                  description: sug.reason || `Improve content for AI search visibility`,
+                  implementation: `Replace: "${sug.currentSentence.substring(0, 60)}..." WITH: "${sug.improvedSentence.substring(0, 60)}..."`,
+                  impact: 'Improves content visibility in AI search engines like ChatGPT, Gemini, Perplexity',
+                  currentContent: sug.currentSentence,
+                  enhancedContent: sug.improvedSentence,
+                  exactReplacement: { find: sug.currentSentence, replace: sug.improvedSentence },
+                  sentenceReplacement: { find: sug.currentSentence, replace: sug.improvedSentence }
+            });
+          }
+        });
+            console.log('[Blog Suggestions] Total suggestions added:', suggestions.length);
+          } else {
+            console.warn('[Blog Suggestions] No valid AI suggestions parsed');
+          }
+        } catch (error) {
+          console.error('[Blog Suggestions] AI generation failed:', error);
+        }
+      } else {
+        console.warn('[Blog Suggestions] Not generating AI suggestions:', {
+          hasCleanSentences: cleanSentences.length > 0,
+          hasGeminiKey: !!process.env.GEMINI_API_KEY
+          });
+        }
+      }
+
+    // OLD suggestion logic removed - now using AI-powered suggestions above
+
+    // All meta/structure suggestions below are disabled (user wants only sentence replacements)
+    if (false) {
     // 2. Check for missing meta description
 
     if (!fullPageHtml.includes('meta name="description"') && !fullPageHtml.includes('meta name=\'description\'')) {
@@ -11662,7 +12448,6 @@ Only suggest replacements that significantly improve the content.`;
     <meta property="og:type" content="article">
 
     <meta property="og:url" content="${url}">
-
 </head>`
 
         }
@@ -11946,6 +12731,8 @@ RESTRUCTURE: [improved content that replaces the original]`;
       }
 
     }
+
+    } // End of if (false) block - all meta/structure suggestions disabled
 
 
 
@@ -12389,8 +13176,8 @@ RESTRUCTURE: [improved content that replaces the original]`;
 
 
 
-    // Add schema markup suggestion after metadata is created
-
+    // Schema markup suggestion DISABLED - user wants only AI content suggestions
+    /* DISABLED
     suggestions.push({
 
       type: 'schema',
@@ -12432,7 +13219,6 @@ RESTRUCTURE: [improved content that replaces the original]`;
   "dateModified": "${metadata.lastModified || ''}"
 
 }
-
 </script>`,
 
       impact: 'Improves search engine visibility and rich snippets',
@@ -12484,8 +13270,7 @@ RESTRUCTURE: [improved content that replaces the original]`;
       }
 
     });
-
-
+    END DISABLED SCHEMA SUGGESTION */
 
     // Step 5: Generate structured data
 
@@ -13167,7 +13952,7 @@ Title: ${pageTitle}\n\nContent:\n${extractedContent.substring(0, 6000)}`;
 
       readabilityScore: Math.min(readabilityScore, 100),
 
-      suggestions,
+      suggestions: suggestions.filter(s => s.type === 'sentence_replacement'),
 
         metadata,
 
@@ -13185,7 +13970,8 @@ Title: ${pageTitle}\n\nContent:\n${extractedContent.substring(0, 6000)}`;
 
     };
 
-
+    console.log('[Structural Content Crawler] Final suggestions count:', analysisResult.suggestions.length);
+    console.log('[Structural Content Crawler] Returning analysis with suggestions');
 
     return res.json({ success: true, analysis: analysisResult });
 
@@ -13206,9 +13992,6 @@ Title: ${pageTitle}\n\nContent:\n${extractedContent.substring(0, 6000)}`;
   }
 
 });
-
-
-
 // Persist last structure analysis per user (keyed by URL)
 
 app.post('/api/structure/last', authenticateToken, async (req, res) => {
@@ -13944,9 +14727,6 @@ app.get('/api/shopify/credentials', authenticateToken, async (req, res) => {
   }
 
 });
-
-
-
 app.post('/api/shopify/credentials', authenticateToken, async (req, res) => {
 
   try {

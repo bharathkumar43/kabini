@@ -350,8 +350,8 @@ export function ContentStructureLanding() {
            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
              <div className="col-span-1 md:col-span-2">
                <div className="flex items-center gap-3 mb-4">
-                 <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                   <Brain className="w-6 h-6 text-white" />
+                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                  <Brain className="w-4 h-4 text-blue-600" />
                  </div>
                   <span className="text-xl font-bold">kabini.ai</span>
                </div>

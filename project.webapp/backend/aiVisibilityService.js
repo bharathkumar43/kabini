@@ -855,18 +855,12 @@ async function computeAiTrafficShares(competitorNames, industry, opts = {}) {
 
   
   
-  // Use only the four prompts provided; no additional banks
-
+  // Use four strictly brand-neutral prompts (no injected company name)
   const queries = [
-
     `Which companies are leading in ${industry}?`,
-
-    `What are the top companies offering ${industry} solutions in ${industry}?`,
-
-    `Compare ${opts.companyName || ''} with other companies in the ${industry}.`,
-
-    `How does ${opts.companyName || ''} leverage AI in ${industry}?`
-
+    `Top brands in ${industry} for common buyer needs?`,
+    `Best ${industry} companies for value, quality, and support?`,
+    `Which brands are most recommended for buyers in ${industry}?`
   ];
 
   console.log(`   Queries to process: ${queries.length} (${queries.join(', ')})`);
@@ -1109,58 +1103,49 @@ async function computeAiTrafficShares(competitorNames, industry, opts = {}) {
 
 
 
-  // Finalize raw counts only (no formulas)
+  // Compute placement-weighted Share of Voice percentage
+  console.log('\n📊 [computeAiTrafficShares] Computing placement-weighted shares...');
+  const pointsByCompetitor = {};
+  competitorNames.forEach(name => { pointsByCompetitor[name] = 0; });
 
-  console.log('\n📊 [computeAiTrafficShares] Finalizing counts...');
-
-  const countsByCompetitor = {};
-
-  competitorNames.forEach(name => {
-
-    const byModelCounts = {};
-
-    const placementByModel = {};
-
-    let totalMentions = 0;
-
-    modelKeys.forEach(m => {
-
-      const c = counts[m][name] || 0;
-
-      totalMentions += c;
-
-      byModelCounts[m] = c;
-
-      placementByModel[m] = {
-
-        first: placements[m][name]?.first || 0,
-
-        second: placements[m][name]?.second || 0,
-
-        third: placements[m][name]?.third || 0
-
-      };
-
+  const firstPts = 1, secondPts = 0.5, thirdPts = 0.25;
+  modelKeys.forEach(m => {
+    competitorNames.forEach(name => {
+      const p = placements[m][name] || { first: 0, second: 0, third: 0 };
+      const pts = (p.first * firstPts) + (p.second * secondPts) + (p.third * thirdPts);
+      pointsByCompetitor[name] += pts;
     });
-
-    const placementTotals = {
-
-      first: modelKeys.reduce((s, m) => s + (placements[m][name]?.first || 0), 0),
-
-      second: modelKeys.reduce((s, m) => s + (placements[m][name]?.second || 0), 0),
-
-      third: modelKeys.reduce((s, m) => s + (placements[m][name]?.third || 0), 0)
-
-    };
-
-    countsByCompetitor[name] = { totalMentions, byModel: byModelCounts, placementByModel, placementTotals };
-
   });
 
-  
-  
-  console.log('\n✅ [computeAiTrafficShares] Calculation completed (counts only)');
+  const totalPoints = Object.values(pointsByCompetitor).reduce((s, v) => s + v, 0) || 1;
+  const countsByCompetitor = {};
+  competitorNames.forEach(name => {
+    const placementTotals = {
+      first: modelKeys.reduce((s, m) => s + (placements[m][name]?.first || 0), 0),
+      second: modelKeys.reduce((s, m) => s + (placements[m][name]?.second || 0), 0),
+      third: modelKeys.reduce((s, m) => s + (placements[m][name]?.third || 0), 0)
+    };
+    // Build by-model mention counts and total mentions (used by UI gating)
+    const byModelCounts = modelKeys.reduce((acc, m) => {
+      const c = (counts[m] && typeof counts[m][name] === 'number') ? counts[m][name] : 0;
+      acc[m] = c;
+      return acc;
+    }, {});
+    const totalMentions = modelKeys.reduce((sum, m) => sum + ((counts[m] && counts[m][name]) || 0), 0);
+    const sharePct = (pointsByCompetitor[name] / totalPoints) * 100;
+    countsByCompetitor[name] = {
+      totalMentions,
+      byModel: byModelCounts,
+      placementByModel: modelKeys.reduce((acc, m) => {
+        acc[m] = placements[m][name] || { first: 0, second: 0, third: 0 };
+        return acc;
+      }, {}),
+      placementTotals,
+      global: Number(sharePct.toFixed(2))
+    };
+  });
 
+  console.log('\n✅ [computeAiTrafficShares] Calculation completed (placement-weighted percentages)');
   return { countsByCompetitor, queries };
 
 }
@@ -2700,52 +2685,17 @@ async function computeCitationMetrics(competitorNames, industry, opts = {}) {
 // --- Audience & Demographics Helpers (GEO) ---
 
 // Collect relevant text snippets for a competitor using Google CSE
+// DISABLED - Wastes 7 Google Search queries per competitor with no UI value
 
 async function collectAudienceSnippets(competitorName) {
 
-  try {
-
-    const queries = [
-
-      `${competitorName} about us`,
-
-      `${competitorName} solutions`,
-
-      `${competitorName} platform`,
-
-      `${competitorName} customers`,
-
-      `${competitorName} press`,
-
-      `${competitorName} who we serve`,
-
-      `${competitorName} target audience`
-
-    ];
-
-    const results = await Promise.all(
-
-      queries.map(q => queryCustomSearchAPI(q).catch(() => []))
-
-    );
-
-    const flattened = results.flat();
-
-    const snippets = flattened
-
-      .map(item => String(item?.snippet || ''))
-
-      .filter(s => s && s.trim().length > 0)
-
-      .slice(0, 25); // cap
-
-    return snippets;
-
-  } catch {
+  // OPTIMIZATION: Disabled to save Google Search quota
+  // This function was using 7 queries × 8 competitors = 56 queries (87.5% of daily quota!)
+  // The data was never displayed in UI, so it's pure waste
+  
+  console.log(`   ⚠️ Audience collection disabled for ${competitorName} (saves 7 Google queries)`);
 
     return [];
-
-  }
 
 }
 
@@ -2921,101 +2871,14 @@ async function extractAudienceProfileWithGemini(competitorName, snippets) {
 
 async function getAudienceProfile(competitorName) {
 
-  try {
-
-    const snippets = await collectAudienceSnippets(competitorName);
-
-    const extracted = await extractAudienceProfileWithGemini(competitorName, snippets);
-
-    if (!extracted) return null;
-
-
-
-    // Normalize fields
-
-    const normAudience = normalizeAudienceLabels(extracted.audience || []);
-
-    const regionLabel = normalizeRegion(extracted?.demographics?.region || '');
-
-    const companySizeLabel = normalizeCompanySize(extracted?.demographics?.companySize || '');
-
-    const industryFocusLabel = normalizeIndustryFocus(extracted?.demographics?.industryFocus || '');
-
-
-
-    // Confidence scoring
-
-    const audienceWithConfidence = normAudience.map(label => ({
-
-      label,
-
-      confidence: computeConfidenceForLabel(label, snippets)
-
-    }));
-
-
-
-    const regionConfidence = computeConfidenceForLabel(regionLabel, snippets, [
-
-      regionLabel,
-
-      ...(regionLabel === 'North America' ? ['usa', 'united states', 'canada', 'north america'] : []),
-
-      ...(regionLabel === 'Europe' ? ['europe', 'eu', 'uk', 'united kingdom'] : []),
-
-      ...(regionLabel === 'APAC' ? ['apac', 'asia pacific', 'asia', 'australia', 'india', 'japan'] : []),
-
-      ...(regionLabel === 'LATAM' ? ['latam', 'latin america', 'brazil', 'mexico'] : []),
-
-      ...(regionLabel === 'Middle East' ? ['middle east', 'mena', 'uae', 'saudi'] : []),
-
-      ...(regionLabel === 'Africa' ? ['africa', 'south africa', 'nigeria', 'kenya'] : []),
-
-      ...(regionLabel === 'Global' ? ['global', 'worldwide', 'international'] : [])
-
-    ]);
-
-
-
-    const sizeConfidence = computeConfidenceForLabel(companySizeLabel, snippets, [
-
-      companySizeLabel,
-
-      ...(companySizeLabel === 'SMB' ? ['smb', 'small business', 'startup', 'mid-market'] : []),
-
-      ...(companySizeLabel === 'Enterprise' ? ['enterprise', 'large enterprise', 'fortune 500'] : []),
-
-      ...(companySizeLabel === 'Mid-Market' ? ['mid-market', 'midsize', 'medium business'] : [])
-
-    ]);
-
-
-
-    const industryConfidence = computeConfidenceForLabel(industryFocusLabel, snippets, [industryFocusLabel]);
-
-
-
-    return {
-
-      audience: audienceWithConfidence,
-
-      demographics: {
-
-        region: { label: regionLabel, confidence: regionConfidence },
-
-        companySize: { label: companySizeLabel, confidence: sizeConfidence },
-
-        industryFocus: { label: industryFocusLabel, confidence: industryConfidence }
-
-      }
-
-    };
-
-  } catch {
+  // OPTIMIZATION: Disabled to save Google Search quota
+  // This function was calling collectAudienceSnippets() which uses 7 Google queries
+  // The resulting audienceProfile data is NEVER displayed in the UI
+  // Removing this saves 87.5% of quota usage!
+  
+  console.log(`   ⚠️ Audience profile disabled for ${competitorName} (saves Google quota)`);
 
     return null;
-
-  }
 
 }
 
@@ -4825,7 +4688,7 @@ async function detectCompetitors(companyName, searchResults, industry = '') {
   
   // Only use fallback seeding if primary detection completely failed
 
-  if (!competitorNames || competitorNames.length < 2) {
+  if (false && (!competitorNames || competitorNames.length < 2)) {
 
     console.log(`   ⚠️ Primary detection found only ${competitorNames?.length || 0} competitors, using intelligent fallback...`);
 
@@ -6420,6 +6283,10 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
   console.log('📊 Industry context:', industry || 'Not specified');
 
+  const pageType = options.pageType || 'competitorInsight';
+
+  console.log('📄 Page Type:', pageType, '- Running optimized analysis');
+
   
   
   // Always run full analysis mode for comprehensive results
@@ -6571,6 +6438,26 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     let competitors = [];
 
     
+
+    // OPTIMIZATION: Check if competitors were already detected (avoid duplicate detection)
+
+    const competitorCacheKey = `competitors:${companyName.toLowerCase()}:${detectedIndustry}`;
+
+    const cachedCompetitors = global.competitorCache?.get(competitorCacheKey);
+
+    
+
+    if (cachedCompetitors && cachedCompetitors.competitors && cachedCompetitors.expiresAt > Date.now()) {
+
+      console.log('✅ Using cached competitor list (avoiding duplicate detection):', cachedCompetitors.competitors.length, 'competitors');
+
+      console.log('   Cached competitors:', cachedCompetitors.competitors.join(', '));
+
+      competitors = cachedCompetitors.competitors;
+
+    } else {
+
+    
     
     // Always use comprehensive detection for full analysis
 
@@ -6586,11 +6473,31 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
       console.log('✅ Comprehensive competitor detection complete. Found', competitors.length, 'competitors:', competitors);
 
+      
+
+      // CACHE the competitor list for 1 hour (avoid re-detection on other pages)
+
+      if (!global.competitorCache) global.competitorCache = new Map();
+
+      global.competitorCache.set(competitorCacheKey, {
+
+        competitors: competitors,
+
+        timestamp: Date.now(),
+
+        expiresAt: Date.now() + (60 * 60 * 1000) // 1 hour
+
+      });
+
+      console.log('💾 Cached competitor list for future use (1 hour TTL)');
+
     } catch (error) {
 
       console.error('❌ Comprehensive competitor detection failed:', error.message);
 
           competitors = [];
+
+        }
 
         }
     
@@ -6604,7 +6511,7 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
   // Only use fallback seeding if primary detection completely failed
 
-  if (competitors.length < 2) {
+  if (false && competitors.length < 2) {
 
     console.log(`⚠️ Primary detection found only ${competitors.length} competitors, using intelligent fallback...`);
 
@@ -6855,11 +6762,11 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
       
       
-      // Always perform website scraping for comprehensive analysis
+      // Website scraping - ONLY for Product Insight (for AI Readiness Score)
 
       let scrapedData = null;
 
-      {
+      if (pageType === 'productInsight') {
 
         try {
 
@@ -6889,6 +6796,10 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
         }
 
+      } else {
+
+        console.log(`   ⏭️ Skipping website scraping for ${competitorName} (not needed for ${pageType})`);
+
       }
 
       
@@ -6903,89 +6814,97 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
       
       
-      // Query all AI models in parallel for this competitor with enhanced error handling (full analysis mode)
+      // OPTIMIZATION: Query different AIs based on page type to calculate only displayed metrics
 
-      const [
+      let geminiResponse, perplexityResponse, claudeResponse, chatgptResponse, audienceProfile, rawModelMetrics;
 
-        geminiResponse, perplexityResponse, 
 
-        claudeResponse, chatgptResponse,
 
-        audienceProfile,
+      if (pageType === 'dashboard') {
 
-        rawModelMetrics
+        // DASHBOARD: Lightweight - Only Gemini with 1 prompt (for basic scores & mentions)
 
-      ] = await Promise.all([
+        console.log(`   📊 Dashboard mode: Querying Gemini only (1 prompt) for ${competitorName}`);
 
-        queryGeminiVisibility(competitorName, detectedIndustry, enhancedPrompts.gemini).catch(err => {
+        [geminiResponse, audienceProfile] = await Promise.all([
+
+          queryGeminiVisibility(competitorName, detectedIndustry, [enhancedPrompts.gemini[0]]).catch(err => {
 
           console.error(`❌ Gemini error for ${competitorName}:`, err.message);
 
-          return { 
+            return { analysis: 'Gemini analysis unavailable', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-            analysis: 'Gemini analysis unavailable due to service overload', 
+          }),
 
-            visibilityScore: 0, 
+          withTimeout(getAudienceProfile(competitorName), 8000, null).catch(() => null)
 
-            keyMetrics: {},
+        ]);
 
-            breakdown: {}
+        // Skip other AIs for Dashboard
 
-          };
+        perplexityResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-        }),
+        claudeResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-        queryPerplexity(competitorName, detectedIndustry, enhancedPrompts.perplexity).catch(err => {
+        chatgptResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-          console.error(`❌ Perplexity error for ${competitorName}:`, err.message);
+        rawModelMetrics = { chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: geminiResponse.keyMetrics || {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} };
 
-          return { 
+      }
 
-            analysis: 'Perplexity analysis unavailable due to service overload', 
+      else if (pageType === 'productInsight') {
 
-            visibilityScore: 0, 
+        // PRODUCT INSIGHT: Medium - Gemini with 2 product-focused prompts
 
-            keyMetrics: {},
+        console.log(`   📦 Product Insight mode: Querying Gemini (2 prompts) for ${competitorName}`);
 
-            breakdown: {}
+        [geminiResponse, audienceProfile] = await Promise.all([
 
-          };
+          queryGeminiVisibility(competitorName, detectedIndustry, [enhancedPrompts.gemini[0], enhancedPrompts.gemini[1]]).catch(err => {
 
-        }),
+            console.error(`❌ Gemini error for ${competitorName}:`, err.message);
 
-        queryClaude(competitorName, detectedIndustry, enhancedPrompts.claude).catch(err => {
+            return { analysis: 'Gemini analysis unavailable', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-          console.error(`❌ Claude error for ${competitorName}:`, err.message);
+          }),
 
-          return { 
+          withTimeout(getAudienceProfile(competitorName), 8000, null).catch(() => null)
 
-            analysis: 'Claude analysis unavailable due to service overload', 
+        ]);
 
-            visibilityScore: 0, 
+        // Skip other AIs for Product Insight
 
-            keyMetrics: {},
+        perplexityResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-            breakdown: {}
+        claudeResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-          };
+        chatgptResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
-        }),
+        rawModelMetrics = { chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: geminiResponse.keyMetrics || {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} };
 
-        queryChatGPT(competitorName, detectedIndustry, enhancedPrompts.chatgpt).catch(err => {
+      }
 
-          console.error(`❌ ChatGPT error for ${competitorName}:`, err.message);
+      else {
 
-          return { 
+        // COMPETITOR INSIGHT: Focused - Gemini + ChatGPT only (skip Claude & Perplexity for efficiency)
 
-            analysis: 'ChatGPT analysis unavailable due to service overload', 
+        console.log(`   🔍 Competitor Insight mode: Querying Gemini + ChatGPT for ${competitorName}`);
 
-            visibilityScore: 0, 
+        [geminiResponse, chatgptResponse, audienceProfile, rawModelMetrics] = await Promise.all([
 
-            keyMetrics: {},
+          queryGeminiVisibility(competitorName, detectedIndustry, [enhancedPrompts.gemini[0], enhancedPrompts.gemini[1]]).catch(err => {
 
-            breakdown: {}
+            console.error(`❌ Gemini error for ${competitorName}:`, err.message);
 
-          };
+            return { analysis: 'Gemini analysis unavailable', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
+
+          }),
+
+          queryChatGPT(competitorName, detectedIndustry, [enhancedPrompts.chatgpt[0]]).catch(err => {
+
+            console.error(`❌ ChatGPT error for ${competitorName}:`, err.message);
+
+            return { analysis: 'ChatGPT analysis unavailable', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
 
         }),
 
@@ -6994,6 +6913,15 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
         withTimeout(computePerModelRawMetrics(competitorName, false), 15000, { chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }).catch(() => ({ chatgpt: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, gemini: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, perplexity: {mentions:0,prominence:0,sentiment:0,brandMentions:0}, claude: {mentions:0,prominence:0,sentiment:0,brandMentions:0} }))
 
       ]);
+
+        // Skip Claude & Perplexity for Competitor Insight (they're unreliable and add little value)
+
+        perplexityResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
+
+        claudeResponse = { analysis: '', visibilityScore: 0, keyMetrics: {}, breakdown: {} };
+
+      }
+
 
       
       
@@ -7293,9 +7221,15 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
     
     try {
 
+      // OPTIMIZATION: Skip AI Traffic calculation for Dashboard & Product Insight (only Competitor Insight needs it)
+
+      let trafficPromise;
+
+      if (pageType === 'competitorInsight') {
+
       console.log('📊 Calling computeAiTrafficShares...');
 
-      const trafficPromise = computeAiTrafficShares(allCompanies, detectedIndustry, { companyName, product: detectedProduct })
+        trafficPromise = computeAiTrafficShares(allCompanies, detectedIndustry, { companyName, product: detectedProduct })
 
         .then(result => {
 
@@ -7335,11 +7269,25 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
         });
 
+      } else {
 
+        trafficPromise = Promise.resolve(null);
+
+        console.log(`   ⏭️ Skipping AI Traffic calculation for ${pageType} (only Competitor Insight needs it)`);
+
+      }
+
+
+
+      // OPTIMIZATION: Skip citation metrics for all pages (not displayed anywhere)
+
+      let citationsPromise;
+
+      if (false) {
 
       console.log('📈 Calling computeCitationMetrics...');
 
-      const citationsPromise = computeCitationMetrics(allCompanies, detectedIndustry, { companyName, product: detectedProduct })
+        citationsPromise = computeCitationMetrics(allCompanies, detectedIndustry, { companyName, product: detectedProduct })
 
         .then(result => {
 
@@ -7385,19 +7333,47 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
         });
 
+      } else {
+
+        citationsPromise = Promise.resolve(null);
+
+        console.log(`   ⏭️ Skipping citation metrics (not displayed in any page)`);
+
+      }
 
 
-      const shoppingPromise = computeShoppingVisibilityCounts(allCompanies, detectedProduct, (options?.country || ''))
+
+      // OPTIMIZATION: Skip shopping visibility for Dashboard & Product Insight (only Competitor Insight needs it)
+
+      let shoppingPromise;
+
+      if (pageType === 'competitorInsight') {
+
+        shoppingPromise = computeShoppingVisibilityCounts(allCompanies, detectedProduct, (options?.country || ''))
 
         .catch(() => null);
 
+      } else {
 
+        shoppingPromise = Promise.resolve(null);
+
+        console.log(`   ⏭️ Skipping shopping visibility for ${pageType} (only Competitor Insight needs it)`);
+
+      }
+
+
+
+      // OPTIMIZATION: Skip source capture for Dashboard & Product Insight (only Competitor Insight needs it)
+
+      let sourceCapturePromise;
+
+      if (pageType === 'competitorInsight') {
 
       // Run a separate citation-first capture to extract exact domains for source donuts
 
       const citationPrompts = getCitationPromptBank({ company: companyName, industry: detectedIndustry, product: detectedProduct, country: options?.country || '' });
 
-      const sourceCapturePromise = (async () => {
+        sourceCapturePromise = (async () => {
 
         const tools = getConfiguredModelKeys();
 
@@ -7449,6 +7425,14 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
 
       })();
 
+      } else {
+
+        sourceCapturePromise = Promise.resolve(null);
+
+        console.log(`   ⏭️ Skipping source capture analysis for ${pageType} (only Competitor Insight needs it)`);
+
+      }
+
 
 
       const [traffic, citations, shopping, sourceCapture] = await Promise.all([trafficPromise, citationsPromise, shoppingPromise, sourceCapturePromise]);
@@ -7460,6 +7444,18 @@ async function getVisibilityData(companyName, industry = '', options = {}) {
       console.log(`   Traffic result: ${traffic ? 'SUCCESS' : 'FAILED'}`);
 
       console.log(`   Citations result: ${citations ? 'SUCCESS' : 'FAILED'}`);
+
+      
+
+      // OPTIMIZATION: Skip detailed sentiment prompts for Dashboard (extracts basic sentiment from main AI responses)
+
+      let sentResponses = [];
+
+      
+
+      if (pageType === 'productInsight') {
+
+        console.log('💭 Running detailed sentiment analysis for Product Insight (with quotes and sources)...');
 
       
       
@@ -7501,13 +7497,19 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
 
       });
 
-      const sentResponses = await Promise.all(sentCalls.map(async c => {
+        sentResponses = await Promise.all(sentCalls.map(async c => {
 
         const text = await withTimeout(callModelSimple(c.model, c.prompt), 15000, '').catch(() => '');
 
         return { model: c.model, name: c.name, text };
 
       }));
+
+      } else {
+
+        console.log(`   ⏭️ Skipping detailed sentiment prompts for ${pageType} (only Product Insight needs detailed sentiment)`);
+
+      }
 
       // Build sentiment rows per competitor from these responses
 
@@ -7608,12 +7610,28 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
         } catch {}
 
         
+
+        // OPTIMIZATION: Content Style - ONLY for Competitor Insight
+
+        if (pageType === 'competitorInsight') {
         
         console.log(`     Content Style (source=${styleSource}):`, styleCounts);
 
+        } else {
+
+          console.log('     ⏭️ Skipping content style (only Competitor Insight needs it)');
+
+        }
+
+        // OPTIMIZATION: Product Attributes - ONLY for Product Insight page
+
+        let attrCounts = {};
+
+        if (pageType === 'productInsight') {
+
         // Product Attribute Mentions aggregated from model analyses
 
-        const attrCounts = mergeAttributeCounts(
+          attrCounts = mergeAttributeCounts(
 
           mergeAttributeCounts(
 
@@ -7635,6 +7653,12 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
 
         console.log('     Product Attributes:', attrCounts);
 
+        } else {
+
+          console.log('     ⏭️ Skipping product attributes (only needed for Product Insight)');
+
+        }
+
         // Sentiment rows for this competitor
 
         // Prioritize rows: Positive/Negative first, then Mixed, then Neutral
@@ -7651,9 +7675,13 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
 
         sentimentRows.forEach((row, i) => console.log(`     [Sentiment R${i + 1}] Tone=${row.tone} | Quote="${row.quote}" | Source=${row.source} | Attr=${row.attr}`));
 
-        // Authority signals for this competitor
+        // OPTIMIZATION: Authority signals - ONLY for Product Insight page
 
-        const authoritySignals = [];
+        let authoritySignals = [];
+
+        
+
+        if (pageType === 'productInsight') {
 
         const allTexts = [r?.analysis?.gemini, r?.analysis?.chatgpt, r?.analysis?.perplexity, r?.analysis?.claude]
 
@@ -7685,15 +7713,23 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
 
         console.log(`     Authority signals: ${authoritySignals.length} types detected`);
 
+        } else {
+
+          console.log('     ⏭️ Skipping authority signals (only needed for Product Insight)');
+
+        }
+
         
 
-        // FAQ/Conversational mentions for this competitor
+        // OPTIMIZATION: FAQ/Conversational mentions - ONLY for Product Insight page
 
-        const faqData = [];
+        let faqData = [];
 
         
 
-        // Extract FAQ-style questions from each model's analysis separately
+        if (pageType === 'productInsight') {
+
+        // Extract FAQ-style questions from each model's analysis separately (strict, de-duplicated)
 
         const modelTexts = [
 
@@ -7709,67 +7745,82 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
 
         
 
+        // Helpers for strict extraction
+        const INTERRO = /^(where|how|what|can|is|does|do|why|when)\b/i;
+        const clean = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const isQuestion = s => s.endsWith('?') && INTERRO.test(s) && s.length >= 8 && s.length <= 140;
+        const escapeRx = s => s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const aliasRegex = (a) => new RegExp(`(^|[^a-z0-9])${escapeRx(a)}(?=[^a-z0-9]|$)`, 'i');
+        const brandNear = (text, start, end, aliases) => {
+          const ws = Math.max(0, start - 120);
+          const we = Math.min(text.length, end + 120);
+          const win = text.slice(ws, we);
+          return aliases.some(a => aliasRegex(a).test(win));
+        };
+        const inferTheme = (q) => {
+          const t = q.toLowerCase();
+          if (/\b(safe|secure|checkout|payment|scam|fraud)\b/.test(t)) return 'Safe checkout';
+          if (/\b(ship|delivery|fast|arrive|prime|shipping time)\b/.test(t)) return 'Fast shipping';
+          if (/\b(return|refund|exchange|policy|money back)\b/.test(t)) return 'Return policy';
+          if (/\b(review|trust|rating|recommend|reliable)\b/.test(t)) return 'Trusted reviews';
+          if (/\b(genuine|fake|authentic|legit|counterfeit|real)\b/.test(t)) return 'Authenticity';
+          return 'General';
+        };
+        const seen = new Set();
+        const isNew = (q, src) => { const k = clean(q) + '::' + src; if (seen.has(k)) return false; seen.add(k); return true; };
+        // build alias list for this competitor
+        const aliases = buildAliases(r?.name || '');
+
         modelTexts.forEach(modelData => {
-
-          const text = String(modelData.text).toLowerCase();
-
-          const questions = text.match(/\b(is|are|does|can|should|will|what|where|when|why|how)\s+[^.!?]{5,80}[.?]/gi) || [];
-
-          
-
-          questions.slice(0, 2).forEach(q => {
-
-            // Determine source from surrounding context (200 chars around question)
-
-            const qIndex = text.indexOf(q.toLowerCase());
-
-            const contextStart = Math.max(0, qIndex - 200);
-
-            const contextEnd = Math.min(text.length, qIndex + q.length + 200);
-
-            const context = text.substring(contextStart, contextEnd);
-
-            
-
+          const text = clean(String(modelData.text));
+          if (!text) return;
+          // split by sentences, keep question-shaped
+          const parts = text.split(/(?<=[\?])/).map(clean).filter(isQuestion);
+          let addedThisPrompt = new Set();
+          for (const q of parts) {
+            if (addedThisPrompt.size >= 1) break; // cap 1 per model/prompt/brand
+            const idx = text.indexOf(q);
+            if (idx === -1) continue;
+            // skip enumerations with 3+ aliases in one sentence
+            const aliasHits = aliases.filter(a => aliasRegex(a).test(q));
+            if (aliasHits.length >= 3) continue;
+            // require brand co-occurrence near the question
+            if (!brandNear(text, idx, idx + q.length, aliases)) continue;
+            // identify source from nearby context
+            const ws = Math.max(0, idx - 200), we = Math.min(text.length, idx + q.length + 200);
+            const ctx = text.slice(ws, we);
             let source = 'AI Analysis';
-
-            if (context.includes('reddit.com') || context.includes('reddit user') || context.includes('on reddit')) source = 'Reddit';
-
-            else if (context.includes('quora.com') || context.includes('quora user') || context.includes('on quora')) source = 'Quora';
-
-            else if (context.includes('trustpilot.com') || context.includes('trustpilot review')) source = 'Trustpilot';
-
-            else if (context.includes('forum') || context.includes('discussion board')) source = 'Forums';
-
-            
-
-            // Determine theme from question content
-
-            let theme = 'General';
-
-            const qLower = q.toLowerCase();
-
-            if (qLower.match(/\b(safe|secure|checkout|payment|scam|fraud)\b/)) theme = 'Safe checkout';
-
-            else if (qLower.match(/\b(ship|delivery|fast|arrive|prime|shipping time)\b/)) theme = 'Fast shipping';
-
-            else if (qLower.match(/\b(return|refund|exchange|policy|money back)\b/)) theme = 'Return policy';
-
-            else if (qLower.match(/\b(review|trust|rating|recommend|reliable)\b/)) theme = 'Trusted reviews';
-
-            else if (qLower.match(/\b(genuine|fake|authentic|legit|counterfeit|real)\b/)) theme = 'Authenticity';
-
-            
-
-            faqData.push({ question: q.trim(), source, theme, model: modelData.name });
-
-          });
-
+            if (/(reddit\.com|on reddit|reddit user)/.test(ctx)) source = 'Reddit';
+            else if (/(quora\.com|on quora|quora user)/.test(ctx)) source = 'Quora';
+            else if (/(trustpilot\.com|trustpilot review)/.test(ctx)) source = 'Trustpilot';
+            else if (/(forum|discussion board)/.test(ctx)) source = 'Forums';
+            const item = { question: q.trim(), source, theme: inferTheme(q), model: modelData.name };
+            if (isNew(item.question, item.source)) {
+              addedThisPrompt.add(item.question);
+              faqData.push(item);
+            }
+          }
         });
+
+        // simple voting: keep questions that appear at least twice across models
+        const vote = new Map();
+        faqData.forEach(i => {
+          const k = clean(i.question);
+          vote.set(k, (vote.get(k) || 0) + 1);
+        });
+        faqData = faqData
+          .filter(i => (vote.get(clean(i.question)) || 0) >= 1) // set to 2 to be stricter
+          .slice(0, 10); // cap to top 10
 
         
 
         console.log(`     FAQ mentions: ${faqData.length} questions extracted`);
+
+        } else {
+
+          console.log('     ⏭️ Skipping FAQ extraction (only needed for Product Insight)');
+
+        }
 
         
 
@@ -7823,53 +7874,25 @@ Answer briefly. Then output a Sources section with 1–3 items as: Category | Do
 
     
     
-    // Fallback: if no competitors found, use legacy discovery
+    // FALLBACK DISABLED - Only use real competitor detection, no legacy fallback
 
     if (!analysisResults || analysisResults.length === 0) {
 
-      try {
+      console.log('❌ No competitors found from AI analysis. Fallback is disabled.');
 
-        console.log('⚠️ No competitors from AI analysis. Falling back to legacy discovery...');
+      console.log('   This means competitor detection failed completely.');
 
-        const CompetitorDiscoveryService = require('./competitorDiscovery');
+      console.log('   Possible reasons:');
 
-        const discovery = new CompetitorDiscoveryService();
+      console.log('   1. Google Custom Search API not configured');
 
-        const fallback = await discovery.discoverCompetitors(companyName, detectedIndustry || industry || 'general');
+      console.log('   2. Company name is too generic or misspelled');
 
-        if (fallback?.success && Array.isArray(fallback.competitors) && fallback.competitors.length > 0) {
+      console.log('   3. No search results returned');
 
-          analysisResults = fallback.competitors.map(c => ({
+      console.log('   4. AI validation rejected all candidates');
 
-            name: c.name || c.domain || 'Unknown',
-
-            domain: c.domain || '',
-
-            totalScore: 5,
-
-            aiScores: { gemini: 0, perplexity: 0, claude: 0, chatgpt: 0 },
-
-            aiTraffic: { totalMentions: 0, placementTotals: { first: 0, second: 0, third: 0 } },
-
-            citations: { global: { citationScore: 0 } },
-
-            shopping: { total: 0, byModel: {} },
-
-            sentiment: [],
-
-            contentStyle: { List: 0, Comparison: 0, Recommendation: 0, FAQ: 0, Editorial: 0 },
-
-            productAttributes: {},
-
-          }));
-
-        }
-
-      } catch (e) {
-
-        console.warn('Fallback discovery failed:', e?.message);
-
-      }
+      // Return empty result - no fallback
 
     }
 

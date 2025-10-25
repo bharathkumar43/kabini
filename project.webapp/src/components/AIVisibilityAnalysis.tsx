@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Loader2, TrendingUp, Users, Globe, Target, BarChart3, Zap, Shield, Clock, Star, Award, TrendingDown, AlertTriangle, CheckCircle, XCircle, Info, ExternalLink, Download, Share2, Filter, SortAsc, SortDesc, Calendar, MapPin, Building2, Briefcase, Globe2, Network, BarChart, PieChart, LineChart, Activity, Eye, Bot, BarChart3 as BarChartIcon, FileText } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Loader2, Users, Target, Shield, Star, CheckCircle, MapPin, Network, PieChart, Activity, Bot, FileText, RefreshCw, BarChart, Grid3X3 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { SessionData } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -7,10 +7,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { historyService } from '../services/historyService';
 import { sessionManager } from '../services/sessionManager';
+import { getCachedCompetitors, setCachedCompetitors, normalizeTarget } from '../services/competitorCache';
+import { getTargetAnalysis } from '../services/targetAnalysisCache';
+import { runPhasedAnalysis, AnalysisEvents } from '../services/analysisOrchestrator';
+import { backgroundOrchestrator } from '../services/backgroundAnalysisOrchestrator';
+import { unifiedCache } from '../services/unifiedCache';
 import type { HistoryItem, QAHistoryItem } from '../types';
 import AIVisibilityTable from './AIVisibilityTable';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
+import { userStateManager } from '../utils/userStateManager';
 
 // CTA Button component for navigation
 const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
@@ -79,23 +85,94 @@ function FeatureCard({ title, description, button, onClick, icon, visual }: Feat
 interface DashboardCardProps {
   title: string;
   icon: React.ReactNode;
-  iconBgColor: string;
+  iconBgColor?: string;
   children: React.ReactNode;
+  tooltip?: string;
+  subtitle?: string;
 }
 
-function DashboardCard({ title, icon, iconBgColor, children }: DashboardCardProps) {
+function DashboardCard({ title, icon, iconBgColor, children, tooltip, subtitle }: DashboardCardProps) {
+  const [showTooltip, setShowTooltip] = React.useState(false);
+  
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-        <div className={`w-10 h-10 rounded-full ${iconBgColor} flex items-center justify-center`}>
+    <div className="group bg-white border border-gray-300 rounded-xl p-4 shadow-sm hover:shadow-xl hover:border-gray-400 transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col h-full">
+      <div className="flex items-start justify-between mb-3 flex-shrink-0">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-1">
+            <div className={`w-10 h-10 rounded-lg ${iconBgColor || 'bg-gray-100'} flex items-center justify-center shadow-sm`}>
           {icon}
         </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-gray-900 leading-tight">{title}</h3>
+                {tooltip && (
+                  <div className="relative">
+                    <div
+                      onMouseEnter={() => setShowTooltip(true)}
+                      onMouseLeave={() => setShowTooltip(false)}
+                      className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50 text-gray-600 text-xs font-medium flex items-center justify-center transition-colors cursor-default"
+                    >
+                      i
       </div>
+                    {showTooltip && (
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-white text-gray-900 text-xs rounded-lg shadow-xl z-[9999] border border-gray-300"
+                        style={{ 
+                          animation: 'fadeIn 0.2s ease-in',
+                          pointerEvents: 'none'
+                        }}
+                      >
+                        {tooltip}
+                        <div className="absolute left-1/2 -translate-x-1/2 top-full border-[6px] border-transparent border-t-white" 
+                          style={{ marginTop: '-1px' }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="relative flex-1 flex flex-col">
       {children}
+      </div>
     </div>
   );
 }
+
+// Helper functions for competitor analysis styling
+const getBarClass = (score: number) => {
+  // Handle both 0-10 and 0-100 ranges
+  const normalizedScore = score > 10 ? score : score * 10;
+  if (normalizedScore >= 80) return 'bg-green-500'; // Excellent
+  if (normalizedScore >= 60) return 'bg-blue-500';     // Good
+  if (normalizedScore >= 40) return 'bg-yellow-500';   // Fair
+  return 'bg-red-500';                               // Poor
+};
+
+const getPillClass = (score: number) => {
+  // Handle both 0-10 and 0-100 ranges
+  const normalizedScore = score > 10 ? score : score * 10;
+  if (normalizedScore >= 80) return 'text-green-600 bg-green-100';
+  if (normalizedScore >= 60) return 'text-blue-600 bg-blue-100';
+  if (normalizedScore >= 40) return 'text-yellow-600 bg-yellow-100';
+  return 'text-red-600 bg-red-100';
+};
+
+const getScoreClass = (score: number) => {
+  // Handle both 0-10 and 0-100 ranges
+  const normalizedScore = score > 10 ? score : score * 10;
+  if (normalizedScore >= 80) return 'text-green-600 font-semibold';
+  if (normalizedScore >= 60) return 'text-blue-600 font-semibold';
+  if (normalizedScore >= 40) return 'text-yellow-600 font-semibold';
+  return 'text-red-600 font-semibold';
+};
+
+const formatScore = (score: number) => {
+  return score.toFixed(4);
+};
 
 // AI Visibility Score Component
 function AIVisibilityScoreCard({ score, industry, metrics }: { 
@@ -310,9 +387,12 @@ export function CompetitorInsight() {
 
   // Load history items from service
   useEffect(() => {
-    const items = historyService.getHistoryItems();
-    setHistoryItems(items);
-    console.log('[Overview] Loaded history items:', items.length);
+    const loadHistory = async () => {
+      const items = await historyService.getHistoryItems();
+      setHistoryItems(items);
+      console.log('[Overview] Loaded history items:', items.length);
+    };
+    loadHistory();
   }, [refreshKey]);
 
   // Restore cached analysis data after user is known
@@ -339,13 +419,44 @@ export function CompetitorInsight() {
     }
     
     try {
+      // PRIORITY 1: Try unified cache (from new parallel analysis system)
+      const savedState = userStateManager.restoreState('competitor-insight');
+      const lastTarget = savedState?.websiteUrl || '';
+      
+      if (lastTarget) {
+        const cachedData = unifiedCache.getPage(lastTarget, 'competitorInsight');
+        if (cachedData) {
+          console.log('[AIVisibilityAnalysis] Restoring from unified cache:', lastTarget);
+          setWebsiteUrl(lastTarget);
+          if (savedState.selectedIndustry) setSelectedIndustry(savedState.selectedIndustry);
+          setAnalysisResult(cachedData);
+          setShowSuccessMessage(true);
+          console.log('[AIVisibilityAnalysis] Unified cache restored with', cachedData.competitors?.length || 0, 'competitors');
+          return;
+        }
+      }
+      
+      // PRIORITY 2: Try userStateManager (legacy)
+      if (savedState && savedState.websiteUrl) {
+        console.log('[AIVisibilityAnalysis] Restoring from userStateManager:', savedState.websiteUrl);
+        if (savedState.websiteUrl) setWebsiteUrl(savedState.websiteUrl);
+        if (savedState.selectedIndustry) setSelectedIndustry(savedState.selectedIndustry);
+        if (savedState.analysisResult) {
+          setAnalysisResult(savedState.analysisResult);
+          setShowSuccessMessage(true);
+        }
+        console.log('[AIVisibilityAnalysis] State restored from userStateManager');
+        return;
+      }
+      
+      // PRIORITY 3: Fallback to session manager
       const session = sessionManager.getLatestAnalysisSession('ai-visibility', stableUserId);
       if (session) {
         console.log('[AIVisibilityAnalysis] Restoring cached analysis data:', session);
         console.log('[AIVisibilityAnalysis] Session has competitors:', session.data?.competitors?.length || 0);
         
         // Restore all cached values
-        if (session.inputValue) setInputValue(session.inputValue);
+        if (session.inputValue) setWebsiteUrl(session.inputValue);
         if (session.inputType) setInputType(session.inputType as 'company' | 'url');
         if (session.analysisType) setAnalysisType(session.analysisType as 'root-domain' | 'exact-url');
         
@@ -362,7 +473,7 @@ export function CompetitorInsight() {
         console.log('[AIVisibilityAnalysis] No session found for user');
         // No session for this user → clear any stale state
         setAnalysisResult(null);
-        setInputValue('');
+        setWebsiteUrl('');
         setInputType('company');
         setAnalysisType('root-domain');
       }
@@ -370,6 +481,21 @@ export function CompetitorInsight() {
       console.error('[AIVisibilityAnalysis] Error restoring cached data:', error);
     }
   }, [stableUserId, CLEARED_KEY]);
+  
+  // Save state when navigating away
+  useEffect(() => {
+    return () => {
+      if (analysisResult && websiteUrl) {
+        const stateToSave = {
+          websiteUrl,
+          selectedIndustry,
+          analysisResult
+        };
+        userStateManager.saveState('competitor-insight', stateToSave);
+        console.log('[AIVisibilityAnalysis] Saved state on unmount for:', websiteUrl);
+      }
+    };
+  }, [analysisResult, websiteUrl, selectedIndustry]);
 
   // Listen for storage changes to auto-refresh
   useEffect(() => {
@@ -401,8 +527,8 @@ export function CompetitorInsight() {
     window.addEventListener('new-analysis-created', handleNewAnalysis as EventListener);
     
     // Also check for changes every 3 seconds (fallback)
-    const interval = setInterval(() => {
-      const currentItems = historyService.getHistoryItems();
+    const interval = setInterval(async () => {
+      const currentItems = await historyService.getHistoryItems();
       if (currentItems.length !== historyItems.length) {
         console.log('[Overview] Item count changed, refreshing data');
         setRefreshKey(prev => prev + 1);
@@ -676,7 +802,7 @@ export function CompetitorInsight() {
   };
 
   // Unified Analysis Function
-  const startAnalysis = async () => {
+  const startAnalysis = async (forceRefresh = false) => {
     // Validate required fields
     if (!websiteUrl.trim()) {
       setAnalysisError('Website URL is required.');
@@ -685,6 +811,12 @@ export function CompetitorInsight() {
 
     // Use structured Website URL as primary input
     const primaryInput = websiteUrl.trim();
+    
+    // If force refresh, clear cache first
+    if (forceRefresh) {
+      console.log('[Competitor Insight] Force refresh - clearing cache for:', primaryInput);
+      unifiedCache.delete(primaryInput);
+    }
 
     // Auto-detect if input is a URL and extract company name
     let finalCompanyName = primaryInput;
@@ -709,119 +841,134 @@ export function CompetitorInsight() {
     try {
       const abortController = new AbortController();
       setAbortController(abortController);
+    // keep legacy references type-safe below
+    let analysisResults: any;
 
       console.log('[CompetitorInsight] Starting competitor analysis for:', finalCompanyName);
       console.log('[CompetitorInsight] Detected industry:', detectedIndustry);
 
-      const analysisResults = await apiService.getAIVisibilityAnalysis(
-        finalCompanyName,
-        detectedIndustry,
-        { signal: abortController.signal },
-        {
-          productName: productName.trim() || undefined,
-          productCategory: productCategory.trim() || undefined,
-          competitorName: competitorName.trim() || undefined,
-          country: country.trim() || undefined,
-        }
-      );
+      // NEW UNIFIED APPROACH: Check cache first, run current page + background others
+      const target = websiteUrl;
       
-      console.log('[AIVisibilityAnalysis] Analysis results received:', analysisResults);
+      // Check unified cache
+      const cachedCompetitorInsight = unifiedCache.getPage(target, 'competitorInsight');
       
-      if (analysisResults.success && analysisResults.data) {
-        console.log('[CompetitorInsight] Setting analysis result:', analysisResults.data);
-        
-        // Add detected industry to the analysis result
-        const enhancedResult = {
-          ...analysisResults.data,
-          industry: detectedIndustry,
-          originalInput: websiteUrl,
-          inputType: detectedInputType, // Add input type to the cached data
-          analysisType: analysisType // Add analysis type to the cached data
-        };
-        
-        // Force a re-render by updating state
-        setAnalysisResult(null); // Clear first
-        setTimeout(() => {
-          setAnalysisResult(enhancedResult);
-          setShowSuccessMessage(true);
-          console.log('[CompetitorInsight] State updated, analysis result set:', enhancedResult);
-          
-          // Force a re-render by updating a dummy state
-          setRefreshKey(prev => prev + 1);
-        }, 100);
-        
-        // Save to history
-        try {
-          const competitors = analysisResults.data.competitors || [];
-          const historyItem = {
-            id: `ai-visibility-${Date.now()}`,
-            type: 'ai-visibility' as const,
-            name: `Competitor Analysis - ${finalCompanyName}`,
-            timestamp: new Date().toISOString(),
-            status: 'completed' as const,
-            company: finalCompanyName,
+      // IMPORTANT: Only use cache if it has the required metrics for Competitor Insight
+      const hasRequiredMetrics = cachedCompetitorInsight?.competitors?.[0]?.aiTraffic || 
+                                   cachedCompetitorInsight?.competitors?.[0]?.shopping ||
+                                   cachedCompetitorInsight?.competitors?.[0]?.sourcesByTool;
+      
+      if (cachedCompetitorInsight && hasRequiredMetrics && !forceRefresh) {
+        console.log('[AIVisibilityAnalysis] Using cached competitor insight data');
+        console.log('[AIVisibilityAnalysis] Cache has required metrics (aiTraffic, shopping, sources)');
+          const result = {
+          ...cachedCompetitorInsight,
             industry: detectedIndustry,
-            analysis: {
-              competitors: competitors.map((comp: any) => ({
-                name: comp.name,
-                mentions: comp.mentions || 0,
-                status: 'success' as const
-              })),
-              serviceStatus: analysisResults.data.serviceStatus || {
-                gemini: true,
-                perplexity: true,
-                claude: true,
-                chatgpt: true
-              },
-              summary: {
-                totalCompetitors: competitors.length,
-                averageVisibilityScore: competitors.reduce((sum: number, comp: any) => sum + (comp.mentions || 0), 0) / Math.max(competitors.length, 1),
-                topCompetitor: competitors.length > 0 ? competitors.reduce((top: any, comp: any) => 
-                  (comp.mentions || 0) > (top.mentions || 0) ? comp : top
-                ).name : 'None'
-              }
-            }
+            originalInput: websiteUrl,
+            inputType: detectedInputType,
+            analysisType: analysisType
+        };
+          setAnalysisResult(result);
+          setShowSuccessMessage(true);
+          setRefreshKey(prev => prev + 1);
+        setIsAnalyzing(false);
+        
+        // Save state to userStateManager for restoration
+        userStateManager.saveState('competitor-insight', {
+          websiteUrl,
+          selectedIndustry: detectedIndustry,
+          analysisResult: result
+        });
+        console.log('[AIVisibilityAnalysis] Saved cached state to userStateManager');
+        
+        // Still trigger background refresh for other pages if needed
+        backgroundOrchestrator.runFullAnalysis({
+          target,
+          originalInput: websiteUrl,
+          industry: detectedIndustry,
+          currentPage: 'competitorInsight',
+          userId: user?.id || user?.email || 'anonymous'
+        }).catch(e => console.warn('[AIVisibilityAnalysis] Background analysis failed:', e));
+        
+        return;
+      }
+      
+      // If we have cached data but it's incomplete, log it
+      if (cachedCompetitorInsight && !hasRequiredMetrics) {
+        console.warn('[AIVisibilityAnalysis] Cache found but missing required metrics (aiTraffic, shopping, sources)');
+        console.warn('[AIVisibilityAnalysis] Running fresh analysis to get complete data');
+      }
+
+      // Run fresh competitor insight analysis + trigger background for other pages
+      console.log('[AIVisibilityAnalysis] Running fresh competitor insight analysis');
+      
+      try {
+        // Get current page data (foreground)
+        const result = await backgroundOrchestrator.getCurrentPageAnalysis(
+          'competitorInsight',
+          target,
+          websiteUrl,
+          detectedIndustry
+        );
+        
+        if (result) {
+          const enhancedResult = {
+            ...result,
+            industry: detectedIndustry,
+            originalInput: websiteUrl,
+            inputType: detectedInputType,
+            analysisType: analysisType
           };
           
-          try {
-            await historyService.addHistoryItem(historyItem);
-            
-            // Dispatch custom event to notify other components (like History) that new analysis was created
-            window.dispatchEvent(new CustomEvent('new-analysis-created', { 
-              detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
-            }));
-            
-            console.log('[CompetitorInsight] Analysis saved to history:', historyItem);
-          } catch (error) {
-            console.error('[CompetitorInsight] Failed to save analysis to history:', error);
-            // Still dispatch the event even if history save fails
-            window.dispatchEvent(new CustomEvent('new-analysis-created', { 
-              detail: { type: 'ai-visibility', timestamp: new Date().toISOString() } 
-            }));
-          }
-        } catch (e) {
-          console.warn('Failed to save analysis to history:', e);
-        }
-        
-        // Cache the results using session manager
-        try {
-          sessionManager.saveAnalysisSession(
-            'ai-visibility',
-            enhancedResult,
+          setAnalysisResult(enhancedResult);
+          setShowSuccessMessage(true);
+          setRefreshKey(prev => prev + 1);
+          
+          // Save state to userStateManager for restoration
+          userStateManager.saveState('competitor-insight', {
             websiteUrl,
-            analysisType,
-            detectedInputType,
-            detectedIndustry,
-            stableUserId
-          );
-          console.log('[AIVisibilityAnalysis] Analysis results saved to session storage');
-        } catch (e) {
-          console.warn('Failed to cache analysis results:', e);
+            selectedIndustry: detectedIndustry,
+            analysisResult: enhancedResult
+          });
+          console.log('[AIVisibilityAnalysis] Saved state to userStateManager');
+          
+          // Save to session manager as well
+          try {
+            sessionManager.saveAnalysisSession(
+              'ai-visibility',
+              enhancedResult,
+              websiteUrl,
+              detectedIndustry,
+              detectedInputType,
+              detectedIndustry,
+              stableUserId
+            );
+            console.log('[AIVisibilityAnalysis] Saved to session manager');
+          } catch (saveError) {
+            console.error('[AIVisibilityAnalysis] Error saving to session manager:', saveError);
+          }
+          
+          // Fire background analysis for other pages (fire-and-forget)
+          backgroundOrchestrator.runFullAnalysis({
+            target,
+            originalInput: websiteUrl,
+            industry: detectedIndustry,
+            currentPage: 'competitorInsight',
+            userId: user?.id || user?.email || 'anonymous'
+          }).catch(e => console.warn('[AIVisibilityAnalysis] Background analysis failed:', e));
+          
+        } else {
+          throw new Error('No competitor insight data returned');
         }
-      } else {
-        console.error('[Overview] Analysis failed:', analysisResults.error);
-        setAnalysisError(analysisResults.error || 'Analysis failed. Please try again.');
+      } catch (error: any) {
+        console.error('[AIVisibilityAnalysis] Competitor insight analysis failed:', error);
+        setAnalysisError(error?.message || 'Analysis failed');
+        setIsAnalyzing(false);
+        return;
       }
+      
+      setIsAnalyzing(false);
+      return;
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.log('Analysis was cancelled');
@@ -979,8 +1126,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <PieChart className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <PieChart className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1104,8 +1251,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <Target className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <Target className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1215,8 +1362,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <Users className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <Users className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1352,8 +1499,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <MapPin className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <MapPin className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <h3 className="text-xl font-semibold text-gray-900">Product Attribute Mentions (GEO)</h3>
@@ -1533,8 +1680,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <Network className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <Network className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1654,8 +1801,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <PieChart className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <PieChart className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1760,8 +1907,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <Activity className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <Activity className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1892,8 +2039,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <Star className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <Star className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <h3 className="text-xl font-semibold text-gray-900">Sentiment Analysis</h3>
@@ -1988,8 +2135,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <Shield className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <Shield className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <h3 className="text-xl font-semibold text-gray-900">Authority Signals</h3>
@@ -2137,8 +2284,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-200">
-              <Bot className="w-5 h-5" style={{ color: '#2563eb' }} />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+              <Bot className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <h3 className="text-xl font-semibold text-gray-900">FAQ / Conversational Mentions</h3>
@@ -2292,8 +2439,8 @@ export function CompetitorInsight() {
       <div className="bg-white border border-gray-300 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
-          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
@@ -2482,7 +2629,10 @@ export function CompetitorInsight() {
               </select>
             </div>
             <button
-              onClick={startAnalysis}
+              onClick={(e) => {
+                e.preventDefault();
+                startAnalysis();
+              }}
               disabled={isAnalyzing || !websiteUrl.trim()}
               className="h-11 px-4 bg-black hover:bg-gray-800 disabled:bg-gray-400 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow w-full text-sm lg:col-span-2 self-end"
             >
@@ -2517,13 +2667,31 @@ export function CompetitorInsight() {
       <div className="mb-8">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-4">
           <div></div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Competitor Analysis Results</h2>
-            <p className="text-gray-600 text-lg">Analysis completed for: {analysisResult?.originalInput || websiteUrl}</p>
+          <div className="text-left">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Competitor Analysis</h2>
+            <p className="text-gray-600 text-sm">Analysis completed for: {analysisResult?.originalInput || websiteUrl}</p>
           </div>
-          <div className="justify-self-end">
+          <div className="justify-self-end flex gap-2">
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                // Refresh current analysis
+                if (websiteUrl) {
+                  console.log('[Competitor Insight] Refreshing analysis for:', websiteUrl);
+                  startAnalysis(true); // Force refresh
+                }
+              }}
+              disabled={isAnalyzing || !analysisResult}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
             <button
               onClick={() => {
+                // NEW BEHAVIOR: Only clear UI form, keep cache intact
+                // This allows re-analyzing same company to use cache
+                
                 setAnalysisResult(null);
                 setAnalysisError(null);
                 setShowSuccessMessage(false);
@@ -2533,8 +2701,11 @@ export function CompetitorInsight() {
                 setCompetitorName('');
                 setCountry('');
                 setSelectedIndustry('auto');
-                try { localStorage.setItem(CLEARED_KEY, '1'); } catch {}
-                setHasClearedData(true);
+                
+                // DO NOT clear cache - let users benefit from cached analyses
+                // If they enter same company again, it will load from cache instantly!
+                
+                console.log('[Competitor Insight] Form cleared - ready for new input (cache preserved)');
               }}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
             >
@@ -2572,16 +2743,166 @@ export function CompetitorInsight() {
             {/* FAQConversationalSection */}
             {/* ProductAttributeBubbleSection */}
 
-            {/* Add error boundary for AIVisibilityTable */}
-            <div className="bg-white rounded-lg shadow p-6 border border-gray-300 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Competitor Analysis</h3>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">Period: Monthly</span>
-              </div>
+            {/* Competitor Analysis Section */}
               {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 && (
-                <AIVisibilityTable key={`analysis-${refreshKey}`} data={analysisResult} />
-              )}
+              <>
+                {/* Competitor Analysis Heading */}
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">Competitor Analysis</h2>
             </div>
+            
+                {/* Competitor Analysis - 2 Cards */}
+                <div className="space-y-6">
+                {/* Card 1: Competitor Performance Overview (Bar Chart) */}
+                <DashboardCard
+                  title="Competitor Performance Overview"
+                  subtitle="Quick visual snapshot of how each competitor ranks on AI visibility"
+                  tooltip="Visual comparison of average AI visibility scores across competitors"
+                  icon={<BarChart className="w-4 h-4" />}
+                >
+                  <div className="h-48 sm:h-56 lg:h-64 overflow-x-auto overflow-y-visible">
+                    <div className="flex items-end h-full gap-3 sm:gap-4 min-w-max px-2 pb-2">
+                    {analysisResult.competitors.map((competitor: any, index: number) => {
+                      const avgScore = competitor.totalScore || 0;
+                      // Normalize score for height calculation (handle both 0-10 and 0-100 ranges)
+                      const normalizedScore = avgScore > 10 ? avgScore : avgScore * 10;
+                      const heightPercentage = Math.min(95, Math.max(10, (normalizedScore / 100) * 85 + 10));
+                        const barColor = getBarClass(avgScore);
+                      
+                      return (
+                        <div key={index} className="flex-none w-12 sm:w-16 h-full flex flex-col justify-end items-center relative">
+                          <div className="mb-1 text-xs font-semibold text-gray-800 text-center whitespace-nowrap">
+                            {formatScore(avgScore)}
+            </div>
+            
+                          <div className="w-full h-full bg-gray-200 rounded-t-lg relative">
+                            <div 
+                              className={`${barColor} rounded-t-lg transition-all duration-500 ease-out absolute bottom-0 left-0 w-full`}
+                              style={{ 
+                                height: `${heightPercentage}%`,
+                                minHeight: '20px'
+                              }}
+                            />
+                          </div>
+                          
+                          <div className="mt-2 text-xs text-gray-600 text-center font-medium truncate w-full">
+                            {competitor.name}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 text-center">
+                      <div className="inline-flex items-center flex-wrap justify-center gap-2 sm:gap-4 text-xs text-gray-500">
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 bg-green-500 rounded mr-1"></div>
+                          <span>Excellent (8-10)</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 bg-blue-500 rounded mr-1"></div>
+                          <span>Good (6-7.9)</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 bg-yellow-500 rounded mr-1"></div>
+                          <span>Fair (4-5.9)</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 bg-red-500 rounded mr-1"></div>
+                          <span>Poor (0-3.9)</span>
+                        </div>
+                      </div>
+                  </div>
+                </DashboardCard>
+
+                {/* Card 2: Competitors Comparison (Table) */}
+                <DashboardCard
+                  title="Competitors Comparison"
+                  subtitle="Detailed breakdown of scores across Gemini, Perplexity, Claude, and ChatGPT"
+                  tooltip="Detailed scoring breakdown for each company across multiple models"
+                  icon={<Grid3X3 className="w-4 h-4" />}
+                >
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Company
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Gemini
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Perplexity
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Claude
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            ChatGPT
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Average Score
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {analysisResult.competitors.map((competitor: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-10 w-10">
+                                  <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <span className="text-sm font-medium text-black">
+                                      {competitor.name.charAt(0).toUpperCase()}
+                                    </span>
+          </div>
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-medium text-gray-900">{competitor.name}</div>
+                                </div>
+                              </div>
+                            </td>
+                            
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.gemini || 0)}`}>
+                                {formatScore(competitor.aiScores?.gemini || 0)}
+                              </span>
+                            </td>
+                            
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.perplexity || 0)}`}>
+                                {formatScore(competitor.aiScores?.perplexity || 0)}
+                              </span>
+                            </td>
+                            
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.claude || 0)}`}>
+                                {formatScore(competitor.aiScores?.claude || 0)}
+                              </span>
+                            </td>
+                            
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.chatgpt || 0)}`}>
+                                {formatScore(competitor.aiScores?.chatgpt || 0)}
+                              </span>
+                            </td>
+                            
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`text-sm ${getScoreClass(competitor.totalScore || 0)}`}>
+                                {formatScore(competitor.totalScore || 0)}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </DashboardCard>
+              </div>
+              </>
+            )}
             
 
             

@@ -7,10 +7,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { historyService } from '../services/historyService';
 import { sessionManager } from '../services/sessionManager';
+import { setCachedCompetitors, normalizeTarget } from '../services/competitorCache';
+import { getTargetAnalysis } from '../services/targetAnalysisCache';
+import { runPhasedAnalysis, AnalysisEvents } from '../services/analysisOrchestrator';
+import { backgroundOrchestrator } from '../services/backgroundAnalysisOrchestrator';
+import { unifiedCache } from '../services/unifiedCache';
 import type { HistoryItem, QAHistoryItem } from '../types';
 
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
+import { userStateManager } from '../utils/userStateManager';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -24,19 +30,48 @@ interface DashboardCardProps {
   className?: string;
   headerAction?: React.ReactNode;
   subtitle?: string;
+  tooltip?: string;
 }
 
-function DashboardCard({ title, icon, iconBgColor, children, className = "", headerAction, subtitle }: DashboardCardProps) {
+function DashboardCard({ title, icon, iconBgColor, children, className = "", headerAction, subtitle, tooltip }: DashboardCardProps) {
+  const [showTooltip, setShowTooltip] = React.useState(false);
+  
   return (
     <div className={`group bg-white border border-gray-300 rounded-xl p-4 shadow-sm hover:shadow-xl hover:border-gray-400 transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col h-full${className}`}>
       <div className="flex items-start justify-between mb-3 flex-shrink-0">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
             <div className={`w-10 h-10 rounded-lg ${iconBgColor || 'bg-gray-100'} flex items-center justify-center shadow-sm`}>
-              {React.cloneElement(icon as React.ReactElement, { className: iconBgColor ? "w-4 h-4 text-white" : "w-4 h-4 text-black" })}
+              {icon}
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 leading-tight">{title}</h3>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-gray-900 leading-tight">{title}</h3>
+                {tooltip && (
+                  <div className="relative">
+                    <div
+                      onMouseEnter={() => setShowTooltip(true)}
+                      onMouseLeave={() => setShowTooltip(false)}
+                      className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50 text-gray-600 text-xs font-medium flex items-center justify-center transition-colors cursor-default"
+                    >
+                      i
+                    </div>
+                    {showTooltip && (
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-white text-gray-900 text-xs rounded-lg shadow-xl z-[9999] border border-gray-300"
+                        style={{ 
+                          animation: 'fadeIn 0.2s ease-in',
+                          pointerEvents: 'none'
+                        }}
+                      >
+                        {tooltip}
+                        <div className="absolute left-1/2 -translate-x-1/2 top-full border-[6px] border-transparent border-t-white" 
+                          style={{ marginTop: '-1px' }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
             </div>
           </div>
@@ -98,7 +133,7 @@ function AIVisibilityScoreCard({ score, industry, metrics }: {
   return (
     <DashboardCard
       title="Overall AI Visibility Score"
-      subtitle="Tracks how discoverable your brand is across ChatGPT, Gemini, Claude, and Perplexity with week-over-week trend analysis"
+      tooltip="Tracks how discoverable your brand is across ChatGPT, Gemini, Claude, and Perplexity with week-over-week trend analysis"
       icon={<Eye className="w-5 h-5 text-white" />}
       iconBgColor={getIconBgColor(displayScore)}
       headerAction={
@@ -287,7 +322,7 @@ function AIPlatformPresenceCard() {
   return (
     <DashboardCard
       title="AI Platform Presence Breakdown"
-      subtitle="Identify where you're strong or weak across AI platforms"
+      tooltip="Identify where you're strong or weak across AI platforms"
       icon={<Target className="w-5 h-5 text-white" />}
       iconBgColor="bg-purple-500"
       headerAction={
@@ -447,6 +482,14 @@ function OverallAIVisibilityScoreCard({ result }: { result: any }) {
     return 'Poor';
   };
 
+  // Local text color helper aligned with Competitor Insight palette
+  const getScoreClassLocal = (score: number) => {
+    if (score >= 80) return 'text-emerald-600';
+    if (score >= 60) return 'text-sky-600';
+    if (score >= 40) return 'text-amber-600';
+    return 'text-rose-600';
+  };
+
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
     if (score >= 60) return 'text-blue-600';
@@ -464,37 +507,22 @@ function OverallAIVisibilityScoreCard({ result }: { result: any }) {
   return (
     <DashboardCard
       title="AI Visibility Score"
-      icon={<Eye className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-          </div>
-      }
+      tooltip="How well your brand appears in AI assistant responses"
+      icon={<Eye className="w-4 h-4 text-blue-600" />}
     >
-      <div className="text-center">
-        <div className={`text-4xl font-bold ${getScoreColor(compositeScore)} mb-2`}>
+      <div className="flex items-center justify-center h-32">
+        <div className="text-center w-full px-6">
+        <div className={`text-4xl font-bold ${getScoreClassLocal(compositeScore)} mb-2`}>
           {compositeScore}
         </div>
-        <div className="text-gray-600 mb-2">out of 100</div>
-        <div className={`text-lg font-semibold ${getScoreColor(compositeScore)} mb-3`}>
-          {getScoreLabel(compositeScore)}
-        </div>
-        
+          <div className="text-gray-600 mb-3">out of 100</div>
         <div className="w-full bg-gray-200 rounded-full h-3">
           <div 
             className={`h-3 rounded-full ${getProgressColor(compositeScore)} transition-all duration-500`}
             style={{ width: `${Math.min(100, Math.max(0, compositeScore))}%` }}
           ></div>
+          </div>
       </div>
-        {showDescription && (
-          <div className="text-xs text-gray-500 mt-3">
-            How well your brand appears in AI assistant responses
-    </div>
-        )}
       </div>
     </DashboardCard>
   );
@@ -713,7 +741,7 @@ function ProductPerformanceAnalysisCard({ result, setShowShopifyModal }: { resul
   return (
     <DashboardCard
       title="Top Performing Categories"
-      icon={<BarChart3 className="w-4 h-4 text-black" />}
+      icon={<BarChart3 className="w-4 h-4 text-blue-600" />}
     >
       {hasShopifyConnection ? (
         loading ? (
@@ -816,16 +844,8 @@ function AIPlatformPresenceBreakdown({ result }: { result: any }) {
   return (
     <DashboardCard
       title="LLM Presence"
-      icon={<Globe className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
+      tooltip="Which AI platforms recognize your brand"
+      icon={<Globe className="w-4 h-4 text-blue-600" />}
     >
       <div className="space-y-3">
         {platforms.map((platform, index) => (
@@ -840,11 +860,7 @@ function AIPlatformPresenceBreakdown({ result }: { result: any }) {
                     </div>
                   </div>
         ))}
-        {showDescription && (
-          <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-200">
-            Which AI platforms recognize your brand
-                  </div>
-        )}
+        
       </div>
     </DashboardCard>
   );
@@ -883,30 +899,40 @@ function ShareOfAIVoiceCard({ result }: { result: any }) {
   };
 
   const sharePct = computeShare(result);
+
+  // Local helpers to match AI Visibility card styling
+  const getScoreClassLocal = (score: number) => {
+    if (score >= 80) return 'text-emerald-600';
+    if (score >= 60) return 'text-sky-600';
+    if (score >= 40) return 'text-amber-600';
+    return 'text-rose-600';
+  };
+
+  const getProgressColor = (score: number) => {
+    if (score >= 80) return 'bg-green-500';
+    if (score >= 60) return 'bg-blue-500';
+    if (score >= 40) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
   return (
     <DashboardCard
       title="Share of AI Voice"
-      icon={<PieChart className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
+      tooltip="Measure your brand's share of voice across AI platforms"
+      icon={<PieChart className="w-4 h-4 text-blue-600" />}
     >
       <div className="flex items-center justify-center h-32">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-gray-900 mb-2">{sharePct}%</div>
+        <div className="text-center w-full px-6">
+          <div className={`text-4xl font-bold ${getScoreClassLocal(sharePct)} mb-2`}>{sharePct}%</div>
+          <div className="text-gray-600 mb-3">out of 100</div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div 
+              className={`h-3 rounded-full ${getProgressColor(sharePct)} transition-all duration-500`}
+              style={{ width: `${Math.min(100, Math.max(0, sharePct))}%` }}
+            ></div>
+          </div>
         </div>
       </div>
-      {showDescription && (
-        <div className="text-xs text-gray-500 mt-3">
-          Measure your brand's share of voice across AI platforms
-        </div>
-      )}
+      
     </DashboardCard>
   );
 }
@@ -981,49 +1007,58 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
 function CompetitorBenchmarkCard({ competitors }: { competitors: any[] }) {
   const [showDescription, setShowDescription] = useState(false);
   
-  const getBenchmarkStatus = (competitors: any[]) => {
-    if (!competitors || competitors.length === 0) return { status: 'No Data', color: 'text-gray-500', score: 0 };
-
-    const avgScore = competitors.reduce((sum, comp) => sum + (comp.totalScore || 0), 0) / competitors.length;
-    const normalizedScore = avgScore > 10 ? avgScore : avgScore * 10;
-
-    if (normalizedScore >= 80) return { status: 'Excellent', color: 'text-green-600', score: Math.round(normalizedScore) };
-    if (normalizedScore >= 60) return { status: 'Good', color: 'text-blue-600', score: Math.round(normalizedScore) };
-    if (normalizedScore >= 40) return { status: 'Fair', color: 'text-yellow-600', score: Math.round(normalizedScore) };
-    return { status: 'Poor', color: 'text-red-600', score: Math.round(normalizedScore) };
+  // Relative competitor metric: rank, percentile, gap to leader (score 0..100)
+  const getRelativeBenchmark = (competitors: any[]) => {
+    if (!competitors || competitors.length === 0) {
+      return { score: 0, percentile: 0, rank: 0, total: 0, gapToLeader: 0 };
+    }
+    // Convert to comparable 0..100 scores
+    const scores = competitors.map(c => ({
+      name: c.name,
+      score: Math.min(100, Math.max(0, (c.totalScore || 0) > 10 ? c.totalScore : (c.totalScore || 0) * 10))
+    }));
+    const sorted = [...scores].sort((a, b) => b.score - a.score);
+    const leader = sorted[0];
+    // Assume the main company is first in the array (server returns your company first) else fallback to company field
+    const yourName = competitors.find((c: any) => c.name?.toLowerCase() === (competitors[0]?.company || '').toLowerCase())?.name || competitors[0]?.name || sorted[0].name;
+    const yourIndex = sorted.findIndex(s => s.name === yourName);
+    const yourRank = yourIndex >= 0 ? yourIndex + 1 : 1;
+    const yourScore = yourIndex >= 0 ? sorted[yourIndex].score : leader.score;
+    const gapToLeader = Math.max(0, leader.score - yourScore);
+    const percentile = Math.round((1 - (yourRank - 1) / Math.max(1, sorted.length)) * 100);
+    return { score: yourScore, percentile, rank: yourRank, total: sorted.length, gapToLeader };
   };
 
-  const benchmark = getBenchmarkStatus(competitors);
+  const benchmark = getRelativeBenchmark(competitors);
 
   return (
     <DashboardCard
       title="Competitor Score"
-      icon={<BarChartIcon className="w-4 h-4 text-black" />}
-      headerAction={
-        <div 
-          onClick={() => setShowDescription(!showDescription)}
-          className="w-8 h-8 rounded-full border border-gray-300 bg-white hover:border-gray-400 transition-colors cursor-pointer flex items-center justify-center"
-          title="Click for description"
-        >
-          <span className="text-xs text-gray-600 font-medium">i</span>
-        </div>
-      }
+      tooltip="Compare your performance against industry competitors"
+      icon={<BarChartIcon className="w-4 h-4 text-blue-600" />}
     >
       <div className="flex items-center justify-center h-32">
-        <div className="text-center">
-          <div className={`text-2xl font-bold ${benchmark.color} mb-2`}>
-            {benchmark.status}
+        <div className="text-center w-full px-6">
+          {(() => {
+            const score = Math.min(100, Math.max(0, benchmark.score));
+            const textColor = score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-sky-600' : score >= 40 ? 'text-amber-600' : 'text-rose-600';
+            const barColor = score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-blue-500' : score >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+            return (
+              <>
+                <div className={`text-4xl font-bold ${textColor} mb-2`}>{score}</div>
+                <div className="text-gray-600 mb-3">out of 100</div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className={`h-3 rounded-full ${barColor} transition-all duration-500`}
+                    style={{ width: `${score}%` }}
+                  ></div>
           </div>
-          <div className="text-base font-semibold text-gray-700">
-            Score: {benchmark.score}/100
-          </div>
+              </>
+            );
+          })()}
         </div>
       </div>
-      {showDescription && (
-        <div className="text-xs text-gray-500 mt-3">
-          Compare your performance against industry competitors
-        </div>
-      )}
+      
     </DashboardCard>
   );
 }
@@ -1198,7 +1233,7 @@ function SentimentAnalysisCard({ competitors, result }: { competitors: any[]; re
   return (
     <DashboardCard
       title="Customer Sentiment"
-      icon={<Heart className="w-4 h-4 text-black" />}
+      icon={<Heart className="w-4 h-4 text-blue-600" />}
       headerAction={
         <button
           onClick={() => navigate('/product-insights')}
@@ -1210,16 +1245,16 @@ function SentimentAnalysisCard({ competitors, result }: { competitors: any[]; re
     >
       {/* Overall Sentiment */}
       <div className="text-center mb-6">
-        <div className="text-4xl font-bold text-green-600 mb-2">72%</div>
+        <div className="text-4xl font-bold text-green-600 mb-2">{Math.round(sentiment.positive)}%</div>
         <div className="text-sm text-[#475569]">Positive sentiment</div>
       </div>
 
       {/* Sentiment Breakdown */}
       <div className="space-y-3">
         {[
-          { label: 'Positive', value: 72, color: 'bg-green-500' },
-          { label: 'Neutral', value: 21, color: 'bg-gray-400' },
-          { label: 'Negative', value: 7, color: 'bg-red-500' }
+          { label: 'Positive', value: Math.round(sentiment.positive), color: 'bg-green-500' },
+          { label: 'Neutral', value: Math.round(sentiment.neutral), color: 'bg-gray-400' },
+          { label: 'Negative', value: Math.round(sentiment.negative), color: 'bg-red-500' }
         ].map(({ label, value, color }) => (
           <div key={label} className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1451,7 +1486,7 @@ function TopProductsKpiCard({ result, setShowShopifyModal }: { result?: any; set
   return (
     <DashboardCard
       title="Top Performing Products"
-      icon={<Award className="w-4 h-4 text-black" />}
+      icon={<Award className="w-4 h-4 text-blue-600" />}
     >
       {hasShopifyConnection ? (
       <div className="space-y-3">
@@ -3072,6 +3107,49 @@ export function Overview() {
 
   // Restore latest saved session via SessionManager (cross-page persistence)
   useEffect(() => {
+    // Check if user clicked "New Analysis" before navigating away
+    if (userStateManager.hasNewAnalysisIntent('overview')) {
+      console.log('[Overview] User intended new analysis - clearing and not restoring state');
+      userStateManager.clearNewAnalysisIntent('overview');
+      setAnalysisResult(null);
+      setInputValue('');
+      return;
+    }
+    
+    // Check if analysis is currently in progress (user navigated away while analyzing)
+    if (userStateManager.isAnalysisInProgress('overview')) {
+      console.log('[Overview] Analysis in progress detected - showing loading state');
+      const params = userStateManager.getAnalysisParams('overview');
+      if (params) {
+        setInputValue(params.inputValue || '');
+        setInputType(params.detectedInputType || 'company');
+        setAnalysisType(params.analysisType || 'root-domain');
+        setIsAnalyzing(true);
+        console.log('[Overview] Restored loading state with params:', params);
+        
+        // Poll for completion - check if analysis finished in another tab or backend
+        const checkInterval = setInterval(() => {
+          if (!userStateManager.isAnalysisInProgress('overview')) {
+            console.log('[Overview] Analysis completed while away - restoring results');
+            clearInterval(checkInterval);
+            const savedState = userStateManager.restoreState('overview');
+            if (savedState?.analysisResult) {
+              setAnalysisResult(savedState.analysisResult);
+              setIsAnalyzing(false);
+            } else {
+              // Analysis timed out or failed
+              setIsAnalyzing(false);
+              setAnalysisError('Analysis timeout. Please try again.');
+            }
+          }
+        }, 2000); // Check every 2 seconds
+        
+        // Clean up interval on unmount
+        return () => clearInterval(checkInterval);
+      }
+      return;
+    }
+    
     // Only restore if we don't already have MEANINGFUL analysis data
     const hasMeaningfulData = analysisResult && 
                                analysisResult.competitors && 
@@ -3084,9 +3162,22 @@ export function Overview() {
     }
     
     try {
+      // Try to restore from userStateManager first
+      const savedState = userStateManager.restoreState('overview');
+      if (savedState) {
+        console.log('[Overview] Restoring state from userStateManager:', savedState);
+        if (savedState.inputValue) setInputValue(savedState.inputValue);
+        if (savedState.inputType) setInputType(savedState.inputType);
+        if (savedState.analysisType) setAnalysisType(savedState.analysisType);
+        if (savedState.analysisResult) setAnalysisResult(savedState.analysisResult);
+        console.log('[Overview] State restored from userStateManager');
+        return;
+      }
+      
+      // Fallback to sessionManager for backward compatibility
       const session = sessionManager.getLatestAnalysisSession('overview', stableUserId);
       if (session) {
-        console.log('[Overview] Restoring cached analysis data:', session);
+        console.log('[Overview] Restoring cached analysis data from sessionManager:', session);
         console.log('[Overview] Session has competitors:', session.data?.competitors?.length || 0);
         if (session.inputValue) setInputValue(session.inputValue);
         if (session.inputType) setInputType((session.inputType as 'company' | 'url') || 'company');
@@ -3103,6 +3194,36 @@ export function Overview() {
       console.error('[Overview] Failed to restore session:', e);
     }
   }, [stableUserId]);
+  
+  // Save state when analysis completes or when navigating away
+  useEffect(() => {
+    if (analysisResult) {
+      const stateToSave = {
+        inputValue,
+        inputType,
+        analysisType,
+        analysisResult
+      };
+      userStateManager.saveState('overview', stateToSave);
+      console.log('[Overview] Saved current state to userStateManager');
+    }
+  }, [analysisResult, inputValue, inputType, analysisType]);
+  
+  // Save state on unmount (when navigating away)
+  useEffect(() => {
+    return () => {
+      if (analysisResult) {
+        const stateToSave = {
+          inputValue,
+          inputType,
+          analysisType,
+          analysisResult
+        };
+        userStateManager.saveState('overview', stateToSave);
+        console.log('[Overview] Saved state on unmount');
+      }
+    };
+  }, [analysisResult, inputValue, inputType, analysisType]);
   
   // Modal states
   const [showShopifyModal, setShowShopifyModal] = useState(false);
@@ -3237,15 +3358,92 @@ export function Overview() {
     setAnalysisError(null);
     setShowSuccessMessage(false);
     
+    // Mark analysis as started in persistent storage (for background continuation)
+    userStateManager.markAnalysisStarted('overview', {
+      inputValue,
+      finalCompanyName,
+      detectedIndustry,
+      detectedInputType,
+      analysisType
+    });
+    
     try {
       const abortController = new AbortController();
       setAbortController(abortController);
       
-      const analysisResults = await apiService.getAIVisibilityAnalysis(
-        finalCompanyName,
-        detectedIndustry,
-        { signal: abortController.signal }
-      );
+      // NEW UNIFIED APPROACH: Check cache first, run current page + background others
+      const target = inputValue;
+      
+      // Check unified cache
+      const cachedDashboard = unifiedCache.getPage(target, 'dashboard');
+      if (cachedDashboard) {
+        console.log('[Overview] Using cached dashboard data');
+          const result = {
+          ...cachedDashboard,
+            industry: detectedIndustry,
+            originalInput: inputValue,
+            inputType: detectedInputType,
+        };
+          setAnalysisResult(result);
+          setShowSuccessMessage(true);
+        setIsAnalyzing(false);
+        
+        // Still trigger background refresh for other pages if needed
+        backgroundOrchestrator.runFullAnalysis({
+          target,
+          originalInput: inputValue,
+          industry: detectedIndustry,
+          currentPage: 'dashboard',
+          userId: stableUserId
+        }).catch(e => console.warn('[Overview] Background analysis failed:', e));
+        
+        return;
+      }
+
+      // Run fresh dashboard analysis + trigger background for other pages
+      console.log('[Overview] Running fresh dashboard analysis');
+      
+      try {
+        // Get current page data (foreground)
+        const result = await backgroundOrchestrator.getCurrentPageAnalysis(
+          'dashboard',
+          target,
+          inputValue,
+          detectedIndustry
+        );
+        
+        if (result) {
+          const enhancedResult = {
+            ...result,
+            industry: detectedIndustry,
+            originalInput: inputValue,
+            inputType: detectedInputType,
+          };
+          
+          setAnalysisResult(enhancedResult);
+          setShowSuccessMessage(true);
+          
+          // Fire background analysis for other pages (fire-and-forget)
+          backgroundOrchestrator.runFullAnalysis({
+            target,
+            originalInput: inputValue,
+            industry: detectedIndustry,
+            currentPage: 'dashboard',
+            userId: stableUserId
+          }).catch(e => console.warn('[Overview] Background analysis failed:', e));
+          
+        } else {
+          throw new Error('No dashboard data returned');
+        }
+      } catch (error: any) {
+        console.error('[Overview] Dashboard analysis failed:', error);
+        setAnalysisError(error?.message || 'Analysis failed');
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      setIsAnalyzing(false);
+      return;
       
       if (analysisResults.success && analysisResults.data) {
         const enhancedResult = {
@@ -3258,6 +3456,14 @@ export function Overview() {
         
         setAnalysisResult(enhancedResult);
         setShowSuccessMessage(true);
+        
+        // Mark analysis as completed in persistent storage
+        userStateManager.markAnalysisCompleted('overview', {
+          inputValue,
+          inputType: detectedInputType,
+          analysisType,
+          analysisResult: enhancedResult
+        });
         
         // Save to history and cache
         try {
@@ -3301,6 +3507,13 @@ export function Overview() {
             data: enhancedResult,
             timestamp: Date.now()
           }));
+          // Cache competitor names keyed by the original input
+          try {
+            const names = competitors.map((c: any) => c.name).filter(Boolean);
+            setCachedCompetitors(inputValue, names, finalCompanyName);
+          } catch (e) {
+            console.warn('[Overview] Failed to cache competitors:', e);
+          }
           // Persist using SessionManager for cross-page restore
           try {
             sessionManager.saveAnalysisSession(
@@ -3323,9 +3536,20 @@ export function Overview() {
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
+        // Don't mark as completed if user intentionally aborted
+        console.log('[Overview] Analysis aborted by user');
+        userStateManager.clearState('overview'); // Clear the "in progress" state
         return;
       }
       setAnalysisError(error.message || 'Analysis failed. Please try again.');
+      
+      // Mark analysis as completed (with error) so loading state clears
+      userStateManager.markAnalysisCompleted('overview', {
+        inputValue,
+        inputType,
+        analysisType,
+        error: error.message
+      });
     } finally {
       setIsAnalyzing(false);
       setAbortController(null);
@@ -3475,6 +3699,16 @@ export function Overview() {
       setAnalysisError(null);
       setShowSuccessMessage(false);
       
+      // Mark analysis as started in persistent storage
+      userStateManager.markAnalysisStarted('overview', {
+        inputValue: product.title,
+        finalCompanyName,
+        detectedIndustry,
+        detectedInputType,
+        analysisType,
+        sourceProduct: product
+      });
+      
       const abortController = new AbortController();
       setAbortController(abortController);
       
@@ -3503,6 +3737,14 @@ export function Overview() {
         
         setAnalysisResult(enhancedResult);
         setShowSuccessMessage(true);
+        
+        // Mark analysis as completed in persistent storage
+        userStateManager.markAnalysisCompleted('overview', {
+          inputValue: product.title,
+          inputType: detectedInputType,
+          analysisType,
+          analysisResult: enhancedResult
+        });
         
         // Save to history and cache
         try {
@@ -3758,22 +4000,32 @@ export function Overview() {
     };
   };
 
-  const getScoreColor = (score: number) => {
+  // Colors aligned with Competitor Insight page
+  const getBarClass = (score: number) => {
     // Handle both 0-10 and 0-100 ranges
     const normalizedScore = score > 10 ? score : score * 10;
-    if (normalizedScore >= 80) return 'bg-green-500';
-    if (normalizedScore >= 60) return 'bg-blue-500';
-    if (normalizedScore >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (normalizedScore >= 80) return 'bg-emerald-400'; // Excellent
+    if (normalizedScore >= 60) return 'bg-sky-400';     // Good
+    if (normalizedScore >= 40) return 'bg-amber-400';   // Fair
+    return 'bg-rose-400';                               // Poor
+  };
+
+  const getPillClass = (score: number) => {
+    // Handle both 0-10 and 0-100 ranges
+    const normalizedScore = score > 10 ? score : score * 10;
+    if (normalizedScore >= 80) return 'text-emerald-600 bg-emerald-100';
+    if (normalizedScore >= 60) return 'text-sky-600 bg-sky-100';
+    if (normalizedScore >= 40) return 'text-amber-600 bg-amber-100';
+    return 'text-rose-600 bg-rose-100';
   };
 
   const getScoreClass = (score: number) => {
     // Handle both 0-10 and 0-100 ranges
     const normalizedScore = score > 10 ? score : score * 10;
-    if (normalizedScore >= 80) return 'text-green-600 font-semibold';
-    if (normalizedScore >= 60) return 'text-blue-600 font-semibold';
-    if (normalizedScore >= 40) return 'text-yellow-600 font-semibold';
-    return 'text-red-600 font-semibold';
+    if (normalizedScore >= 80) return 'text-emerald-600 font-semibold';
+    if (normalizedScore >= 60) return 'text-sky-600 font-semibold';
+    if (normalizedScore >= 40) return 'text-amber-600 font-semibold';
+    return 'text-rose-600 font-semibold';
   };
 
   const formatScore = (score: number) => {
@@ -4061,8 +4313,27 @@ export function Overview() {
           </h1>
           <p className="text-gray-600 mt-2">Welcome to Kabini.ai - Your AI-Powered Content Enhancement Platform</p>
         </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              // Refresh current analysis
+              if (inputValue) {
+                console.log('[Dashboard] Refreshing analysis for:', inputValue);
+                unifiedCache.delete(inputValue);
+                startAnalysis();
+              }
+            }}
+            disabled={isAnalyzing || !analysisResult}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         <button
           onClick={() => {
+            // Mark intent to start new analysis
+            userStateManager.markNewAnalysis('overview');
+            
             // Clear analysis results
             setAnalysisResult(null);
             setInputValue('');
@@ -4070,11 +4341,15 @@ export function Overview() {
             setShowSuccessMessage(false);
             localStorage.removeItem('overview_market_analysis');
             
+            // Clear user-specific state
+            userStateManager.clearState('overview');
+            sessionManager.clearSessionsByType('overview');
+            
             // Disconnect any connected Shopify store
             try {
               localStorage.removeItem('shopify_connections');
               setConnectedShopifyAccounts([]);
-              console.log('[New Analysis] Disconnected Shopify store');
+              console.log('[New Analysis] Cleared all state and marked new analysis intent');
             } catch (error) {
               console.warn('[New Analysis] Failed to disconnect store:', error);
             }
@@ -4083,6 +4358,7 @@ export function Overview() {
         >
           New Analysis
         </button>
+        </div>
       </div>
 
       {/* Analysis Results Section */}
@@ -4111,13 +4387,11 @@ export function Overview() {
               </div>
             </div>
           ) : (
-            <p className="text-gray-600 text-lg">Analysis completed for: {analysisResult?.originalInput}</p>
+            <p className="text-sm text-gray-600">
+              Analysis completed for: <span className="font-semibold text-black">{analysisResult?.originalInput}</span>
+            </p>
           )}
         </div>
-
-        {showSuccessMessage && (
-          <div className="mb-6 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">✅ Analysis completed successfully! Results are ready below.</div>
-        )}
 
         {/* Dashboard Cards */}
         <div className="space-y-8 lg:space-y-12 mb-8 lg:mb-12">
@@ -4160,14 +4434,15 @@ export function Overview() {
           </button>
         </div>
 
+        {/* Competitor Analysis Cards Container */}
+        <div className="space-y-6">
         {/* Competitor Performance Overview Chart */}
         {analysisResult?.competitors && analysisResult.competitors.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <div className="mb-3">
-              <h3 className="text-base font-semibold text-gray-900">Competitor Performance Overview</h3>
-              <p className="text-xs text-gray-600">Visual comparison of average AI visibility scores across competitors</p>
-            </div>
-            
+          <DashboardCard
+            title="Competitor Performance Overview"
+            tooltip="Visual comparison of average AI visibility scores across competitors"
+            icon={<BarChart className="w-4 h-4" />}
+          >
             <div className="h-48 sm:h-56 lg:h-64 overflow-x-auto overflow-y-visible">
               <div className="flex items-end h-full gap-3 sm:gap-4 min-w-max px-2 pb-2">
               {analysisResult.competitors.map((competitor: any, index: number) => {
@@ -4175,7 +4450,7 @@ export function Overview() {
                 // Normalize score for height calculation (handle both 0-10 and 0-100 ranges)
                 const normalizedScore = avgScore > 10 ? avgScore : avgScore * 10;
                 const heightPercentage = Math.min(95, Math.max(10, (normalizedScore / 100) * 85 + 10));
-                const barColor = getScoreColor(avgScore);
+                  const barColor = getBarClass(avgScore);
                 
                 return (
                   <div key={index} className="flex-none w-12 sm:w-16 h-full flex flex-col justify-end items-center relative">
@@ -4222,16 +4497,15 @@ export function Overview() {
                   </div>
                 </div>
             </div>
-          </div>
+          </DashboardCard>
         )}
 
         {/* Competitors Comparison Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-base font-semibold text-gray-900">Competitors Comparison</h2>
-            <p className="text-xs text-gray-600">Detailed scoring breakdown for each company across multiple models</p>
-          </div>
-          
+        <DashboardCard
+          title="Competitors Comparison"
+          tooltip="Detailed scoring breakdown for each company across multiple models"
+          icon={<Grid3X3 className="w-4 h-4" />}
+        >
           <div className="overflow-x-auto w-full">
             <table className="w-full min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -4275,25 +4549,25 @@ export function Overview() {
                     </td>
                     
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.gemini || 0)}`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.gemini || 0)}`}>
                         {formatScore(competitor.aiScores?.gemini || 0)}
                       </span>
                     </td>
                     
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.perplexity || 0)}`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.perplexity || 0)}`}>
                         {formatScore(competitor.aiScores?.perplexity || 0)}
                       </span>
                     </td>
                     
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.claude || 0)}`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.claude || 0)}`}>
                         {formatScore(competitor.aiScores?.claude || 0)}
                       </span>
                     </td>
                     
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getScoreColor(competitor.aiScores?.chatgpt || 0)}`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPillClass(competitor.aiScores?.chatgpt || 0)}`}>
                         {formatScore(competitor.aiScores?.chatgpt || 0)}
                       </span>
                     </td>
@@ -4308,6 +4582,7 @@ export function Overview() {
               </tbody>
             </table>
           </div>
+        </DashboardCard>
         </div>
       </div>
     </div>

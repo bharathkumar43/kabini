@@ -473,8 +473,11 @@ const AIVisibilityTable: React.FC<AIVisibilityTableProps> = ({ data }) => {
     return 'bg-rose-400'; // Poor (0-3.9)
   };
 
-  const formatScore = (score: number) => {
-    return score.toFixed(4);
+  const formatScore = (score: number | null | undefined) => {
+    if (score === null || score === undefined || isNaN(score)) {
+      return '0.0000';
+    }
+    return Number(score).toFixed(4);
   };
 
 

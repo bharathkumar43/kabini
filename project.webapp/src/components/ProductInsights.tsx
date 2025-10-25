@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3 as BarChartIcon, Zap, Search, Loader2, FileText, Eye } from 'lucide-react';
+import { BarChart3 as BarChartIcon, Search, Loader2, FileText, Eye, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/apiService';
 import { sessionManager } from '../services/sessionManager';
+import { backgroundOrchestrator } from '../services/backgroundAnalysisOrchestrator';
+import { unifiedCache } from '../services/unifiedCache';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import { userStateManager } from '../utils/userStateManager';
 
 // CTA Button component for navigation
 const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
@@ -16,12 +18,14 @@ const CtaButton = ({ onClick, children }: { onClick: () => void; children: React
   </button>
 );
 
-function DashboardCard({ title, icon, iconBgColor, children, tooltip, action }: { title: string; icon: React.ReactNode; iconBgColor: string; children: React.ReactNode; tooltip?: string; action?: React.ReactNode }) {
+function DashboardCard({ title, icon, iconBgColor, children, tooltip, action }: { title: string; icon: React.ReactNode; iconBgColor?: string; children: React.ReactNode; tooltip?: string; action?: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-300 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
       <div className="flex items-center justify-between p-4 border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${iconBgColor}`}>{icon}</div>
+          <div className={`w-10 h-10 rounded-lg ${iconBgColor || 'bg-gray-100'} flex items-center justify-center shadow-sm`}>
+            {icon}
+          </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base sm:text-lg font-semibold text-gray-900">{title}</h2>
@@ -89,7 +93,7 @@ function AIVisibilityScoreCard({ score }: { score: number }) {
   };
   
   return (
-    <DashboardCard title="AI Visibility Score" icon={<Eye className="w-5 h-5" style={{ color: '#2563eb' }} />} iconBgColor="bg-gray-200" tooltip="Shows estimated visibility percentage based on share of mentions across AI tools. Higher scores indicate stronger brand presence and recognition in AI responses. This metric helps understand how visible your brand is compared to competitors in AI-generated content.">
+    <DashboardCard title="AI Visibility Score" icon={<Eye className="w-4 h-4 text-blue-600" />} tooltip="Shows estimated visibility percentage based on share of mentions across AI tools. Higher scores indicate stronger brand presence and recognition in AI responses. This metric helps understand how visible your brand is compared to competitors in AI-generated content.">
       <div className="text-center">
         <div className="text-4xl font-bold text-gray-900 mb-1">{pct}</div>
         <div className="text-sm text-gray-600 mb-2">out of 100</div>
@@ -129,7 +133,7 @@ function AIReadinessScoreCard({ score }: { score: number }) {
   };
   
   return (
-    <DashboardCard title="AI Readiness Score" icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} iconBgColor="bg-gray-200" tooltip="Measures how well your content is optimized for AI understanding and recommendations. Based on schema markup, content quality, trust signals, and technical SEO. Higher scores indicate better AI readiness and higher chances of being recommended by AI tools.">
+    <DashboardCard title="AI Readiness Score" icon={<BarChartIcon className="w-4 h-4 text-blue-600" />} tooltip="Measures how well your content is optimized for AI understanding and recommendations. Based on schema markup, content quality, trust signals, and technical SEO. Higher scores indicate better AI readiness and higher chances of being recommended by AI tools.">
       <div className="text-center">
         <div className="text-4xl font-bold text-gray-900 mb-1">{score}</div>
         <div className="text-sm text-gray-600 mb-2">out of 100</div>
@@ -230,8 +234,7 @@ function ProductGeoBubbleChart({ result }: { result: any }) {
   return (
     <DashboardCard 
       title="Product Analysis by Platforms" 
-      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
-      iconBgColor="bg-gray-200" 
+      icon={<BarChartIcon className="w-4 h-4 text-blue-600" />} 
       tooltip="Shows which product attributes (luxury, affordable, organic, sustainable) AI associates with each competitor across platforms. Bubble size indicates frequency of association. Helps understand how competitors are positioned in the market and identify attribute gaps."
       // action removed per request
     >
@@ -332,14 +335,10 @@ function SentimentFromCompetitor({ result }: { result: any }) {
   return (
     <DashboardCard 
       title="Sentiment Analysis" 
-      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
-      iconBgColor="bg-gray-200" 
+      icon={<BarChartIcon className="w-4 h-4 text-blue-600" />} 
       tooltip="Shows how competitors are perceived in AI responses: Positive (praise), Neutral (factual), Negative (criticism), Mixed (both). Includes example quotes, sources, and context. Helps understand brand perception and reputation in AI-generated content."
       // action removed per request
     >
-      <div className="mb-3">
-        <div className="text-xs text-gray-600">Tone, example mention, source, attribute/context, and takeaway per competitor.</div>
-      </div>
       {showInfo && <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-3">Heuristic tone derived from AI analyses when backend sentiment rows are missing.</div>}
       <div className="w-full overflow-x-auto">
         <table className="min-w-[900px] w-full text-sm border border-gray-200">
@@ -358,10 +357,10 @@ function SentimentFromCompetitor({ result }: { result: any }) {
               <tr key={`sent-${r.name}`} className="border-b border-gray-100">
                 <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ color: '#0f172a' }}>{r.name}</td>
                 <td className="px-3 py-2"><span className={`px-2 py-1 rounded ${toneColor(r.tone)}`}>{r.tone}</span></td>
-                <td className="px-3 py-2 text-gray-800">{r.quote}</td>
+                <td className="px-3 py-2 text-gray-700">{r.quote}</td>
                 <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.source}</td>
                 <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.attr}</td>
-                <td className="px-3 py-2 text-gray-800">{r.takeaway}</td>
+                <td className="px-3 py-2 text-gray-700">{r.takeaway}</td>
               </tr>
             ))}
           </tbody>
@@ -432,70 +431,40 @@ function AuthorityFromCompetitor({ result }: { result: any }) {
     
     return { name, counts };
   });
-  const totals: Record<SignalKey, number> = { Reviews: 0, Backlinks: 0, 'PR Coverage': 0, 'Certifications/Awards': 0 };
-  rows.forEach(r => SIGNAL_KEYS.forEach(k => { totals[k] += r.counts[k]; }));
-  const max = Math.max(1, ...Object.values(totals));
-  const color: Record<SignalKey, string> = { Reviews: 'bg-sky-400', Backlinks: 'bg-emerald-400', 'PR Coverage': 'bg-amber-400', 'Certifications/Awards': 'bg-rose-400' };
   return (
     <DashboardCard 
       title="Authority Signals" 
-      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
-      iconBgColor="bg-gray-200" 
-      tooltip="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown, donut shows overall distribution. Helps understand what builds AI trust."
+      icon={<BarChartIcon className="w-4 h-4 text-blue-600" />} 
+      tooltip="Shows trust signals that make AI recommend competitors: Reviews (Trustpilot, Google), Backlinks (high DA sites), PR Coverage (Forbes, TechCrunch), Certifications/Awards. Stacked bars show per-competitor breakdown. Helps understand what builds AI trust."
       // action removed per request
     >
-      <div className="flex items-center gap-4 text-sm mb-3">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1 text-gray-800"><span className="inline-block w-3 h-3 rounded bg-sky-400" /> Reviews</span>
-          <span className="inline-flex items-center gap-1 text-gray-800"><span className="inline-block w-3 h-3 rounded bg-emerald-400" /> Backlinks</span>
-          <span className="inline-flex items-center gap-1 text-gray-800"><span className="inline-block w-3 h-3 rounded bg-amber-400" /> PR Coverage</span>
-          <span className="inline-flex items-center gap-1 text-gray-800"><span className="inline-block w-3 h-3 rounded bg-rose-400" /> Certifications/Awards</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="flex items-end gap-3 overflow-x-auto">
-          {rows.map(r => {
-            const total = SIGNAL_KEYS.reduce((s,k)=>s+(r.counts[k]||0),0) || 1;
-            return (
-              <div key={r.name} className="flex flex-col items-center flex-shrink-0">
-                <div className="w-20 h-40 bg-gray-100 rounded-md overflow-hidden flex flex-col justify-end">
-                  <div className="bg-rose-400" style={{ height: `${(r.counts['Certifications/Awards']/total)*100}%` }} />
-                  <div className="bg-amber-400" style={{ height: `${(r.counts['PR Coverage']/total)*100}%` }} />
-                  <div className="bg-emerald-400" style={{ height: `${(r.counts['Backlinks']/total)*100}%` }} />
-                  <div className="bg-sky-400" style={{ height: `${(r.counts['Reviews']/total)*100}%` }} />
-                </div>
-                <div className="mt-2 text-xs font-medium text-gray-800">{r.name}</div>
-                <div className="text-[11px] text-gray-600">{total}</div>
+      <div className="flex items-end gap-3 overflow-x-auto">
+        {rows.map(r => {
+          const total = SIGNAL_KEYS.reduce((s,k)=>s+(r.counts[k]||0),0) || 1;
+          return (
+            <div key={r.name} className="flex flex-col items-center flex-shrink-0">
+              <div className="w-20 h-40 bg-gray-100 rounded-md overflow-hidden flex flex-col justify-end">
+                <div className="bg-rose-400" style={{ height: `${(r.counts['Certifications/Awards']/total)*100}%` }} />
+                <div className="bg-amber-400" style={{ height: `${(r.counts['PR Coverage']/total)*100}%` }} />
+                <div className="bg-emerald-400" style={{ height: `${(r.counts['Backlinks']/total)*100}%` }} />
+                <div className="bg-sky-400" style={{ height: `${(r.counts['Reviews']/total)*100}%` }} />
               </div>
-            );
-          })}
-        </div>
-        <div className="flex items-center gap-8">
-          <div className="relative" style={{ width: 220, height: 220 }}>
-            <div className="absolute inset-0 rounded-full border-[18px] border-sky-400" />
-            <div className="absolute inset-6 rounded-full border-[18px] border-emerald-400" />
-            <div className="absolute inset-12 rounded-full border-[18px] border-amber-400" />
-            <div className="absolute inset-[72px] rounded-full border-[18px] border-rose-400 flex items-center justify-center text-sm font-semibold">{SIGNAL_KEYS.reduce((s,k)=>s+(totals[k]||0),0)}</div>
-          </div>
-          <div className="text-sm">
-            {SIGNAL_KEYS.map(k => (
-              <div key={k} className="flex items-center gap-2">
-                <span className={`inline-block w-3 h-3 rounded ${color[k]}`} />
-                <span className="w-40 text-gray-800">{k}</span>
-                <span className="text-gray-700">{totals[k]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+              <div className="mt-2 text-xs font-medium text-gray-800">{r.name}</div>
+              <div className="text-[11px] text-gray-600">{total}</div>
+            </div>
+          );
+        })}
       </div>
     </DashboardCard>
   );
 }
 
 const FAQ_SOURCE_CATS = ['Reddit','Quora','Trustpilot','Forums'] as const;
+type FAQSourceCat = typeof FAQ_SOURCE_CATS[number];
 const FAQ_THEMES = ['Safe checkout','Fast shipping','Return policy','Trusted reviews','Authenticity'] as const;
-const FAQ_SRC_KWS: Record<typeof FAQ_SOURCE_CATS[number], string[]> = { Reddit: ['reddit'], Quora: ['quora'], Trustpilot: ['trustpilot'], Forums: ['forum'] };
-const FAQ_THEME_KWS: Record<typeof FAQ_THEMES[number], string[]> = {
+type FAQTheme = typeof FAQ_THEMES[number];
+const FAQ_SRC_KWS: Record<FAQSourceCat, string[]> = { Reddit: ['reddit'], Quora: ['quora'], Trustpilot: ['trustpilot'], Forums: ['forum'] };
+const FAQ_THEME_KWS: Record<FAQTheme, string[]> = {
   'Safe checkout': ['safe','secure','trusted','checkout'],
   'Fast shipping': ['fast shipping','next-day','prime','quick delivery'],
   'Return policy': ['return','refund','policy'],
@@ -528,16 +497,16 @@ function FAQFromCompetitor({ result }: { result: any }) {
           const combined = `${source} ${question} ${answer}`;
           
           // Count sources
-          (FAQ_SOURCE_CATS as readonly string[]).forEach(cat => { 
-            if (FAQ_SRC_KWS[cat as any].some(k => combined.includes(k))) {
-              sourceCounts[cat as any] += 1;
+          (FAQ_SOURCE_CATS as readonly FAQSourceCat[]).forEach((cat: FAQSourceCat) => {
+            if (FAQ_SRC_KWS[cat].some((k: string) => combined.includes(k))) {
+              sourceCounts[cat] += 1;
             }
           });
           
           // Count themes
-          (FAQ_THEMES as readonly string[]).forEach(theme => { 
-            if (FAQ_THEME_KWS[theme as any].some(k => combined.includes(k))) {
-              themeCounts[theme as any] += 1;
+          (FAQ_THEMES as readonly FAQTheme[]).forEach((theme: FAQTheme) => {
+            if (FAQ_THEME_KWS[theme].some((k: string) => combined.includes(k))) {
+              themeCounts[theme] += 1;
             }
           });
         });
@@ -558,14 +527,14 @@ function FAQFromCompetitor({ result }: { result: any }) {
           if (t.includes('where can i') || t.includes('where to buy') || t.includes('faq') || t.includes('question')) {
             count += 1;
           }
-          (FAQ_SOURCE_CATS as readonly string[]).forEach(cat => { 
-            if (FAQ_SRC_KWS[cat as any].some(k => t.includes(k))) {
-              sourceCounts[cat as any] += 1;
+          (FAQ_SOURCE_CATS as readonly FAQSourceCat[]).forEach((cat: FAQSourceCat) => {
+            if (FAQ_SRC_KWS[cat].some((k: string) => t.includes(k))) {
+              sourceCounts[cat] += 1;
             }
           });
-          (FAQ_THEMES as readonly string[]).forEach(theme => { 
-            if (FAQ_THEME_KWS[theme as any].some(k => t.includes(k))) {
-              themeCounts[theme as any] += 1;
+          (FAQ_THEMES as readonly FAQTheme[]).forEach((theme: FAQTheme) => {
+            if (FAQ_THEME_KWS[theme].some((k: string) => t.includes(k))) {
+              themeCounts[theme] += 1;
             }
           });
     });
@@ -576,21 +545,16 @@ function FAQFromCompetitor({ result }: { result: any }) {
   
   const rows = Object.entries(competitorCounts).sort((a,b) => b[1]-a[1]);
   const maxC = Math.max(1, ...rows.map(r => r[1] as number));
-  const maxS = Math.max(1, ...Object.values(sourceCounts));
-  const maxT = Math.max(1, ...Object.values(themeCounts));
   return (
     <DashboardCard 
       title="FAQ / Conversational Mentions" 
-      icon={<BarChartIcon className="w-5 h-5" style={{ color: '#2563eb' }} />} 
-      iconBgColor="bg-gray-200" 
+      icon={<BarChartIcon className="w-4 h-4 text-blue-600" />} 
       tooltip="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent and trust-building mentions."
       // action removed per request
     >
-      <div className="text-xs text-gray-600 mb-3">Counts of FAQ-style mentions, sources referenced, and common themes.</div>
       <div className="space-y-6">
         {/* Competitor bars on top - no horizontal scroll */}
         <div>
-          <div className="text-sm font-semibold mb-2 text-gray-800">Competitor FAQ Mentions</div>
           <div className="w-full overflow-x-auto">
             <div className="min-w-[640px] flex items-end gap-4 px-1 py-2">
               {/* Y axis - consistent spacing like other graphs */}
@@ -615,8 +579,8 @@ function FAQFromCompetitor({ result }: { result: any }) {
           </div>
         </div>
 
-        {/* Sources and Themes below in two columns */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Sources and Themes below in two columns - COMMENTED OUT FOR LATER USE */}
+        {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <div className="text-sm font-semibold mb-2 text-gray-800">Sources</div>
           <div className="space-y-2">
@@ -641,7 +605,7 @@ function FAQFromCompetitor({ result }: { result: any }) {
             ))}
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </DashboardCard>
   );
@@ -665,88 +629,171 @@ export function ProductInsights() {
 
   // Restore saved analysis results on component mount
   useEffect(() => {
-    // Check if user explicitly cleared data in this session
     const wasCleared = localStorage.getItem(CLEARED_KEY) === '1';
     if (wasCleared) {
-      // Clear the flag and don't restore
       localStorage.removeItem(CLEARED_KEY);
       setAnalysisResult(null);
       return;
     }
-    
-    // Only restore if we don't already have MEANINGFUL analysis data
-    const hasMeaningfulData = analysisResult && 
-                               analysisResult.competitors && 
-                               Array.isArray(analysisResult.competitors) && 
-                               analysisResult.competitors.length > 0;
-    
-    if (hasMeaningfulData) {
-      console.log('[ProductInsights] Already have meaningful analysis data, skipping restoration');
-      return;
-    }
-    
-    try {
-      const session = sessionManager.getLatestAnalysisSession('product-insights', stableUserId);
-      if (session) {
-        console.log('[ProductInsights] Restoring cached analysis data:', session);
-        console.log('[ProductInsights] Session has competitors:', session.data?.competitors?.length || 0);
-        
-        // Restore all cached values
-        if (session.inputValue) setWebsiteUrl(session.inputValue);
-        if (session.analysisType) setSelectedIndustry(session.analysisType);
-        if (session.data) {
-          setAnalysisResult(session.data);
-          console.log('[ProductInsights] Analysis result set with', session.data?.competitors?.length || 0, 'competitors');
-        }
-        
-        console.log('[ProductInsights] Cached data restored successfully');
-      } else {
-        console.log('[ProductInsights] No session found for user');
-        // No session for this user → clear any stale state
-        setAnalysisResult(null);
-        setWebsiteUrl('');
-        setProductName('');
-        setProductCategory('');
-        setCompetitorName('');
-        setCountry('');
-        setSelectedIndustry('auto');
-        setError(null);
-      }
-    } catch (error) {
-      console.error('[ProductInsights] Error restoring cached data:', error);
-      setError('Failed to restore previous analysis');
-    }
-  }, [stableUserId, CLEARED_KEY]);
 
-  const startAnalysis = async () => {
+    // Skip if we already have meaningful data
+    const hasMeaningfulData = analysisResult && Array.isArray(analysisResult?.competitors) && analysisResult.competitors.length > 0;
+    if (hasMeaningfulData) return;
+
+    try {
+      // PRIORITY 1: unified cache using last target from userStateManager
+      const savedState = userStateManager.restoreState('product-insights');
+      const lastTarget = savedState?.websiteUrl || '';
+      if (lastTarget) {
+        const cached = unifiedCache.getPage(lastTarget, 'productInsight');
+        if (cached) {
+          setWebsiteUrl(lastTarget);
+          if (savedState.selectedIndustry) setSelectedIndustry(savedState.selectedIndustry);
+          setAnalysisResult({ ...cached, targetUrl: lastTarget, originalInput: lastTarget });
+          return;
+        }
+      }
+
+      // PRIORITY 2: userStateManager
+      if (savedState && savedState.websiteUrl) {
+        setWebsiteUrl(savedState.websiteUrl);
+        if (savedState.selectedIndustry) setSelectedIndustry(savedState.selectedIndustry);
+        if (savedState.analysisResult) {
+          setAnalysisResult(savedState.analysisResult);
+          return;
+        }
+      }
+
+      // PRIORITY 3: sessionManager fallback
+      const session = sessionManager.getLatestAnalysisSession('product-insights', stableUserId);
+      if (session && session.data) {
+        if (session.inputValue) setWebsiteUrl(session.inputValue);
+        setAnalysisResult(session.data);
+      }
+    } catch (e) {
+      console.warn('[ProductInsights] Restore failed:', e);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [CLEARED_KEY, stableUserId]);
+
+  // Save state when navigating away
+  useEffect(() => {
+    return () => {
+      if (analysisResult && websiteUrl) {
+        const stateToSave = { websiteUrl, selectedIndustry, analysisResult };
+        userStateManager.saveState('product-insights', stateToSave);
+      }
+    };
+  }, [analysisResult, websiteUrl, selectedIndustry]);
+  
+  const startAnalysis = async (forceRefresh = false) => {
     if (!websiteUrl.trim()) {
       setError('Website URL is required.');
       return;
     }
+    
     setIsAnalyzing(true);
     setError(null);
+    
     try {
       const industry = selectedIndustry === 'auto' ? 'Ecommerce & Retail' : selectedIndustry;
-      const res = await apiService.getAIVisibilityAnalysis(
-        websiteUrl.trim(),
-        industry,
-        {},
-        {
-          productName: productName.trim() || undefined,
-          productCategory: productCategory.trim() || undefined,
-          competitorName: competitorName.trim() || undefined,
-          country: country.trim() || undefined,
-        }
-      );
-      if (res?.success && res?.data) {
-        setAnalysisResult(res.data);
+      const target = websiteUrl.trim();
+      
+      // If force refresh, clear cache first
+      if (forceRefresh) {
+        console.log('[ProductInsights] Force refresh - clearing cache for:', target);
+        unifiedCache.delete(target);
+      }
+      
+      // NEW UNIFIED APPROACH: Check cache first, run current page + background others
+      const cachedProductInsight = unifiedCache.getPage(target, 'productInsight');
+      if (cachedProductInsight && !forceRefresh) {
+        console.log('[ProductInsights] Using cached product insight data');
+        console.log('[ProductInsights] Cached competitors count:', cachedProductInsight?.competitors?.length || 0);
+        console.log('[ProductInsights] Cached competitors:', cachedProductInsight?.competitors?.map((c: any) => c?.name || c).join(', ') || 'None');
+          const result = {
+          ...cachedProductInsight,
+            targetUrl: target,
+            originalInput: target,
+        };
+          setAnalysisResult(result);
+        setIsAnalyzing(false);
+
+        // Save state for restoration
+        userStateManager.saveState('product-insights', {
+          websiteUrl: target,
+          selectedIndustry: industry,
+          analysisResult: result
+        });
         
-        // Save the analysis results to session storage
+        // Still trigger background refresh for other pages if needed
+        backgroundOrchestrator.runFullAnalysis({
+          target,
+          originalInput: target,
+          industry,
+          currentPage: 'productInsight',
+          userId: stableUserId
+        }).catch(e => console.warn('[ProductInsights] Background analysis failed:', e));
+        
+        return;
+      }
+
+      // Run fresh product insight analysis + trigger background for other pages
+      console.log('[ProductInsights] Running fresh product insight analysis');
+      
+      const result = await backgroundOrchestrator.getCurrentPageAnalysis(
+        'productInsight',
+        target,
+        target,
+        industry
+      );
+      
+      if (!result) {
+        console.warn('[ProductInsights] Analysis returned null');
+        setError('Analysis failed. Please try again or check Competitor Insight page first.');
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      console.log('[ProductInsights] Fresh analysis complete');
+      console.log('[ProductInsights] Fresh competitors count:', result?.competitors?.length || 0);
+      console.log('[ProductInsights] Fresh competitors:', result?.competitors?.map((c: any) => c?.name || c).join(', ') || 'None');
+      
+      // Show info message if only 1 competitor, but still display the data
+      if (result?.competitors?.length < 2) {
+        console.warn('[ProductInsights] Only 1 competitor detected - limited data available');
+        console.log('[ProductInsights] TIP: Go to Dashboard or Competitor Insight first for better results');
+      }
+      
+      const enhancedResult = {
+        ...result,
+        targetUrl: target,
+        originalInput: target,
+      };
+      
+      setAnalysisResult(enhancedResult);
+      // Save state for restoration
+      userStateManager.saveState('product-insights', {
+        websiteUrl: target,
+        selectedIndustry: industry,
+        analysisResult: enhancedResult
+      });
+        
+      // Fire background analysis for other pages (fire-and-forget)
+      backgroundOrchestrator.runFullAnalysis({
+        target,
+        originalInput: target,
+        industry,
+        currentPage: 'productInsight',
+        userId: stableUserId
+      }).catch(e => console.warn('[ProductInsights] Background analysis failed:', e));
+        
+      // Legacy: Save to session storage
         try {
           sessionManager.saveAnalysisSession(
             'product-insights',
-            res.data,
-            websiteUrl.trim(),
+          enhancedResult,
+          target,
             industry,
             'url',
             industry,
@@ -755,56 +802,114 @@ export function ProductInsights() {
           console.log('[ProductInsights] Analysis results saved to session storage');
         } catch (saveError) {
           console.error('[ProductInsights] Error saving analysis results:', saveError);
-          // Don't fail the analysis if saving fails
-        }
-      } else {
-        setError(res?.error || 'Failed to analyze');
       }
     } catch (e: any) {
+      console.error('[ProductInsights] Analysis error:', e);
       setError(e?.message || 'Failed to analyze');
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const computeVisibilityScore = (result: any): number => {
-    const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
-    if (comps.length === 0) return 0;
-    const totals = comps.map(c => Number(c?.aiTraffic?.totalMentions || c?.mentions || 0));
-    const sum = totals.reduce((a, b) => a + b, 0) || 1;
-    const top = Math.max(...totals);
-    const ratio = top / sum; // share of mentions
-    return ratio * 10; // normalize to 0..10
-  };
+  // Removed fallback useEffect - scores are now fetched directly in startAnalysis
 
-  const computeReadinessScore = (result: any): number => {
-    // Only calculate from real data
-    if (!result || !Array.isArray(result?.competitors) || result.competitors.length === 0) {
+  const computeVisibilityScore = (result: any): number => {
+    console.log('[computeVisibilityScore] Called with result:', result);
+    console.log('[computeVisibilityScore] targetScores:', result?.targetScores);
+    
+    // Use direct target score if available (from ecommerce content analysis)
+    if (result?.targetScores?.aiVisibilityScore !== undefined) {
+      const score = Number(result.targetScores.aiVisibilityScore);
+      console.log('[computeVisibilityScore] Using direct target score:', score);
+      return score / 10; // Convert 0-100 to 0-10 for card display
+    }
+
+    // Fallback: calculate from competitor data
+    const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+    if (competitors.length === 0) {
+      console.log('[computeVisibilityScore] No competitors, returning 0');
       return 0;
     }
 
-    const comps: any[] = result.competitors;
-    let totalScore = 0;
-    let totalWeight = 0;
+    // Calculate share of voice from mentions
+    const rawInput = String(result?.originalInput || websiteUrl || '').trim();
+    const norm = (s: string) => s.toLowerCase().replace(/^www\./, '');
+    const getLabelFromUrl = (input: string) => {
+      try {
+        const u = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`);
+        return norm(u.hostname).split('.')[0];
+      } catch { return norm(input).split(/[\/\s]/)[0]; }
+    };
+    const targetLabel = getLabelFromUrl(rawInput);
 
-    comps.forEach(c => {
-      // Schema markup score (0-30 points)
-      const schemaScore = Math.min(30, (c?.schemaMarkup || 0) * 3);
-      
-      // Content quality score (0-40 points)
-      const contentScore = Math.min(40, (c?.contentQuality || 0) * 4);
-      
-      // Trust signals score (0-30 points)
-      const trustScore = Math.min(30, (c?.trustSignals || 0) * 3);
-      
-      const competitorScore = schemaScore + contentScore + trustScore;
-      const weight = Number(c?.aiTraffic?.totalMentions || 1);
-      
-      totalScore += competitorScore * weight;
-      totalWeight += weight;
+    const match = competitors.find(c => {
+      const d = norm(String(c?.domain || ''));
+      const n = norm(String(c?.name || ''));
+      return d.includes(targetLabel) || n.includes(targetLabel);
     });
 
-    return totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
+    if (match) {
+      const mentions = Number(match?.aiTraffic?.totalMentions || match?.mentions || 0);
+      const sumAll = competitors.reduce((acc, c) => acc + Number(c?.aiTraffic?.totalMentions || c?.mentions || 0), 0) || 1;
+      const sharePercent = (mentions / sumAll) * 100;
+      console.log('[computeVisibilityScore] Calculated from mentions:', sharePercent);
+      return sharePercent / 10;
+    }
+
+    console.log('[computeVisibilityScore] No match found, returning 0');
+    return 0;
+  };
+
+  const computeReadinessScore = (result: any): number => {
+    console.log('[computeReadinessScore] Called with result:', result);
+    console.log('[computeReadinessScore] targetScores:', result?.targetScores);
+    console.log('[computeReadinessScore] aiReadinessScore:', result?.targetScores?.aiReadinessScore);
+    
+    // Use direct target score if available (from ecommerce content analysis)
+    if (result?.targetScores?.aiReadinessScore !== undefined) {
+      const score = Number(result.targetScores.aiReadinessScore);
+      console.log('[computeReadinessScore] Using direct target score:', score);
+      return Math.round(score);
+    }
+
+    // Fallback: use competitor data
+    if (!result || !Array.isArray(result?.competitors) || result.competitors.length === 0) {
+      console.log('[computeReadinessScore] No data available, returning 0');
+      return 0;
+    }
+
+    const competitors: any[] = result.competitors;
+    const rawInput = String(result?.originalInput || websiteUrl || '').trim();
+    const norm = (s: string) => s.toLowerCase().replace(/^www\./, '');
+    const getLabelFromUrl = (input: string) => {
+      try {
+        const u = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`);
+        return norm(u.hostname).split('.')[0];
+      } catch { return norm(input).split(/[\/\s]/)[0]; }
+    };
+    const targetLabel = getLabelFromUrl(rawInput);
+
+    const match = competitors.find(c => {
+      const d = norm(String(c?.domain || ''));
+      const n = norm(String(c?.name || ''));
+      return d.includes(targetLabel) || n.includes(targetLabel);
+    });
+
+    if (match) {
+      if (typeof match.contentOptimizationScore === 'number') {
+        console.log('[computeReadinessScore] Using match contentOptimizationScore:', match.contentOptimizationScore);
+        return Math.round(match.contentOptimizationScore);
+      }
+      const schemaScore = Math.min(30, (Number(match?.schemaMarkup) || 0) * 3);
+      const contentScore = Math.min(40, (Number(match?.contentQuality) || 0) * 4);
+      const trustScore = Math.min(30, (Number(match?.trustSignals) || 0) * 3);
+      const total = Math.round(schemaScore + contentScore + trustScore);
+      console.log('[computeReadinessScore] Calculated from components:', total);
+      return total;
+    }
+
+    console.log('[computeReadinessScore] No match found, returning 0');
+    return 0;
   };
 
   const clearAnalysisData = () => {
@@ -955,7 +1060,7 @@ export function ProductInsights() {
                 </select>
               </div>
               <button
-                onClick={startAnalysis}
+                onClick={(e) => { e.preventDefault(); startAnalysis(false); }}
                 disabled={isAnalyzing || !websiteUrl.trim()}
                 className="h-11 px-4 bg-black hover:bg-gray-800 disabled:bg-gray-400 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow w-full text-sm lg:col-span-2 self-end"
               >
@@ -992,7 +1097,15 @@ export function ProductInsights() {
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Analysis Results</h2>
             <p className="text-gray-600 text-lg">Analysis completed for: {resultData?.originalInput || websiteUrl}</p>
           </div>
-          <div className="justify-self-end">
+          <div className="justify-self-end flex gap-2">
+            <button 
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+              onClick={(e) => { e.preventDefault(); startAnalysis(true); }}
+              disabled={isAnalyzing}
+            >
+              <RefreshCw className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
             <button 
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
               onClick={clearAnalysisData}

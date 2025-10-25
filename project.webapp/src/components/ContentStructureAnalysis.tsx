@@ -79,6 +79,7 @@ import { StructureAnalysisHistoryItem } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import SuccessNotification from './ui/SuccessNotification';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import { userStateManager } from '../utils/userStateManager';
 
 // Format long URLs for subtitle display: remove query/hash and truncate middle
 const formatDisplayUrl = (input?: string): string => {
@@ -173,6 +174,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
   const [historyItems, setHistoryItems] = useLocalStorage<StructureAnalysisHistoryItem[]>(getHistoryKey(), []);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [shopifyProducts, setShopifyProducts] = useState<any[]>([]);
   const [notificationDetails, setNotificationDetails] = useState<{
     type: 'success' | 'error' | 'info' | 'warning';
     title: string;
@@ -446,149 +448,94 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
             try { localStorage.setItem(getStructureLastSavedKey(), new Date().toISOString()); } catch {}
   };
 
-  // Restore analysis session on mount
+  // Restore user-specific state or clear if "New Analysis" was clicked
   useEffect(() => {
-    const stableUserId = authService.getCurrentUserId() || 'anonymous';
-    
-    console.log('[Structure Analysis] Attempting to restore session, current analysis:', !!analysis);
-    
-    // Only restore if we don't already have analysis data
-    if (analysis) {
-      console.log('[Structure Analysis] Skipping restoration - analysis already exists');
+    // Check if user clicked "New Analysis" before navigating away
+    if (userStateManager.hasNewAnalysisIntent('structure-analysis')) {
+      console.log('[Structure Analysis] User intended new analysis - clearing and not restoring state');
+      userStateManager.clearNewAnalysisIntent('structure-analysis');
+      setAnalysis(null);
+      setUrlInput('');
       return;
     }
     
-    try {
-      const session = sessionManager.getLatestAnalysisSession('structure-analysis', stableUserId);
-      console.log('[Structure Analysis] Retrieved session:', !!session);
-      
-      if (session) {
-        console.log('[Structure Analysis] Restoring cached analysis data:', session);
-        
-        // Restore the analysis data
-        if (session.data) {
-          console.log('[Structure Analysis] Setting analysis data');
-          setAnalysis(session.data);
-        }
-        
-        // Restore URL input if available
-        if (session.originalInput) {
-          console.log('[Structure Analysis] Setting URL input:', session.originalInput);
-          setUrlInput(session.originalInput);
-        }
-        
-        console.log('[Structure Analysis] Successfully restored analysis session');
-      } else {
-        console.log('[Structure Analysis] No session found to restore');
-      }
-    } catch (error) {
-      console.error('[Structure Analysis] Error restoring cached data:', error);
+    // Try to restore from userStateManager
+    const savedState = userStateManager.restoreState('structure-analysis');
+    if (savedState) {
+      console.log('[Structure Analysis] Restoring state from userStateManager:', savedState);
+      if (savedState.urlInput) setUrlInput(savedState.urlInput);
+      if (savedState.analysis) setAnalysis(savedState.analysis);
+      console.log('[Structure Analysis] State restored successfully');
+    } else {
+      console.log('[Structure Analysis] No saved state to restore - starting fresh');
     }
     
     // Initialize pastedContent with the content prop if not already set
     if (!pastedContent && content) {
       setPastedContent(content);
     }
-  }, []); // Remove analysis from dependencies to prevent infinite loops
+  }, []); // Run once on mount
+  
+  // Save state when analysis completes or when navigating away
+  useEffect(() => {
+    if (analysis) {
+      const stateToSave = {
+        urlInput,
+        analysis
+      };
+      userStateManager.saveState('structure-analysis', stateToSave);
+      console.log('[Structure Analysis] Saved current state to userStateManager');
+    }
+  }, [analysis, urlInput]);
+  
+  // Save state on unmount (when navigating away)
+  useEffect(() => {
+    return () => {
+      if (analysis) {
+        const stateToSave = {
+          urlInput,
+          analysis
+        };
+        userStateManager.saveState('structure-analysis', stateToSave);
+        console.log('[Structure Analysis] Saved state on unmount');
+      }
+    };
+  }, [analysis, urlInput]);
 
-  // Listen for new analysis events to refresh session data
+  // Session restore on events DISABLED - user wants fresh results only
   useEffect(() => {
     const handleNewAnalysis = () => {
-      console.log('[Structure Analysis] New analysis event received, refreshing session data');
-      const stableUserId = authService.getCurrentUserId() || 'anonymous';
-      try {
-        const session = sessionManager.getLatestAnalysisSession('structure-analysis', stableUserId);
-        if (session && session.data) {
-          setAnalysis(session.data);
-          if (session.originalInput) {
-            setUrlInput(session.originalInput);
-          }
-        }
-      } catch (error) {
-        console.error('[Structure Analysis] Error refreshing session data:', error);
-      }
+      console.log('[Structure Analysis] New analysis event received - cache disabled, ignoring');
+      // Don't restore from cache - force fresh analysis
     };
 
     window.addEventListener('new-analysis-created', handleNewAnalysis);
     return () => window.removeEventListener('new-analysis-created', handleNewAnalysis);
   }, []);
 
-  // Persist last successful analysis across navigation so it stays until user runs a new one
+  // Persistence DISABLED - user wants fresh results only, no caching
   useEffect(() => {
-    if (!analysis) return;
-    try {
-      const payload = {
-        analysis,
-        fullPageHtml,
-        improvedFullPageHtml,
-        activeTab,
-        codeViewType,
-        urlInput,
-        pastedContent,
-        savedAt: Date.now(),
-      } as any;
-      localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(payload));
-      console.log('[Content Analysis] Analysis persisted for navigation');
-    } catch (error) {
-      console.error('[Content Analysis] Error persisting analysis:', error);
-      if (error.name === 'QuotaExceededError') {
-        console.log('[Content Analysis] QuotaExceededError - attempting emergency cleanup for persistence');
-        try {
-          // Emergency cleanup - remove old structure analysis persistence data
-          const keys = Object.keys(localStorage);
-          const structureKeys = keys.filter(key => key.includes('structure_last_persisted'));
-          // Remove all old persistence data
-          structureKeys.forEach(key => {
-            localStorage.removeItem(key);
-            console.log('[Content Analysis] Removed old persistence data:', key);
-          });
-          // Try saving minimal data
-          const minimalPayload = {
-            analysis: {
-              seoScore: analysis.seoScore,
-              llmOptimizationScore: analysis.llmOptimizationScore,
-              readabilityScore: analysis.readabilityScore,
-              suggestions: analysis.suggestions?.slice(0, 5) // Keep only first 5 suggestions
-            },
-            urlInput,
-            savedAt: Date.now(),
-          };
-          localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(minimalPayload));
-          console.log('[Content Analysis] Minimal analysis persisted after cleanup');
-        } catch (retryError) {
-          console.error('[Content Analysis] Failed to persist even after cleanup:', retryError);
-        }
-      }
-    }
-  }, [analysis, fullPageHtml, improvedFullPageHtml, activeTab, codeViewType, urlInput, pastedContent]);
+    // Don't persist analysis to cache - completely disabled
+    console.log('[Structure Analysis] All persistence disabled - no caching');
+  }, []); // Empty dependencies - runs once only
 
-  // Cleanup function to ensure persistence works reliably
+  // Cleanup persistence DISABLED - user wants fresh results only
   useEffect(() => {
     return () => {
-      // When component unmounts, ensure we save the current state if we have analysis
-      if (analysis) {
-        try {
-          const payload = {
-            analysis,
-            fullPageHtml,
-            improvedFullPageHtml,
-            activeTab,
-            codeViewType,
-            urlInput,
-            pastedContent,
-            savedAt: Date.now(),
-          } as any;
-          localStorage.setItem(getStructureLastPersistedKey(), JSON.stringify(payload));
-          console.log('[Content Analysis] Analysis persisted on component unmount');
-        } catch (error) {
-          console.error('[Content Analysis] Error persisting analysis on unmount:', error);
-        }
-      }
+      // Don't persist on unmount - user wants fresh results only
+      console.log('[Content Analysis] Unmount persistence disabled - not caching');
     };
-  }, [analysis, fullPageHtml, improvedFullPageHtml, activeTab, codeViewType, urlInput, pastedContent]);
+  }, []);
 
-  // Restore persisted analysis when component mounts (for navigation persistence)
+  // Restore persisted analysis DISABLED - user wants fresh results only
   useEffect(() => {
+    // Don't restore from localStorage - always force fresh analysis
+    console.log('[Structure Analysis] LocalStorage restoration disabled - clearing cache');
+    try {
+      localStorage.removeItem(getStructureLastPersistedKey());
+    } catch {}
+    return;
+    
     if (analysis) return; // Don't restore if we already have analysis
     
     try {
@@ -664,39 +611,79 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     };
   }, []);
 
-  // Persist lightweight state on change (avoid storing huge HTML to prevent cache bloat/blank screens)
+  // Lightweight state persistence DISABLED - user wants fresh results only
   useEffect(() => {
-    if (pastedContent && pastedContent.trim().length > 0 && isComponentActive) {
-      const contentHash = hashContent(pastedContent);
-              const storageKey = `${getStructureAnalysisKey()}_${contentHash}`;
+    // Don't persist any state - user wants completely fresh results every time
+    console.log('[Content Analysis] Lightweight persistence disabled - no caching');
+  }, []);
 
-      const stateToPersist = {
-        urlInput,
-        // Do NOT store full analysis or HTML blobs; only keep lightweight UI state
-        activeTab,
-        structuredView,
-        schemaView,
-        // Trim pastedContent to a preview to avoid large entries
-        pastedPreview: pastedContent.slice(0, 1000),
-        codeViewType,
-        lastAccessed: Date.now(),
-        createdAt: Date.now(),
-        isActive: true,
-      } as const;
-
+  // Fetch Shopify products on mount
+  useEffect(() => {
+    const fetchShopifyProducts = async () => {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(stateToPersist));
-        console.log('[Content Analysis] Persisted lightweight state for content hash:', contentHash);
-      } catch (e) {
-        // If storage fails (quota), clear older entries for this feature
-        Object.keys(localStorage).forEach((k) => {
-          if (k.startsWith(getStructureAnalysisKey())) {
-            try { localStorage.removeItem(k); } catch {}
+        const connections = JSON.parse(localStorage.getItem('shopify_connections') || '[]');
+        if (connections.length === 0) {
+          console.log('[Structure Analysis] No Shopify connections found');
+          return;
+        }
+
+        console.log('[Structure Analysis] Fetching products from', connections.length, 'Shopify stores');
+        const allProducts: any[] = [];
+        
+        for (const connection of connections) {
+          try {
+            const query = `
+              query {
+                products(first: 250) {
+                  edges {
+                    node {
+                      id
+                      title
+                      handle
+                      onlineStoreUrl
+                      vendor
+                    }
+                  }
+                }
+              }
+            `;
+
+            const response = await fetch(`https://${connection.shop}/api/2023-10/graphql.json`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Storefront-Access-Token': connection.token,
+              },
+              body: JSON.stringify({ query }),
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const products = data.data?.products?.edges?.map((edge: any) => ({
+                ...edge.node,
+                shop: connection.shop,
+                productUrl: edge.node.onlineStoreUrl || `https://${connection.shop}/products/${edge.node.handle}`
+              })) || [];
+              
+              allProducts.push(...products);
+              console.log('[Structure Analysis] Fetched', products.length, 'products from', connection.shop);
+            } else {
+              console.error('[Structure Analysis] Failed to fetch from', connection.shop, ':', response.status);
+            }
+          } catch (error) {
+            console.error(`[Structure Analysis] Error fetching from ${connection.shop}:`, error);
           }
-        });
+        }
+
+        setShopifyProducts(allProducts);
+        console.log('[Structure Analysis] Total Shopify products loaded:', allProducts.length);
+      } catch (error) {
+        console.error('[Structure Analysis] Error fetching Shopify products:', error);
       }
-    }
-  }, [urlInput, activeTab, structuredView, schemaView, pastedContent, codeViewType, isComponentActive]);
+    };
+
+    fetchShopifyProducts();
+  }, []);
 
   // Prevent repeated analysis by tracking last analyzed content hash
   const lastAnalyzedHashRef = useRef<string | null>(null);
@@ -813,67 +800,83 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
         hasMetadata: !!result?.metadata,
         hasSeoScore: typeof result?.seoScore === 'number',
         hasLlmScore: typeof result?.llmOptimizationScore === 'number',
-        hasReadabilityScore: typeof result?.readabilityScore === 'number'
       });
-      console.log('[Content Analysis] Suggestions:', result?.suggestions);
-      console.log('[Content Analysis] Full page HTML available:', !!result?.fullPageHtml);
-      setAnalysis(result);
-      
-      // Save the analysis results to session storage
-      try {
-        const stableUserId = authService.getCurrentUserId() || 'anonymous';
-        sessionManager.saveAnalysisSession(
-          'structure-analysis',
-          result,
-          urlToAnalyze || contentToAnalyze,
-          undefined, // industry not applicable for structure analysis
-          'url'
-        );
-        console.log('[Structure Analysis] Analysis session saved successfully');
-        
-        // Dispatch event to notify other components
-        window.dispatchEvent(new CustomEvent('new-analysis-created', { 
-          detail: { type: 'structure-analysis' } 
-        }));
-      } catch (error) {
-        console.error('[Structure Analysis] Error saving analysis session:', error);
-        if (error.name === 'QuotaExceededError') {
-          console.log('[Structure Analysis] QuotaExceededError - attempting emergency cleanup');
-          try {
-            // Emergency cleanup - remove old structure analysis sessions
-            const keys = Object.keys(localStorage);
-            const structureKeys = keys.filter(key => key.includes('structure-analysis'));
-            // Keep only the 2 most recent sessions
-            if (structureKeys.length > 2) {
-              const sortedKeys = structureKeys.sort((a, b) => {
-                const aTime = parseInt(a.split('_').pop() || '0');
-                const bTime = parseInt(b.split('_').pop() || '0');
-                return bTime - aTime;
-              });
-              // Remove older sessions
-              sortedKeys.slice(2).forEach(key => {
-                localStorage.removeItem(key);
-                console.log('[Structure Analysis] Removed old session:', key);
-              });
-            }
-            // Try saving again
-            sessionManager.saveAnalysisSession(
-              'structure-analysis',
-              result,
-              urlToAnalyze || contentToAnalyze,
-              undefined,
-              'url'
-            );
-            console.log('[Structure Analysis] Analysis session saved after cleanup');
-          } catch (retryError) {
-            console.error('[Structure Analysis] Failed to save even after cleanup:', retryError);
-          }
-        }
+
+      // Filter to only sentence replacement suggestions
+      const filteredSuggestions = (result?.suggestions || []).filter((s: any) => s?.type === 'sentence_replacement');
+      const filteredResult = { ...result, suggestions: filteredSuggestions };
+
+      console.log('[Content Analysis] Filtered suggestions:', {
+        originalCount: result?.suggestions?.length || 0,
+        filteredCount: filteredSuggestions.length,
+        allTypes: result?.suggestions?.map((s: any) => s?.type) || [],
+        filteredTypes: filteredSuggestions.map((s: any) => s?.type)
+      });
+
+      // Persist full page HTML if provided
+      if (filteredResult.fullPageHtml) {
+        setFullPageHtml(filteredResult.fullPageHtml);
       }
+      setAnalysis(filteredResult);
+      
+      // Session storage DISABLED - user wants fresh results only, no caching
+      console.log('[Structure Analysis] Session save disabled - not caching results');
+      
+      // Don't save to session storage
+      // try {
+      //   const stableUserId = authService.getCurrentUserId() || 'anonymous';
+      //   sessionManager.saveAnalysisSession(
+      //     'structure-analysis',
+      //     filteredResult,
+      //     urlToAnalyze || contentToAnalyze,
+      //     undefined, // industry not applicable for structure analysis
+      //     'url'
+      //   );
+      //   console.log('[Structure Analysis] Analysis session saved successfully');
+      //   
+      //   // Dispatch event to notify other components
+      //   window.dispatchEvent(new CustomEvent('new-analysis-created', { 
+      //     detail: { type: 'structure-analysis' } 
+      //   }));
+      // } catch (error) {
+      //   console.error('[Structure Analysis] Error saving analysis session:', error);
+      //   if (error.name === 'QuotaExceededError') {
+      //     console.log('[Structure Analysis] QuotaExceededError - attempting emergency cleanup');
+      //     try {
+      //       // Emergency cleanup - remove old structure analysis sessions
+      //       const keys = Object.keys(localStorage);
+      //       const structureKeys = keys.filter(key => key.includes('structure-analysis'));
+      //       // Keep only the 2 most recent sessions
+      //       if (structureKeys.length > 2) {
+      //         const sortedKeys = structureKeys.sort((a, b) => {
+      //           const aTime = parseInt(a.split('_').pop() || '0');
+      //           const bTime = parseInt(b.split('_').pop() || '0');
+      //           return bTime - aTime;
+      //         });
+      //         // Remove older sessions
+      //         sortedKeys.slice(2).forEach(key => {
+      //           localStorage.removeItem(key);
+      //           console.log('[Structure Analysis] Removed old session:', key);
+      //         });
+      //       }
+      //       // Try saving again
+      //       sessionManager.saveAnalysisSession(
+      //         'structure-analysis',
+      //         filteredResult,
+      //         urlToAnalyze || contentToAnalyze,
+      //         undefined,
+      //         'url'
+      //       );
+      //       console.log('[Structure Analysis] Analysis session saved after cleanup');
+      //     } catch (retryError) {
+      //       console.error('[Structure Analysis] Failed to save even after cleanup:', retryError);
+      //     }
+      //   }
+      // }
       
       // Set the full page HTML if available from the analysis
-      if (result.fullPageHtml) {
-        setFullPageHtml(result.fullPageHtml);
+      if (filteredResult.fullPageHtml) {
+        setFullPageHtml(filteredResult.fullPageHtml);
         console.log('[Content Analysis] Full page HTML set from analysis response');
       } else if (urlToAnalyze) {
         // Fallback: try to extract full page HTML separately
@@ -890,23 +893,23 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       
       // Save to history and persist per-user on backend
       console.log('[Content Analysis] About to save to history with result:', {
-        hasResult: !!result,
+        hasResult: !!filteredResult,
         contentLength: contentToAnalyze?.length || 0,
         urlToAnalyze,
-        resultKeys: result ? Object.keys(result) : []
+        resultKeys: Object.keys(filteredResult)
       });
       
       // Check if result has all required fields for history
       console.log('[Content Analysis] Result validation for history:', {
-        hasOriginalContent: !!result?.originalContent,
-        hasStructuredContent: !!result?.structuredContent,
-        hasSeoScore: typeof result?.seoScore === 'number',
-        hasLlmScore: typeof result?.llmOptimizationScore === 'number',
-        hasReadabilityScore: typeof result?.readabilityScore === 'number',
-        hasSuggestions: Array.isArray(result?.suggestions),
-        suggestionsLength: result?.suggestions?.length || 0,
-        hasMetadata: !!result?.metadata,
-        hasStructuredData: !!result?.structuredData
+        hasOriginalContent: !!filteredResult?.originalContent,
+        hasStructuredContent: !!filteredResult?.structuredContent,
+        hasSeoScore: typeof filteredResult?.seoScore === 'number',
+        hasLlmScore: typeof filteredResult?.llmOptimizationScore === 'number',
+        hasReadabilityScore: typeof filteredResult?.readabilityScore === 'number',
+        hasSuggestions: Array.isArray(filteredResult?.suggestions),
+        suggestionsLength: filteredResult?.suggestions?.length || 0,
+        hasMetadata: !!filteredResult?.metadata,
+        hasStructuredData: !!filteredResult?.structuredData
       });
       
       // CRITICAL: Force save to history with debugging
@@ -920,10 +923,10 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
           id: uniqueId,
           name: `Structure Analysis${urlToAnalyze ? ` - ${urlToAnalyze}` : ''} - ${currentTime.toLocaleTimeString()}`,
           originalContent: contentToAnalyze,
-          structuredContent: result.structuredContent || contentToAnalyze,
+          structuredContent: filteredResult.structuredContent || contentToAnalyze,
           analysis: {
             // Only include the current, relevant data - remove old metrics
-            suggestions: (result.suggestions || []).filter(s => 
+            suggestions: (filteredResult.suggestions || []).filter(s => 
               ['heading', 'paragraph', 'list', 'table', 'quote', 'code', 'link', 'image', 'schema'].includes(s.type)
             ).map(s => ({
               type: s.type as 'heading' | 'paragraph' | 'list' | 'table' | 'quote' | 'code' | 'link' | 'image' | 'schema',
@@ -933,10 +936,10 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
               impact: s.impact || ''
             })),
             metadata: {
-              title: result.metadata?.title || 'Analyzed Content',
-              description: result.metadata?.description || 'Content structure analysis',
-              keywords: result.metadata?.keywords || [],
-              author: result.metadata?.author || 'Unknown',
+              title: filteredResult.metadata?.title || 'Analyzed Content',
+              description: filteredResult.metadata?.description || 'Content structure analysis',
+              keywords: filteredResult.metadata?.keywords || [],
+              author: filteredResult.metadata?.author || 'Unknown',
               publishDate: currentTime.toISOString().split('T')[0],
               lastModified: currentTime.toISOString().split('T')[0],
               readingTime: Math.ceil(contentToAnalyze.length / 1000),
@@ -944,20 +947,20 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
               language: 'en'
             },
             // Include any other current data that might be relevant
-            structuredData: result.structuredData || {},
-            fullPageHtml: result.fullPageHtml || '',
-            pageTitle: result.pageTitle || '',
-            pageDescription: result.pageDescription || '',
+            structuredData: filteredResult.structuredData || {},
+            fullPageHtml: filteredResult.fullPageHtml || '',
+            pageTitle: filteredResult.pageTitle || '',
+            pageDescription: filteredResult.pageDescription || '',
             // NEW: Include ALL current analysis data
-            geoScoreTotal: (result as any).geoScoreTotal,
-            geoBreakdown: (result as any).geoBreakdown,
-            contentQualityScoreTotal: (result as any).contentQualityScoreTotal,
-            contentQualityBreakdown: (result as any).contentQualityBreakdown,
+            geoScoreTotal: (filteredResult as any).geoScoreTotal,
+            geoBreakdown: (filteredResult as any).geoBreakdown,
+            contentQualityScoreTotal: (filteredResult as any).contentQualityScoreTotal,
+            contentQualityBreakdown: (filteredResult as any).contentQualityBreakdown,
             // Content summary data
-            wordCount: result.metadata?.wordCount || contentToAnalyze.split(/\s+/).length,
-            readingTime: result.metadata?.readingTime || Math.ceil(contentToAnalyze.length / 1000),
-            suggestionsCount: (result.suggestions || []).length,
-            language: result.metadata?.language || 'en'
+            wordCount: filteredResult.metadata?.wordCount || contentToAnalyze.split(/\s+/).length,
+            readingTime: filteredResult.metadata?.readingTime || Math.ceil(contentToAnalyze.length / 1000),
+            suggestionsCount: (filteredResult.suggestions || []).length,
+            language: filteredResult.metadata?.language || 'en'
           }
         };
         
@@ -998,8 +1001,8 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       }
       
       // Also try the original method
-      saveToHistory(result, contentToAnalyze, urlToAnalyze);
-      try { await apiService.saveLastStructureAnalysis({ ...result, crawledUrl: urlToAnalyze || urlInput || '' }); } catch {}
+      saveToHistory(filteredResult, contentToAnalyze, urlToAnalyze);
+      try { await apiService.saveLastStructureAnalysis({ ...filteredResult, crawledUrl: urlToAnalyze || urlInput || '' }); } catch {}
 
       // Attempt to fetch GA4 and GSC metrics if a URL is available
       try {
@@ -1558,7 +1561,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       });
       
       // Apply suggestions to the code (Apply All)
-      const improvedCode = applySuggestionsWithDOM(sourceHtml, analysis.suggestions);
+      const improvedCode = applySuggestionsWithDOM(sourceHtml, analysis.suggestions.filter((s: any) => s?.type === 'sentence_replacement'));
       
       console.log('[Content Analysis] Improved code generated:', {
         improvedCodeLength: improvedCode.length,
@@ -1570,20 +1573,6 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       improvedHtmlRef.current = improvedCode;
       setShowImprovedCode(true);
       
-      console.log('[Frontend] State updated after applying suggestion:', {
-        improvedCodeLength: improvedCode.length,
-        sourceHtmlLength: sourceHtml.length,
-        hasChanges: improvedCode !== sourceHtml,
-        improvedCodePreview: improvedCode.substring(0, 200) + '...'
-      });
-      
-      // Update the analysis object with the new structured content (do not overwrite original fullPageHtml)
-      const updatedAnalysis = {
-        ...analysis,
-        structuredContent: improvedCode
-      };
-      setAnalysis(updatedAnalysis);
-      
       console.log('[Frontend] Analysis object updated:', {
         analysisUpdated: true,
         structuredContentLength: updatedAnalysis.structuredContent.length,
@@ -1594,8 +1583,8 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       await navigator.clipboard.writeText(improvedCode);
       
       // Show success notification with applied suggestions count
-      const appliedCount = analysis.suggestions.length;
-      const suggestionTypes = analysis.suggestions.map(s => s.type).slice(0, 3); // Show first 3 types
+      const appliedCount = analysis.suggestions.filter((s: any) => s?.type === 'sentence_replacement').length;
+      const suggestionTypes = analysis.suggestions.filter((s: any) => s?.type === 'sentence_replacement').map(s => s.type).slice(0, 3); // Show first 3 types
       // Show dynamic notification with real results
       setNotificationDetails({
         type: 'success',
@@ -1740,6 +1729,15 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       improvedHtmlRef.current = improvedCode;
       setShowImprovedCode(true);
       
+      console.log('[applySingleSuggestion] Updated improved HTML:', {
+        improvedCodeLength: improvedCode.length,
+        stateUpdated: true,
+        refUpdated: true,
+        improvedCodePreview: improvedCode.substring(0, 300) + '...',
+        hasChanges: improvedCode !== sourceHtml,
+        changesMade: improvedCode.length !== sourceHtml.length
+      });
+      
       // Update the analysis object with the new structured content (do not change original)
       if (analysis) {
         const updatedAnalysis = {
@@ -1758,16 +1756,20 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
       setNotificationDetails({
         type: 'success',
         title: 'Suggestion Applied Successfully!',
-        message: `The ${suggestion.type} suggestion has been applied to your content.`,
+        message: `The ${suggestion.type} suggestion has been applied to your content. Click "Compare Pages" to see the changes.`,
         details: [
           `Applied: ${suggestion.type}`,
           `Description: ${suggestion.description}`,
-          `Impact: ${suggestion.impact || 'Improved content quality'}`
+          `Impact: ${suggestion.impact || 'Improved content quality'}`,
+          `💡 Tip: Click "Compare Pages" button to see before/after comparison`
         ],
         appliedCount: 1,
         totalCount: 1,
         suggestions: [suggestion]
       });
+      
+      // Show success message guiding user to compare
+      setSuccessMessage(`✅ Suggestion applied! Click "Compare Pages" to see the changes.`);
       
       // Switch to landing tab to show the updated content
       setCodeViewType('landing');
@@ -2050,14 +2052,18 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
 
   // Add handler for new analysis
   const handleNewAnalysis = () => {
+    // Mark intent to start new analysis
+    userStateManager.markNewAnalysis('structure-analysis');
+    
     // Clear the current analysis to show the input form
     setAnalysis(null);
     
-    // Clear session storage
+    // Clear session storage and user state
     try {
       const stableUserId = authService.getCurrentUserId() || 'anonymous';
       sessionManager.clearSessionsByType('structure-analysis');
-      console.log('[Structure Analysis] Cleared analysis sessions');
+      userStateManager.clearState('structure-analysis');
+      console.log('[Structure Analysis] Cleared analysis sessions and marked new analysis intent');
     } catch (error) {
       console.error('[Structure Analysis] Error clearing sessions:', error);
     }
@@ -2087,7 +2093,7 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
     // Clear persisted analysis to prevent conflicts with new analysis
     localStorage.removeItem(getStructureLastPersistedKey());
     
-    console.log('[Content Analysis] New analysis initiated - state cleared');
+    console.log('[Structure Analysis] New analysis initiated - state cleared');
   };
 
   if (!analysis) {
@@ -2125,10 +2131,20 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
                       setIsComponentActive(true);
                     }}
                     required
-                    placeholder="Paste a URL to analyze..."
+                    placeholder="Paste a URL to analyze or select from your Shopify products..."
+                    list="shopify-products-datalist"
                          className="flex-1 px-4 py-3 border-2 border-blue-600 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg h-[48px]"
                     disabled={isUrlLoading}
                   />
+                  {shopifyProducts.length > 0 && (
+                    <datalist id="shopify-products-datalist">
+                      {shopifyProducts.map((product) => (
+                        <option key={product.id} value={product.productUrl}>
+                          {product.title}
+                        </option>
+                      ))}
+                    </datalist>
+                  )}
                   <button
                     onClick={handleAnalyzeUrl}
                     disabled={isUrlLoading || !urlInput.trim()}

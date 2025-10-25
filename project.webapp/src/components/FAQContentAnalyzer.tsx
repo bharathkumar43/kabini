@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Loader2, RefreshCw, Download, Target, Globe, Zap, ShoppingCart, Package, Tag, Search, CheckCircle, AlertCircle, Check } from 'lucide-react';
+import { FileText, Plus, Loader2, RefreshCw, Download, Target, Globe, Zap, ShoppingCart, Package, Tag, Search, CheckCircle, AlertCircle, Check, Code } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import SchemaGenerator from './SchemaGenerator';
 import { apiService } from '../services/apiService';
 import { useNavigate } from 'react-router-dom';
 import SuccessNotification from './ui/SuccessNotification';
@@ -84,7 +85,7 @@ export function FAQContentAnalyzer() {
   
   // Industry Selection State - Only e-commerce now
   const [selectedIndustry, setSelectedIndustry] = useState<'ecommerce'>('ecommerce');
-  const [contentType, setContentType] = useState<'product' | 'category' | 'faq'>('product');
+  const [contentType, setContentType] = useState<'product' | 'category' | 'faq' | 'schema'>('product');
   
   // FAQ Generation State
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
@@ -120,8 +121,8 @@ export function FAQContentAnalyzer() {
         if (normalized) setEcommerceContent(normalized);
       }
       const savedType = localStorage.getItem(ECOMMERCE_CONTENT_TYPE_KEY);
-      if (savedType === 'product' || savedType === 'category' || savedType === 'faq') {
-        setContentType(savedType as 'product' | 'category' | 'faq');
+      if (savedType === 'product' || savedType === 'category' || savedType === 'faq' || savedType === 'schema') {
+        setContentType(savedType as 'product' | 'category' | 'faq' | 'schema');
       }
     } catch (_err) {
       // ignore persistence errors
@@ -882,6 +883,8 @@ export function FAQContentAnalyzer() {
         const questionText = questions.length === 1 ? 'question' : 'questions';
         setNotificationType('success');
         setNotificationMessage(`Generated ${questions.length} ${questionText} successfully!`);
+        // Save to history sidebar as e-commerce FAQ session
+        saveEcomQuestionsToSession(questions);
       } else {
         setNotificationType('error');
         setNotificationMessage('Failed to generate questions. Please try again.');
@@ -1206,6 +1209,64 @@ export function FAQContentAnalyzer() {
     setCurrentSession(sessionData);
   };
 
+  // Save e-commerce questions to session (History in sidebar)
+  const saveEcomQuestionsToSession = (questions: string[]) => {
+    if (!user?.id) {
+      console.warn('[FAQ Session] Cannot save e-commerce questions session - no user ID');
+      return;
+    }
+
+    const hasProductInput = (productInputs.name.trim() || categoryInputs.categoryName.trim());
+    const productOrCategoryName = productInputs.name || categoryInputs.categoryName || 'E-commerce FAQ';
+    const summaryLines: string[] = [];
+    if (productInputs.name) summaryLines.push(`Product: ${productInputs.name}`);
+    if (categoryInputs.categoryName) summaryLines.push(`Category: ${categoryInputs.categoryName}`);
+    if (productInputs.features) summaryLines.push(`Features: ${productInputs.features}`);
+    if (productInputs.targetAudience || categoryInputs.audience) {
+      summaryLines.push(`Audience: ${productInputs.targetAudience || categoryInputs.audience}`);
+    }
+    if (!hasProductInput && ecomFaqContent.trim()) {
+      summaryLines.push(`Content: ${ecomFaqContent.substring(0, 140)}${ecomFaqContent.length > 140 ? '…' : ''}`);
+    }
+
+    const sessionData: SessionData = {
+      id: `ecom-faq-${Date.now()}`,
+      name: productOrCategoryName,
+      type: 'ecommerce-faq',
+      timestamp: new Date().toISOString(),
+      model: faqModel,
+      questionProvider: faqProvider || null,
+      answerProvider: faqProvider || null,
+      questionModel: faqModel || null,
+      answerModel: faqModel || null,
+      blogContent: summaryLines.join('\n'),
+      blogUrl: extractUrl(ecomFaqContent) || undefined,
+      sourceUrls: extractUrl(ecomFaqContent) ? [extractUrl(ecomFaqContent)!] : [],
+      qaData: [],
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      statistics: {
+        totalQuestions: questions.length,
+        avgAccuracy: 'N/A',
+        avgCitationLikelihood: 'N/A',
+        totalCost: 'N/A'
+      },
+      userId: user.id,
+      generatedQuestions: questions,
+      showQuestionsSection: true,
+      showFAQSection: false
+    };
+
+    console.log('[FAQ Session] Saving e-commerce questions session:', {
+      id: sessionData.id,
+      name: sessionData.name,
+      questionsLength: sessionData.generatedQuestions?.length || 0
+    });
+    
+    setSessions(prev => [sessionData, ...prev]);
+    setCurrentSession(sessionData);
+  };
+
   // Update existing session with answers
   const updateSessionWithAnswers = (newFaqs: FAQItem[]) => {
     if (!user?.id || !currentSession) {
@@ -1368,22 +1429,50 @@ export function FAQContentAnalyzer() {
 
   // Normalize backend response into EcommerceContent shape
   const normalizeEcommerceContent = (data: any): EcommerceContent | null => {
+    console.log('[Normalize] Input data:', data);
     if (!data) return null;
-    // If already in expected shape, return as-is
+    // If already in expected shape (has the wrapper keys), return as-is
     if (
       typeof data === 'object' && (
-        'productContent' in data || 'categoryContent' in data || 'faqs' in data
+        'productContent' in data || 'categoryContent' in data
       )
     ) {
+      console.log('[Normalize] Already in expected shape, returning as-is');
       return data as EcommerceContent;
     }
-    // If it looks like a raw product content object, wrap it
-    if (typeof data === 'object' && 'shortDescription' in data && 'longDescription' in data) {
+
+    // Map new backend placeholder shapes → expected UI shape
+    if (typeof data === 'object') {
+      const obj: any = data;
+      console.log('[Normalize] Checking object fields:', Object.keys(obj));
+
+      // Product content shape from backend
+      if (('shortDescription' in obj || 'longDescription' in obj || 'description' in obj) && 
+          (Array.isArray(obj.features) || Array.isArray(obj.bullets) || Array.isArray(obj.benefits) || Array.isArray(obj.highlights))) {
+        console.log('[Normalize] Matched product content pattern!');
+        const product: ProductContent = {
+          shortDescription: String(obj.shortDescription || obj.description || ''),
+          longDescription: String(obj.longDescription || obj.description || ''),
+          features: Array.isArray(obj.features) ? obj.features.map((f: any) => String(f)) : 
+                    Array.isArray(obj.bullets) ? obj.bullets.map((b: any) => String(b)) : [],
+          benefits: Array.isArray(obj.benefits) ? obj.benefits.map((b: any) => String(b)) :
+                    Array.isArray(obj.highlights) ? obj.highlights.map((h: any) => String(h)) : [],
+          comparison: String(obj.comparison || ''),
+          specs: typeof obj.specs === 'object' && obj.specs ? obj.specs : {},
+          useCases: Array.isArray(obj.useCases) ? obj.useCases.map((u: any) => String(u)) : [],
+          keywords: Array.isArray(obj.keywords) ? obj.keywords.map((k: any) => String(k)) : [],
+          altText: Array.isArray(obj.altText) ? obj.altText.map((a: any) => String(a)) : [],
+          metaTags: {
+            title: String(obj.metaTags?.title || obj.seoTitle || ''),
+            description: String(obj.metaTags?.description || obj.seoDescription || ''),
+            keywords: String(obj.metaTags?.keywords || '')
+          }
+        };
       return {
-        productContent: data as ProductContent,
+          productContent: product,
         categoryContent: undefined,
         faqs: [],
-        seoRecommendations: {
+          seoRecommendations: obj.seoRecommendations || {
           schemaSuggestions: [],
           contentDepthScore: 0,
           aiOptimizationTips: [],
@@ -1391,6 +1480,33 @@ export function FAQContentAnalyzer() {
         },
       };
     }
+
+      // Category content shape from backend
+      if ('intro' in obj || ('description' in obj && !Array.isArray(obj.bullets) && !Array.isArray(obj.features))) {
+        console.log('[Normalize] Matched category content pattern!');
+        const category: CategoryContent = {
+          intro: String(obj.intro || obj.description || ''),
+          buyingGuide: String(obj.buyingGuide || (Array.isArray(obj.highlights) ? obj.highlights.join('\n') : '')),
+          comparisonChart: String(obj.comparisonChart || ''),
+          faqs: Array.isArray(obj.faqs) ? obj.faqs : [],
+          internalLinks: Array.isArray(obj.internalLinks) ? obj.internalLinks : [],
+        };
+        const result = {
+          productContent: undefined,
+          categoryContent: category,
+          faqs: Array.isArray(obj.faqs) ? obj.faqs : [],
+          seoRecommendations: obj.seoRecommendations || {
+            schemaSuggestions: [],
+            contentDepthScore: 0,
+            aiOptimizationTips: [],
+            technicalSeoReminders: [],
+          },
+        };
+        console.log('[Normalize] Returning category result:', result);
+        return result;
+      }
+    }
+
     // If it looks like raw FAQs result (supports nested shape)
     if (typeof data === 'object' && ('faqs' in (data as any))) {
       const maybeNested = (data as any).faqs;
@@ -1419,6 +1535,9 @@ export function FAQContentAnalyzer() {
         seoRecommendations: seo,
       };
     }
+    
+    console.log('[Normalize] No pattern matched, returning null');
+    console.warn('[Normalize] Unrecognized data structure:', data);
     return null;
   };
 
@@ -1442,9 +1561,48 @@ export function FAQContentAnalyzer() {
       if (response.success) {
         console.log('[Product Content] Received data:', response.data);
         const normalized = normalizeEcommerceContent(response.data);
-        setEcommerceContent(normalized);
+        // Merge with existing content to preserve category/faq data
+        setEcommerceContent(prev => ({
+          productContent: normalized?.productContent,
+          categoryContent: prev?.categoryContent,  // Preserve category content
+          faqs: prev?.faqs || normalized?.faqs || [],  // Preserve FAQs
+          seoRecommendations: normalized?.seoRecommendations || prev?.seoRecommendations || {
+            schemaSuggestions: [],
+            contentDepthScore: 0,
+            aiOptimizationTips: [],
+            technicalSeoReminders: []
+          }
+        }));
         const elapsed = Math.round(performance.now() - startedAt);
         setNotificationMessage(`Product content generated successfully in ${elapsed}ms!`);
+        
+        // Save to history
+        const historyItem: SessionData = {
+          id: `product-${Date.now()}`,
+          name: productInputs.name || 'Unnamed Product',
+          type: 'product',
+          timestamp: new Date().toISOString(),
+          model: faqModel,
+          questionProvider: null,
+          answerProvider: faqProvider,
+          questionModel: null,
+          answerModel: faqModel,
+          blogContent: `Product: ${productInputs.name}\nFeatures: ${productInputs.features}`,
+          blogUrl: '',
+          sourceUrls: [],
+          qaData: [],
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          statistics: {
+            totalQuestions: 0,
+            avgAccuracy: '0%',
+            avgCitationLikelihood: '0%',
+            totalCost: '$0.00'
+          },
+          userId: user?.id || user?.email || 'anonymous'
+        };
+        setSessions(prev => [historyItem, ...prev]);
+        console.log('[Product Content] Saved to history');
       } else {
         console.error('[Product Content] API error:', response.error);
         alert('Failed to generate product content: ' + (response.error || 'Unknown error'));
@@ -1475,8 +1633,49 @@ export function FAQContentAnalyzer() {
       if (response.success) {
         console.log('[Category Content] Received data:', response.data);
         const normalized = normalizeEcommerceContent(response.data);
-        setEcommerceContent(normalized);
+        console.log('[Category Content] Normalized data:', normalized);
+        console.log('[Category Content] Has categoryContent?', !!normalized?.categoryContent);
+        // Merge with existing content to preserve product/faq data
+        setEcommerceContent(prev => ({
+          productContent: prev?.productContent,  // Preserve product content
+          categoryContent: normalized?.categoryContent,
+          faqs: prev?.faqs || normalized?.faqs || [],  // Preserve FAQs
+          seoRecommendations: normalized?.seoRecommendations || prev?.seoRecommendations || {
+            schemaSuggestions: [],
+            contentDepthScore: 0,
+            aiOptimizationTips: [],
+            technicalSeoReminders: []
+          }
+        }));
         setNotificationMessage('Category content generated successfully!');
+        
+        // Save to history
+        const historyItem: SessionData = {
+          id: `category-${Date.now()}`,
+          name: categoryInputs.categoryName || 'Unnamed Category',
+          type: 'category',
+          timestamp: new Date().toISOString(),
+          model: faqModel,
+          questionProvider: null,
+          answerProvider: faqProvider,
+          questionModel: null,
+          answerModel: faqModel,
+          blogContent: `Category: ${categoryInputs.categoryName}\nProduct Types: ${categoryInputs.productTypes}\nAudience: ${categoryInputs.audience}`,
+          blogUrl: '',
+          sourceUrls: [],
+          qaData: [],
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          statistics: {
+            totalQuestions: 0,
+            avgAccuracy: '0%',
+            avgCitationLikelihood: '0%',
+            totalCost: '$0.00'
+          },
+          userId: user?.id || user?.email || 'anonymous'
+        };
+        setSessions(prev => [historyItem, ...prev]);
+        console.log('[Category Content] Saved to history');
       } else {
         console.error('[Category Content] API error:', response.error);
         alert('Failed to generate category content: ' + (response.error || 'Unknown error'));
@@ -1536,13 +1735,48 @@ export function FAQContentAnalyzer() {
           }
         }
 
-        // Save merged back into ecommerceContent state
-        const finalContent: EcommerceContent | null = normalized
-          ? { ...normalized, faqs: mergedFaqs }
-          : { productContent: undefined, categoryContent: undefined, faqs: mergedFaqs, seoRecommendations: { schemaSuggestions: [], contentDepthScore: 0, aiOptimizationTips: [], technicalSeoReminders: [] } };
-
-        setEcommerceContent(finalContent);
+        // Merge FAQs with existing content to preserve product/category data
+        setEcommerceContent(prev => ({
+          productContent: prev?.productContent,  // Preserve product content
+          categoryContent: prev?.categoryContent,  // Preserve category content
+          faqs: mergedFaqs,
+          seoRecommendations: normalized?.seoRecommendations || prev?.seoRecommendations || {
+            schemaSuggestions: [],
+            contentDepthScore: 0,
+            aiOptimizationTips: [],
+            technicalSeoReminders: []
+          }
+        }));
         setNotificationMessage('E-commerce FAQs generated successfully!');
+        
+        // Save to history
+        const topic = productInputs.name || categoryInputs.categoryName || 'E-commerce';
+        const historyItem: SessionData = {
+          id: `faq-${Date.now()}`,
+          name: `${topic} FAQs`,
+          type: 'ecommerce-faq',
+          timestamp: new Date().toISOString(),
+          model: faqModel,
+          questionProvider: faqProvider,
+          answerProvider: faqProvider,
+          questionModel: faqModel,
+          answerModel: faqModel,
+          blogContent: `Topic: ${topic}`,
+          blogUrl: '',
+          sourceUrls: [],
+          qaData: mergedFaqs,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          statistics: {
+            totalQuestions: mergedFaqs.length,
+            avgAccuracy: '100%',
+            avgCitationLikelihood: '100%',
+            totalCost: '$0.00'
+          },
+          userId: user?.id || user?.email || 'anonymous'
+        };
+        setSessions(prev => [historyItem, ...prev]);
+        console.log('[E-commerce FAQs] Saved to history');
       } else {
         console.error('[E-commerce FAQs] API error:', response.error);
         alert('Failed to generate e-commerce FAQs: ' + (response.error || 'Unknown error'));
@@ -1609,6 +1843,17 @@ export function FAQContentAnalyzer() {
                     >
                       <Search className="w-4 h-4" />
                       FAQ Generator
+                    </button>
+                    <button
+                      onClick={() => setContentType('schema')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
+                        contentType === 'schema'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Code className="w-4 h-4" />
+                      Schema Generator
                     </button>
               </div>
             </div>
@@ -1731,6 +1976,7 @@ export function FAQContentAnalyzer() {
 
                 {/* E-commerce FAQ Form */}
                 {contentType === 'faq' && (
+                  <>
                   <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
                     <h3 className="text-lg font-semibold text-black">E-commerce FAQ Generator</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1816,14 +2062,25 @@ export function FAQContentAnalyzer() {
                       </div>
                     </div>
 
-                        <button
+                    <button
                       onClick={generateEcomQuestions}
                       disabled={isGeneratingEcomQuestions}
                       className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-                        >
+                    >
                       {isGeneratingEcomQuestions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                       Generate Questions
-                        </button>
+                    </button>
+                  </div>
+                  </>
+                )}
+
+                {/* Dedicated Schema Generator Section */}
+                {contentType === 'schema' && (
+                  <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                    <h3 className="text-lg font-semibold text-black">Schema Generator</h3>
+                    <div className="bg-white border rounded-lg p-4">
+                      <SchemaGenerator initialType="article" />
+                    </div>
                   </div>
                 )}
               </div>
@@ -1899,11 +2156,15 @@ export function FAQContentAnalyzer() {
 
           {/* E-commerce Content Display */}
           {(() => {
+            console.log('[E-commerce Display] contentType:', contentType);
+            console.log('[E-commerce Display] ecommerceContent:', ecommerceContent);
+            console.log('[E-commerce Display] ecommerceContent?.categoryContent:', ecommerceContent?.categoryContent);
             const hasRelevantContent = !!(
               (contentType === 'product' && ecommerceContent && ecommerceContent?.productContent) ||
               (contentType === 'category' && ecommerceContent && ecommerceContent?.categoryContent) ||
               (contentType === 'faq' && ecommerceContent && ecommerceContent?.faqs && ecommerceContent?.faqs.length > 0)
             );
+            console.log('[E-commerce Display] hasRelevantContent:', hasRelevantContent);
             if (!hasRelevantContent) return false;
             console.log('[E-commerce Display] Rendering content:', ecommerceContent);
             return true;
@@ -2139,6 +2400,10 @@ export function FAQContentAnalyzer() {
 
                 {/* SEO Recommendations */}
                 {ecommerceContent?.seoRecommendations
+                  && (ecommerceContent.seoRecommendations.schemaSuggestions.length > 0 
+                      || ecommerceContent.seoRecommendations.aiOptimizationTips.length > 0 
+                      || ecommerceContent.seoRecommendations.technicalSeoReminders.length > 0
+                      || ecommerceContent.seoRecommendations.contentDepthScore > 0)
                   && (
                   (contentType === 'product' && !!ecommerceContent?.productContent)
                   || (contentType === 'category' && !!ecommerceContent?.categoryContent)
@@ -2155,14 +2420,16 @@ export function FAQContentAnalyzer() {
                       <div>
                         <h5 className="font-medium text-black mb-2">Schema Suggestions</h5>
                         <ul className="text-gray-700 bg-white p-3 rounded border">
-                          {ecommerceContent?.seoRecommendations.schemaSuggestions.map((suggestion, index) => (
+                          {ecommerceContent?.seoRecommendations.schemaSuggestions.length > 0 ? (
+                            ecommerceContent.seoRecommendations.schemaSuggestions.map((suggestion, index) => (
                             <li key={index} className="flex items-start gap-2">
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                              <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                               <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                               {suggestion}
                             </li>
-                          ))}
+                            ))
+                          ) : (
+                            <li className="text-gray-500 italic">No schema suggestions available</li>
+                          )}
                         </ul>
                       </div>
                       
@@ -2215,6 +2482,39 @@ export function FAQContentAnalyzer() {
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
           <button
             onClick={() => {
+              // Clear only the current tab's content, preserve other tabs
+              if (contentType === 'product') {
+                // Clear only Product content
+                setEcommerceContent(prev => ({
+                  productContent: undefined,
+                  categoryContent: prev?.categoryContent,  // Preserve category
+                  faqs: prev?.faqs || [],  // Preserve FAQs
+                  seoRecommendations: prev?.seoRecommendations || {
+                    schemaSuggestions: [],
+                    contentDepthScore: 0,
+                    aiOptimizationTips: [],
+                    technicalSeoReminders: []
+                  }
+                }));
+                setProductInputs({ name: '', features: '', targetAudience: '', category: '', tone: 'professional' });
+                console.log('[Content Enhancement] Product content cleared (Category and FAQ preserved)');
+              } else if (contentType === 'category') {
+                // Clear only Category content
+                setEcommerceContent(prev => ({
+                  productContent: prev?.productContent,  // Preserve product
+                  categoryContent: undefined,
+                  faqs: prev?.faqs || [],  // Preserve FAQs
+                  seoRecommendations: prev?.seoRecommendations || {
+                    schemaSuggestions: [],
+                    contentDepthScore: 0,
+                    aiOptimizationTips: [],
+                    technicalSeoReminders: []
+                  }
+                }));
+                setCategoryInputs({ categoryName: '', productTypes: '', audience: '' });
+                console.log('[Content Enhancement] Category content cleared (Product and FAQ preserved)');
+              } else if (contentType === 'faq') {
+                // Clear only FAQs
               setContent('');
               setEcomFaqContent('');
               setFaqs([]);
@@ -2230,7 +2530,18 @@ export function FAQContentAnalyzer() {
               setIsGeneratingQuestions(false);
               setIsGeneratingAnswers(false);
               setPendingFAQGeneration(null);
-              // Clear current session, pending generation, and generated FAQs from localStorage
+                setEcommerceContent(prev => ({
+                  productContent: prev?.productContent,  // Preserve product
+                  categoryContent: prev?.categoryContent,  // Preserve category
+                  faqs: [],  // Clear FAQs
+                  seoRecommendations: prev?.seoRecommendations || {
+                    schemaSuggestions: [],
+                    contentDepthScore: 0,
+                    aiOptimizationTips: [],
+                    technicalSeoReminders: []
+                  }
+                }));
+                // Clear FAQ-related localStorage
               if (user?.id) {
                 const userCurrentSessionKey = getUserSpecificKey(CURRENT_SESSION_KEY, user.id);
                 const pendingKey = getUserSpecificKey('pending_faq_generation', user.id);
@@ -2238,12 +2549,13 @@ export function FAQContentAnalyzer() {
                 localStorage.removeItem(userCurrentSessionKey);
                 localStorage.removeItem(pendingKey);
                 localStorage.removeItem(generatedFAQsKey);
-                // Clear last persisted FAQ UI state
                 try { localStorage.removeItem(getFaqPersistKey()); } catch {}
               }
-              // Reset textarea height to original state
+                // Reset textarea height
               if (textareaRef.current) {
                 textareaRef.current.style.height = '36px';
+                }
+                console.log('[Content Enhancement] FAQ content cleared (Product and Category preserved)');
               }
             }}
                               className="w-full bg-white text-black font-bold px-3 py-2 rounded-lg hover:bg-gray-50 transition-all duration-200 flex items-center gap-2 justify-start border border-blue-600 text-sm"
@@ -2270,8 +2582,12 @@ export function FAQContentAnalyzer() {
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    {session.type === 'faq' ? (
-                      <svg className="w-4 h-4 text-black flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {session.type === 'product' ? (
+                      <Package className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    ) : session.type === 'category' ? (
+                      <Tag className="w-4 h-4 text-green-600 flex-shrink-0" />
+                    ) : session.type === 'ecommerce-faq' || session.type === 'faq' ? (
+                      <svg className="w-4 h-4 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     ) : (
@@ -2314,33 +2630,114 @@ export function FAQContentAnalyzer() {
               
               {/* Expanded Content */}
               {expandedSessions.has(session.id) && (
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  {session.type === 'faq' ? (
-                    // FAQ Session Display
+                <div className="mt-3 pt-3 border-gray-200">
+                  {session.type === 'product' ? (
+                    // Product Session Display
                     <div className="space-y-3">
-                      {session.blogUrl && (
-                        <div className="text-xs text-black bg-gray-50 p-2 rounded border border-gray-200">
-                          <strong>Source URL:</strong> {session.blogUrl}
+                      <div className="text-xs text-gray-600">
+                        <div><strong>Product:</strong> {session.name}</div>
+                        <div className="mt-1 text-gray-500 whitespace-pre-wrap">{session.blogContent}</div>
                         </div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs text-gray-600 font-medium">Generated FAQs:</div>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
-                              // Regenerate FAQs for this session
-                              setContent(session.blogContent || '');
-                              setFaqProvider(session.questionProvider || 'gemini');
-                              setFaqModel(session.questionModel || (session.questionProvider === 'perplexity' ? 'sonar' : session.questionProvider === 'claude' ? 'claude-3.5-sonnet-20241022' : 'gemini-2.0-flash'));
-                              generateQuestions();
-                            }}
-                            className="p-2 bg-white border border-gray-300 rounded-lg text-black hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"
-                            title="Regenerate FAQs"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
+                            // Download product inputs as JSON
+                            const lines = (session.blogContent || '').split('\n');
+                            const name = lines.find(l => l.startsWith('Product:'))?.replace('Product:', '').trim() || '';
+                            const features = lines.find(l => l.startsWith('Features:'))?.replace('Features:', '').trim() || '';
+                            const data = { type: 'product', name, features };
+                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `product-${(name || 'session').replace(/\s+/g, '-')}.json`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            setNotificationMessage('Product inputs downloaded!');
+                          }}
+                          className="text-xs px-3 py-1.5 bg-white border border-gray-300 rounded text-gray-700 hover:text-gray-900 hover:bg-gray-50 flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" />
+                          Download
                           </button>
+                        <button
+                          onClick={() => deleteSession(session.id)}
+                          className="text-xs px-3 py-1.5 bg-white border border-gray-300 rounded text-red-600 hover:text-red-800 hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : session.type === 'category' ? (
+                    // Category Session Display
+                    <div className="space-y-3">
+                      <div className="text-xs text-gray-600">
+                        <div><strong>Category:</strong> {session.name}</div>
+                        <div className="mt-1 text-gray-500 whitespace-pre-wrap">{session.blogContent}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            // Download category inputs as JSON
+                            const lines = (session.blogContent || '').split('\n');
+                            const categoryName = lines.find(l => l.startsWith('Category:'))?.replace('Category:', '').trim() || '';
+                            const productTypes = lines.find(l => l.startsWith('Product Types:'))?.replace('Product Types:', '').trim() || '';
+                            const audience = lines.find(l => l.startsWith('Audience:'))?.replace('Audience:', '').trim() || '';
+                            const data = { type: 'category', categoryName, productTypes, audience };
+                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `category-${(categoryName || 'session').replace(/\s+/g, '-')}.json`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            setNotificationMessage('Category inputs downloaded!');
+                          }}
+                          className="text-xs px-3 py-1.5 bg-white border border-gray-300 rounded text-gray-700 hover:text-gray-900 hover:bg-gray-50 flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" />
+                          Download
+                        </button>
+                        <button
+                          onClick={() => deleteSession(session.id)}
+                          className="text-xs px-3 py-1.5 bg-white border border-gray-300 rounded text-red-600 hover:text-red-800 hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : session.type === 'ecommerce-faq' || session.type === 'faq' ? (
+                    // E-commerce FAQ Session Display
+                    <div className="space-y-3">
+                      <div className="text-xs text-gray-600 font-medium">
+                        Generated FAQs ({session.qaData?.length || 0}):
+                      </div>
+                      {session.qaData && session.qaData.length > 0 ? (
+                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                          {session.qaData.slice(0, 5).map((faq, faqIdx) => (
+                            <div key={faqIdx} className="p-2 bg-white rounded border border-gray-200">
+                              <div className="font-medium text-xs text-purple-700 leading-tight">
+                                Q: {faq.question}
+                              </div>
+                              <div className="text-xs text-gray-600 leading-tight mt-1">
+                                A: {faq.answer}
+                              </div>
+                            </div>
+                          ))}
+                          {session.qaData.length > 5 && (
+                            <div className="text-xs text-gray-500 text-center">
+                              +{session.qaData.length - 5} more FAQs
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-500 italic">No FAQs in this session</div>
+                      )}
+                      <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
                               // Download FAQs as JSON
@@ -2359,23 +2756,17 @@ export function FAQContentAnalyzer() {
                               URL.revokeObjectURL(url);
                               setNotificationMessage('FAQs downloaded successfully!');
                             }}
-                            className="p-2 bg-white border border-gray-300 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-50 transition-all duration-200"
-                            title="Download FAQs as JSON"
+                          className="text-xs px-3 py-1.5 bg-white border border-gray-300 rounded text-gray-700 hover:text-gray-900 hover:bg-gray-50 flex items-center gap-1"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
+                          <Download className="w-3 h-3" />
+                          Download FAQs
                           </button>
                           <button
                             onClick={() => deleteSession(session.id)}
-                            className="p-2 bg-white border border-gray-300 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-50 transition-all duration-200"
-                            title="Delete session"
+                          className="text-xs px-3 py-1.5 bg-white border border-gray-300 rounded text-red-600 hover:text-red-800 hover:bg-red-50"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
+                          Delete
                           </button>
-                        </div>
                       </div>
                       {/* Show all questions with their answer status */}
                       {session.generatedQuestions && session.generatedQuestions.length > 0 && (

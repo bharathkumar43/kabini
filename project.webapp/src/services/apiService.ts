@@ -843,7 +843,7 @@ class ApiService {
   async getAIVisibilityAnalysis(
     company: string,
     industry?: string,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; pageType?: string },
     extra?: { productName?: string; productCategory?: string; competitorName?: string; country?: string }
   ): Promise<any> {
     const searchParams = new URLSearchParams();
@@ -852,11 +852,25 @@ class ApiService {
     if (extra?.productCategory) searchParams.append('category', extra.productCategory);
     if (extra?.competitorName) searchParams.append('competitor', extra.competitorName);
     if (extra?.country) searchParams.append('country', extra.country);
+    if (options?.pageType) searchParams.append('pageType', options.pageType);
     const qs = searchParams.toString();
     const suffix = qs ? `?${qs}` : '';
-    return this.request(`/ai-visibility/${encodeURIComponent(company)}${suffix}`, {
+    
+    console.log('[ApiService] Calling getAIVisibilityAnalysis for:', company);
+    console.log('[ApiService] Query params:', { industry, pageType: options?.pageType, ...extra });
+    
+    const result = await this.request(`/ai-visibility/${encodeURIComponent(company)}${suffix}`, {
       signal: options?.signal,
     });
+    
+    console.log('[ApiService] Response received:', {
+      success: result?.success,
+      hasData: !!result?.data,
+      competitorsCount: result?.data?.competitors?.length || 0,
+      competitorNames: result?.data?.competitors?.map((c: any) => c?.name || c).slice(0, 10).join(', ') || 'None'
+    });
+    
+    return result;
   }
 
   // Analyze a single competitor for AI visibility

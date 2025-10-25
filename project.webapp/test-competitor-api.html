@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Competitor API</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .column {
+      border: 1px solid #ccc;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button.clear {
+      background: #f44336;
+    }
+    pre {
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .competitors-list {
+      margin-top: 10px;
+      padding: 10px;
+      background: #e7f3ff;
+      border-radius: 4px;
+    }
+    .competitor-item {
+      padding: 5px;
+      margin: 2px 0;
+      background: white;
+      border-radius: 3px;
+    }
+    .count {
+      font-weight: bold;
+      font-size: 1.2em;
+      color: #2196F3;
+    }
+  </style>
+</head>
+<body>
+  <h1>Competitor API Diagnostic Tool</h1>
+  
+  <div style="margin-bottom: 20px;">
+    <label>
+      Company/URL: 
+      <input type="text" id="companyInput" value="https://zara.com" style="width: 300px; padding: 8px;" />
+    </label>
+    <label style="margin-left: 20px;">
+      Industry: 
+      <select id="industryInput" style="padding: 8px;">
+        <option value="">Auto-detect</option>
+        <option value="Ecommerce & Retail" selected>Ecommerce & Retail</option>
+        <option value="Technology">Technology</option>
+        <option value="Finance">Finance</option>
+        <option value="Healthcare">Healthcare</option>
+      </select>
+    </label>
+  </div>
+
+  <div>
+    <button onclick="testBothAPIs()">🔍 Test Both Pages</button>
+    <button onclick="testCompetitorInsight()">Test Competitor Insight</button>
+    <button onclick="testProductInsight()">Test Product Insight</button>
+    <button class="clear" onclick="clearCache()">🗑️ Clear Cache</button>
+    <button onclick="viewCache()">👁️ View Cache</button>
+  </div>
+
+  <div class="container">
+    <div class="column">
+      <h2>Competitor Insight Response</h2>
+      <div class="competitors-list" id="competitorInsightList">
+        <div class="count">Count: <span id="ciCount">-</span></div>
+      </div>
+      <pre id="competitorInsightResult">Click "Test Competitor Insight" to see results...</pre>
+    </div>
+
+    <div class="column">
+      <h2>Product Insight Response</h2>
+      <div class="competitors-list" id="productInsightList">
+        <div class="count">Count: <span id="piCount">-</span></div>
+      </div>
+      <pre id="productInsightResult">Click "Test Product Insight" to see results...</pre>
+    </div>
+  </div>
+
+  <div style="margin-top: 20px;">
+    <h2>Cache Contents</h2>
+    <pre id="cacheContents">Click "View Cache" to see cached data...</pre>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:5000';
+
+    async function callAPI(url) {
+      console.log('Calling API:', url);
+      const response = await fetch(url);
+      const data = await response.json();
+      console.log('API Response:', data);
+      return data;
+    }
+
+    async function testCompetitorInsight() {
+      const company = document.getElementById('companyInput').value.trim();
+      const industry = document.getElementById('industryInput').value;
+      
+      const url = `${API_BASE}/api/ai-visibility/${encodeURIComponent(company)}${industry ? '?industry=' + encodeURIComponent(industry) : ''}`;
+      
+      console.log('Testing Competitor Insight API...');
+      console.log('URL:', url);
+      
+      try {
+        const result = await callAPI(url);
+        const competitors = result?.data?.competitors || [];
+        
+        document.getElementById('ciCount').textContent = competitors.length;
+        document.getElementById('competitorInsightResult').textContent = JSON.stringify(result, null, 2);
+        
+        const listHtml = competitors.map((c, i) => 
+          `<div class="competitor-item">${i + 1}. ${c.name || c}</div>`
+        ).join('');
+        
+        document.getElementById('competitorInsightList').innerHTML = 
+          `<div class="count">Count: <span id="ciCount">${competitors.length}</span></div>${listHtml}`;
+          
+        console.log('Competitor Insight - Competitors:', competitors.length);
+        console.log('Names:', competitors.map(c => c.name || c));
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('competitorInsightResult').textContent = 'Error: ' + error.message;
+      }
+    }
+
+    async function testProductInsight() {
+      // Product Insight calls the same API
+      const company = document.getElementById('companyInput').value.trim();
+      const industry = document.getElementById('industryInput').value;
+      
+      const url = `${API_BASE}/api/ai-visibility/${encodeURIComponent(company)}${industry ? '?industry=' + encodeURIComponent(industry) : ''}`;
+      
+      console.log('Testing Product Insight API...');
+      console.log('URL:', url);
+      
+      try {
+        const result = await callAPI(url);
+        const competitors = result?.data?.competitors || [];
+        
+        document.getElementById('piCount').textContent = competitors.length;
+        document.getElementById('productInsightResult').textContent = JSON.stringify(result, null, 2);
+        
+        const listHtml = competitors.map((c, i) => 
+          `<div class="competitor-item">${i + 1}. ${c.name || c}</div>`
+        ).join('');
+        
+        document.getElementById('productInsightList').innerHTML = 
+          `<div class="count">Count: <span id="piCount">${competitors.length}</span></div>${listHtml}`;
+          
+        console.log('Product Insight - Competitors:', competitors.length);
+        console.log('Names:', competitors.map(c => c.name || c));
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('productInsightResult').textContent = 'Error: ' + error.message;
+      }
+    }
+
+    async function testBothAPIs() {
+      await testCompetitorInsight();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await testProductInsight();
+    }
+
+    function clearCache() {
+      localStorage.removeItem('kabini_unified_analysis_cache');
+      alert('Cache cleared! Refresh the page and try again.');
+      console.log('Cache cleared');
+    }
+
+    function viewCache() {
+      const cache = localStorage.getItem('kabini_unified_analysis_cache');
+      if (!cache) {
+        document.getElementById('cacheContents').textContent = 'No cache found';
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(cache);
+        let output = '=== CACHE ANALYSIS ===\n\n';
+        
+        Object.entries(parsed.analyses).forEach(([key, val]) => {
+          output += `Target: ${key}\n`;
+          output += `  Original: ${val.targetOriginal}\n`;
+          output += `  Dashboard competitors: ${val.dashboard?.competitors?.length || 0}\n`;
+          output += `  CompetitorInsight competitors: ${val.competitorInsight?.competitors?.length || 0}\n`;
+          output += `  ProductInsight competitors: ${val.productInsight?.competitors?.length || 0}\n`;
+          
+          if (val.productInsight?.competitors) {
+            output += `  ProductInsight names: ${val.productInsight.competitors.map(c => c.name || c).join(', ')}\n`;
+          }
+          if (val.competitorInsight?.competitors) {
+            output += `  CompetitorInsight names: ${val.competitorInsight.competitors.map(c => c.name || c).join(', ')}\n`;
+          }
+          output += '\n';
+        });
+        
+        document.getElementById('cacheContents').textContent = output;
+        console.log(output);
+      } catch (error) {
+        document.getElementById('cacheContents').textContent = 'Error parsing cache: ' + error.message;
+      }
+    }
+  </script>
+</body>
+</html>
+
+
