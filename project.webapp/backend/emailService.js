@@ -500,6 +500,36 @@ This email was sent from Kabini.ai. If you have any questions, please contact ou
     }
   }
 
+  // Generic send email method (used by emailVerificationService)
+  async sendEmail(emailOptions) {
+    console.log('📧 [EmailService] sendEmail called with:', { 
+      to: emailOptions.to, 
+      subject: emailOptions.subject,
+      isConfigured: this.isConfigured 
+    });
+    
+    if (!this.isConfigured) {
+      console.log('⚠️ [EmailService] Email service not configured, using test mode');
+    }
+
+    try {
+      const mailOptions = {
+        from: emailOptions.from || process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@kabini.ai',
+        to: emailOptions.to,
+        subject: emailOptions.subject,
+        html: emailOptions.html,
+        text: emailOptions.text
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log('✅ [EmailService] Email sent successfully to:', emailOptions.to);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ [EmailService] Error sending email:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Send welcome email
   async sendWelcomeEmail(userEmail, userName) {
     if (!this.isConfigured) {
@@ -594,4 +624,4 @@ The kabini.ai Team
   }
 }
 
-module.exports = EmailService; 
+module.exports = new EmailService(); 

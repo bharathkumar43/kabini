@@ -260,6 +260,7 @@ function QAGenerationPage() {
 
 function AppContent() {
   const { isAuthenticated, isLoading, logout, user, refreshUser } = useAuth();
+  const location = useLocation();
   
   console.log('[App] Authentication state:', {
     isAuthenticated,
@@ -274,7 +275,8 @@ function AppContent() {
       console.log('[App] Authenticated but no user data, forcing refresh...');
       refreshUser();
     }
-  }, [isAuthenticated, user, isLoading, refreshUser]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user, isLoading]);
   
   // Clear any stale localStorage data on mount
   useEffect(() => {
@@ -299,7 +301,6 @@ function AppContent() {
     }
   }, [isAuthenticated, user]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const location = useLocation();
   const [sessions] = useLocalStorage<SessionData[]>(SESSIONS_KEY, []);
   const [currentSession] = useLocalStorage<SessionData | null>(CURRENT_SESSION_KEY, null);
 
@@ -351,9 +352,16 @@ function AppContent() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-email" element={<EmailVerification />} />
         <Route path="/test-notifications" element={<NotificationTest />} />
+        <Route path="/login" element={<Login />} />
         <Route path="*" element={<Login />} />
       </Routes>
     );
+  }
+  
+  // If authenticated but on login/signup page, redirect to overview
+  if (isAuthenticated && user && (location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/')) {
+    console.log('[App] User is authenticated but on login/signup page, redirecting to overview...');
+    return <Navigate to="/overview" replace />;
   }
   
   console.log('[App] User is authenticated, showing main app');

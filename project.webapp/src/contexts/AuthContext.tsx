@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, ReactNode } from 'react';
 import { User, AuthState, LoginResponse } from '../types';
 import { authService } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
@@ -336,8 +336,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     dispatch({ type: 'CLEAR_ERROR' });
   };
 
-  // Refresh user function
-  const refreshUser = async () => {
+  // Refresh user function - wrapped in useCallback to prevent infinite loops
+  const refreshUser = useCallback(async () => {
     try {
       const user = await authService.getCurrentUser();
       if (user) {
@@ -366,7 +366,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         payload: error instanceof Error ? error.message : 'Failed to refresh user' 
       });
     }
-  };
+  }, []);
 
   const value: AuthContextType = {
     ...state,

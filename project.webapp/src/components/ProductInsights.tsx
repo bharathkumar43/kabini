@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { sessionManager } from '../services/sessionManager';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import HighlightedLink from './ui/HighlightedLink';
 
 // CTA Button component for navigation
 const CtaButton = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
@@ -990,7 +991,9 @@ export function ProductInsights() {
           </div>
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Analysis Results</h2>
-            <p className="text-gray-600 text-lg">Analysis completed for: {resultData?.originalInput || websiteUrl}</p>
+            <p className="text-gray-600 text-lg">
+              Analysis completed for: <HighlightedLink value={(resultData?.originalInput || websiteUrl) as string} />
+            </p>
           </div>
           <div className="justify-self-end">
             <button 

@@ -68,8 +68,11 @@ const ForgotPassword = () => {
     console.log('[ForgotPassword] Starting API call to forgot-password endpoint');
     setIsLoading(true);
     
+    const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:5000/api';
+    
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      console.log('[ForgotPassword] API URL:', `${API_BASE_URL}/auth/forgot-password`);
+      const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
@@ -211,7 +214,7 @@ const ForgotPassword = () => {
         onClose={() => setError(null)}
         autoClose={true}
         autoCloseDelay={5000}
-        type="error"
+        type={error?.includes('successfully') || error?.includes('sent') ? 'success' : 'error'}
       />
     </div>
   );

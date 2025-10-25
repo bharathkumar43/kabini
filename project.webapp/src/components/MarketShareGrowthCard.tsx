@@ -129,25 +129,25 @@ export function MarketShareGrowthCard({ result }: { result: any }) {
       name: 'ChatGPT', 
       mentions: currentMentions.byPlatform.chatgpt, 
       color: 'bg-purple-500',
-      icon: <Bot className="w-4 h-4" />
+      icon: <ChatGPTIcon size={16} className="text-white" />
     },
     { 
       name: 'Gemini', 
       mentions: currentMentions.byPlatform.gemini, 
       color: 'bg-blue-500',
-      icon: <Star className="w-4 h-4" />
+      icon: <GeminiIcon size={16} className="text-white" />
     },
     { 
       name: 'Claude', 
       mentions: currentMentions.byPlatform.claude, 
       color: 'bg-pink-500',
-      icon: <Brain className="w-4 h-4" />
+      icon: <ClaudeIcon size={16} className="text-white" />
     },
     { 
       name: 'Perplexity', 
       mentions: currentMentions.byPlatform.perplexity, 
       color: 'bg-orange-500',
-      icon: <Search className="w-4 h-4" />
+      icon: <PerplexityIcon size={16} className="text-white" />
     }
   ];
 

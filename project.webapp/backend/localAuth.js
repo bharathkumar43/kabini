@@ -95,26 +95,36 @@ class LocalAuthService {
   // Create default admin user
   async createDefaultAdmin(db) {
     try {
-      const adminExists = await db.getUserByEmail('admin@example.com');
+      const adminEmail = 'admin@kabini.ai';
+      const adminExists = await db.getUserByEmail(adminEmail);
       if (!adminExists) {
-        const hashedPassword = await this.hashPassword('admin123');
+        // Use strong default password: Admin@123456
+        const hashedPassword = await this.hashPassword('Admin@123456');
         const adminUser = {
           id: uuidv4(),
-          email: 'admin@example.com',
+          email: adminEmail,
           name: 'Admin User',
           displayName: 'Administrator',
           password: hashedPassword,
           roles: ['admin', 'user'],
           isActive: true,
+          emailVerified: true, // Admin email is pre-verified
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
         
         await db.createUser(adminUser);
-        console.log('✅ Default admin user created: admin@example.com');
+        console.log('✅ =============================================');
+        console.log('✅ Default admin user created successfully!');
+        console.log('✅ Email: admin@kabini.ai');
+        console.log('✅ Password: Admin@123456');
+        console.log('✅ Please change the password after first login');
+        console.log('✅ =============================================');
+      } else {
+        console.log('ℹ️  Admin user already exists');
       }
     } catch (error) {
-      console.error('Error creating default admin:', error);
+      console.error('❌ Error creating default admin:', error);
     }
   }
 }

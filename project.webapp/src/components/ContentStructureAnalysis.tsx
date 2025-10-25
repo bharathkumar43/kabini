@@ -79,6 +79,7 @@ import { StructureAnalysisHistoryItem } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import SuccessNotification from './ui/SuccessNotification';
 import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDown } from '../utils/emojiFilter';
+import HighlightedLink from './ui/HighlightedLink';
 
 // Format long URLs for subtitle display: remove query/hash and truncate middle
 const formatDisplayUrl = (input?: string): string => {
@@ -2181,7 +2182,9 @@ export function ContentStructureAnalysis({ content, url }: ContentStructureAnaly
           </div>
           <div className="text-center">
             <h1 className="text-2xl lg:text-3xl font-bold text-black mb-2">Structure Analysis Results</h1>
-            <p className="text-gray-600 text-lg">Analysis completed for: {formatDisplayUrl(urlInput)}</p>
+            <p className="text-gray-600 text-lg">
+              Analysis completed for: <HighlightedLink value={formatDisplayUrl(urlInput)} />
+            </p>
           </div>
           <div className="justify-self-end">
             <button
