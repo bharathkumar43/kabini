@@ -183,3 +183,15 @@ Want to go from 8 queries → 1 query per analysis?
 Audience queries have been removed. You now save 56 Google Search queries per analysis!
 
 
+
+
+
+
+
+
+
+
+
+
+
+

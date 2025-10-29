@@ -543,3 +543,15 @@ PAGE 3 (Same company):
 
 Test tomorrow when quota resets and check the console logs - you'll see "Using cached competitor list" on pages 2 and 3!
 
+
+
+
+
+
+
+
+
+
+
+
+

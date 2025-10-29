@@ -65,38 +65,19 @@ export const ClaudeIcon: React.FC<AIIconProps> = ({ className = '', size = 16 })
 export const AIPlatformIcon: React.FC<{ platform: string; className?: string; size?: number }> = ({ platform, className = '', size = 16 }) => {
   const name = platform.toLowerCase();
   if (name.includes('chatgpt') || name.includes('gpt')) {
-    // Try exact assets first (svg then png), then fallback vector
-    return (
-      <>
-        <MultiSourceBrandIcon sources={["/icons/chatgpt.svg", "/icons/chatgpt.png", "/chatgpt.svg", "/chatgpt.png"]} alt="ChatGPT" size={size} className={className} />
-        <ChatGPTIcon className={className} size={size} />
-      </>
-    );
+    // Prefer branded asset; MultiSourceBrandIcon advances through sources on error.
+    return <MultiSourceBrandIcon sources={["/icons/chatgpt.svg", "/icons/chatgpt.png", "/chatgpt.svg", "/chatgpt.png"]} alt="ChatGPT" size={size} className={className} />;
   }
   if (name.includes('gemini')) {
-    return (
-      <>
-        <MultiSourceBrandIcon sources={["/icons/gemini.svg", "/icons/gemini.png"]} alt="Gemini" size={size} className={className} />
-        <GeminiIcon className={className} size={size} />
-      </>
-    );
+    return <MultiSourceBrandIcon sources={["/icons/gemini.svg", "/icons/gemini.png"]} alt="Gemini" size={size} className={className} />;
   }
   if (name.includes('perplexity')) {
-    return (
-      <>
-        <MultiSourceBrandIcon sources={["/icons/perplexity.svg", "/icons/perplexity.png"]} alt="Perplexity" size={size} className={className} />
-        <PerplexityIcon className={className} size={size} />
-      </>
-    );
+    return <MultiSourceBrandIcon sources={["/icons/perplexity.svg", "/icons/perplexity.png"]} alt="Perplexity" size={size} className={className} />;
   }
   if (name.includes('claude')) {
-    return (
-      <>
-        <MultiSourceBrandIcon sources={["/icons/claude.svg", "/icons/claude.png"]} alt="Claude" size={size} className={className} />
-        <ClaudeIcon className={className} size={size} />
-      </>
-    );
+    return <MultiSourceBrandIcon sources={["/icons/claude.svg", "/icons/claude.png"]} alt="Claude" size={size} className={className} />;
   }
+  // Fallback to a neutral vector if platform not recognized
   return <ChatGPTIcon className={className} size={size} />;
 };
 

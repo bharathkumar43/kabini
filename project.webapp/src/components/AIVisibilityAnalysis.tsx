@@ -105,7 +105,7 @@ function DashboardCard({ title, icon, iconBgColor, children, tooltip, subtitle }
         </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-gray-900 leading-tight">{title}</h3>
+                <h3 className="text-xl font-semibold text-gray-900 leading-tight">{title}</h3>
                 {tooltip && (
                   <div className="relative">
                     <div
@@ -131,7 +131,7 @@ function DashboardCard({ title, icon, iconBgColor, children, tooltip, subtitle }
                   </div>
                 )}
               </div>
-              {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+              {subtitle && <p className="text-xs text-gray-600 mt-1">{subtitle}</p>}
             </div>
           </div>
         </div>
@@ -1101,7 +1101,19 @@ export function CompetitorInsight() {
   // Placement/Visibility aggregation (real data only)
   type PlacementDatum = { name: string; first: number; second: number; third: number };
   const computePlacementData = (result: any): PlacementDatum[] => {
-    const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+    // Prepare competitors, excluding the target brand itself
+    const competitorsAll: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+    const normalize = (s: string) => String(s || '').toLowerCase().replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/, '');
+    const targetLabel = (() => {
+      const raw = String(result?.originalInput || result?.targetUrl || result?.company || '').trim();
+      try { const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`); return normalize(u.hostname.split('.')[0]); } catch { return normalize(raw.split(/[\/\s]/)[0]); }
+    })();
+    const competitors: any[] = competitorsAll.filter(c => {
+      const name = normalize(c?.name || '');
+      const domain = normalize(c?.domain || '');
+      return !(name && (name.includes(targetLabel) || targetLabel.includes(name))) &&
+             !(domain && (domain.includes(targetLabel) || targetLabel.includes(domain)));
+    });
 
     const out: PlacementDatum[] = [];
     competitors.forEach((c) => {
@@ -1332,6 +1344,20 @@ export function CompetitorInsight() {
         return;
       }
 
+      // 1b) Fallback to common mention fields exposed elsewhere in the app
+      const metricTotal = Number(
+        c?.keyMetrics?.gemini?.brandMentions ??
+        c?.keyMetrics?.gemini?.mentionsCount ??
+        c?.breakdowns?.gemini?.mentionsScore ??
+        c?.brandMentions ??
+        c?.mentions ??
+        0
+      );
+      if (metricTotal > 0) {
+        rows.push({ competitor: name, total: metricTotal, byTool });
+        return;
+      }
+
       // 2) Fallback – count aliases in analysis text if traffic counts are missing
       const aliases = buildAliasList(name);
       let total = 0;
@@ -1400,7 +1426,7 @@ export function CompetitorInsight() {
                 <div key={r.competitor} className="flex flex-col items-center w-24">
                   <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex items-end justify-center shadow-sm">
                     <div
-                      className="w-14 bg-rose-300"
+                      className="w-14 bg-sky-400"
                       style={{ height: `${(r.total / maxTotal) * 100}%` }}
                       title={`${r.competitor}: ${r.total}`}
                     />
@@ -1754,17 +1780,22 @@ export function CompetitorInsight() {
   const classifyCompetitorType = (name: string, textBlob: string, shoppingTotal: number): CompetitorType => {
     const n = String(name || '').toLowerCase();
     const t = String(textBlob || '').toLowerCase();
-    // Strong marketplace/content/authority signals take precedence
+    // Marketplace — explicit brand hints dominate
     if (NAME_HINTS.Marketplace.some(h => n.includes(h) || t.includes(h))) return 'Marketplace';
+    // Content — review/guides/forums/influencers
     if (NAME_HINTS.Content.some(h => n.includes(h) || t.includes(h))) return 'Content';
+    // Authority — PR/editorial/trusted brands
     if (NAME_HINTS.Authority.some(h => n.includes(h) || t.includes(h))) return 'Authority';
 
-    // Direct vs Indirect heuristics
-    if ((shoppingTotal || 0) > 0) return 'Direct';
-    if (NAME_HINTS.Indirect.some(h => n.includes(h) || t.includes(h)) || /(alternative|substitute|budget|affordable|sustainable\s+luxury)/i.test(t)) {
+    // Direct — ecommerce stores selling the same/similar product
+    if (/store|shop|cart|checkout|official|retail|ecommerce|buy\s+now|add\s+to\s+cart/i.test(t) || (shoppingTotal || 0) > 0 || NAME_HINTS.Direct.some(h => n.includes(h))) {
+      return 'Direct';
+    }
+
+    // Indirect — substitutes/alternatives solving same need
+    if (NAME_HINTS.Indirect.some(h => n.includes(h) || t.includes(h)) || /(alternative|substitute|budget|affordable|sustainable\s+luxury|dupe)/i.test(t)) {
       return 'Indirect';
     }
-    if (/store|shop|cart|checkout|official|retail|ecommerce/i.test(t) || NAME_HINTS.Direct.some(h => n.includes(h))) return 'Direct';
     return 'Direct';
   };
   const computeCompetitorTypeCounts = (result: any): { counts: Record<CompetitorType, number> } => {
@@ -1780,23 +1811,155 @@ export function CompetitorInsight() {
   };
 
   const CompetitorTypeBreakdownSection: React.FC<{ result: any }> = ({ result }) => {
-    const [showInfo, setShowInfo] = useState(false);
-    let data = computeCompetitorTypeCounts(result).counts;
-    const sumBeforeClamp = TYPES.reduce((s,k)=>s+(data[k]||0),0);
-    if (sumBeforeClamp === 0) {
-      data = { Direct: 5, Marketplace: 3, Content: 2, Authority: 2, Indirect: 1 } as any;
-    }
-    const colors: Record<CompetitorType, string> = {
+    // Group competitors by type with examples and counts
+    const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+    const getMentions = (c: any) => Number(c?.aiTraffic?.totalMentions || c?.mentions || 0);
+    const getTextBlob = (c: any) => [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis, c?.breakdowns?.perplexity?.analysis, c?.breakdowns?.claude?.analysis].filter(Boolean).join('\n');
+    const buckets: Record<CompetitorType, Array<{ name: string; mentions: number }>> = {
+      Direct: [], Marketplace: [], Content: [], Authority: [], Indirect: []
+    };
+    competitors.forEach(c => {
+      const name = c?.name || 'Unknown';
+      const type = classifyCompetitorType(name, getTextBlob(c), Number(c?.shopping?.total || 0));
+      buckets[type].push({ name, mentions: getMentions(c) });
+    });
+    (Object.keys(buckets) as CompetitorType[]).forEach(k => {
+      buckets[k] = buckets[k].sort((a, b) => b.mentions - a.mentions);
+    });
+
+    // Mock fallbacks when buckets are empty (per your spec)
+    if (buckets.Direct.length === 0) buckets.Direct = [
+      { name: 'Sephora', mentions: 15 },
+      { name: 'Ulta', mentions: 10 },
+      { name: 'Dermstore', mentions: 3 }
+    ];
+    if (buckets.Indirect.length === 0) buckets.Indirect = [
+      { name: 'The Ordinary', mentions: 6 },
+      { name: 'Tata Harper', mentions: 4 }
+    ];
+    if (buckets.Marketplace.length === 0) buckets.Marketplace = [
+      { name: 'Amazon', mentions: 8 },
+      { name: 'Walmart', mentions: 5 },
+      { name: 'Etsy', mentions: 2 }
+    ];
+    if (buckets.Content.length === 0) buckets.Content = [
+      { name: 'Wirecutter', mentions: 6 },
+      { name: 'Reddit', mentions: 5 },
+      { name: 'YouTube Reviewers', mentions: 3 }
+    ];
+    if (buckets.Authority.length === 0) buckets.Authority = [
+      { name: 'Sephora', mentions: 12 },
+      { name: 'Forbes', mentions: 5 },
+      { name: 'Allure', mentions: 4 }
+    ];
+
+    const Info: Record<CompetitorType, { title: string; desc: string; why: string }> = {
+      Direct: {
+        title: 'Direct Competitors',
+        desc: 'Other ecommerce sites selling the same or very similar products.',
+        why: 'Direct rivals control visibility where customers make head‑to‑head comparisons.'
+      },
+      Indirect: {
+        title: 'Indirect Competitors',
+        desc: 'Brands solving the same customer need with different products.',
+        why: 'AI often surfaces substitutes. If they dominate, your brand can be sidelined.'
+      },
+      Marketplace: {
+        title: 'Marketplace Competitors',
+        desc: 'Platforms like Amazon, Walmart, Etsy that AI loves for broad coverage.',
+        why: 'Marketplaces are safe defaults. Optimize listings or risk invisibility.'
+      },
+      Content: {
+        title: 'Content Competitors',
+        desc: 'Reviews, guides, forums, Reddit, and creator content influencing decisions.',
+        why: 'If you are absent in these voices, AI has fewer reasons to recommend you.'
+      },
+      Authority: {
+        title: 'Brand Authority Competitors',
+        desc: 'Companies and publications with strong PR and reputation signals.',
+        why: 'PR + reputation drive authority mentions. AI treats them as trusted defaults.'
+      }
+    };
+
+    const renderBucket = (type: CompetitorType) => {
+      const list = buckets[type];
+      const examples = list.slice(0, 3).map(x => x.name).join(', ') || '—';
+      const findings = list.slice(0, 3).map(x => `${x.name} appears in ${x.mentions} mentions`).join(' • ') || 'No mentions detected.';
+      return (
+        <div key={`bucket-${type}`} className="border border-gray-200 rounded-lg p-4 bg-white">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-gray-900">{Info[type].title}</h4>
+            <span className="text-xs text-gray-600">{list.length} competitors</span>
+          </div>
+          <p className="text-xs text-gray-700 mb-2">{Info[type].desc}</p>
+          <div className="text-xs text-gray-700 mb-2"><span className="font-semibold">Example Competitors:</span> {examples}</div>
+          <div className="text-xs text-gray-700 mb-2"><span className="font-semibold">Key Findings:</span> {findings}</div>
+          <div className="text-xs text-gray-700"><span className="font-semibold">Why it matters:</span> {Info[type].why}</div>
+        </div>
+      );
+    };
+
+    // Build per-competitor summary for chart/table
+    type Row = { name: string; type: CompetitorType; mentions: number; sources: string[] };
+    const summarize = (): Row[] => {
+      const rows: Row[] = [];
+      competitors.forEach(c => {
+        const name = c?.name || 'Unknown';
+        const type = classifyCompetitorType(name, getTextBlob(c), Number(c?.shopping?.total || 0));
+        const mentions = getMentions(c);
+        // Collect top source categories per competitor if backend present
+        const categories: Record<string, number> = {};
+        const byTool = c?.sourcesByTool || {};
+        Object.keys(byTool).forEach(t => {
+          const counts = byTool[t]?.counts || {};
+          Object.keys(counts).forEach(cat => {
+            categories[cat] = (categories[cat] || 0) + Number(counts[cat] || 0);
+          });
+        });
+        let sources = Object.entries(categories)
+          .sort((a,b) => b[1]-a[1])
+          .slice(0, 3)
+          .map(([k]) => k);
+        // Heuristic fallback when backend sources are missing: infer from analysis text
+        if (sources.length === 0) {
+          const blob = getTextBlob(c).toLowerCase();
+          const localCounts: Record<string, number> = {} as any;
+          SOURCE_CATEGORIES.forEach(cat => {
+            const kws = SOURCE_KEYWORDS[cat] || [];
+            let hits = 0;
+            kws.forEach(k => { if (blob.includes(k)) hits += 1; });
+            localCounts[cat] = hits;
+          });
+          sources = Object.entries(localCounts)
+            .sort((a,b) => b[1]-a[1])
+            .filter(([,v]) => v > 0)
+            .slice(0, 3)
+            .map(([k]) => k);
+        }
+        rows.push({ name, type, mentions, sources });
+      });
+      // If empty, seed a few rows from fallback buckets
+      if (rows.length === 0) {
+        ([
+          ...buckets.Direct.slice(0,3).map(x => ({ name: x.name, type: 'Direct' as CompetitorType, mentions: x.mentions, sources: [] })),
+          ...buckets.Indirect.slice(0,2).map(x => ({ name: x.name, type: 'Indirect' as CompetitorType, mentions: x.mentions, sources: [] })),
+          ...buckets.Marketplace.slice(0,3).map(x => ({ name: x.name, type: 'Marketplace' as CompetitorType, mentions: x.mentions, sources: ['Marketplaces'] })),
+          ...buckets.Content.slice(0,3).map(x => ({ name: x.name, type: 'Content' as CompetitorType, mentions: x.mentions, sources: ['Reviews/Guides'] })),
+          ...buckets.Authority.slice(0,3).map(x => ({ name: x.name, type: 'Authority' as CompetitorType, mentions: x.mentions, sources: ['PR/Editorial'] })),
+        ] as Row[]).forEach(r => rows.push(r));
+      }
+      return rows.sort((a,b) => b.mentions - a.mentions);
+    };
+
+    const rows = summarize();
+    const maxMentions = Math.max(1, ...rows.map(r => r.mentions));
+    const typeColors: Record<CompetitorType, string> = {
       Direct: '#1f4b89',
       Marketplace: '#f59e0b',
       Content: '#14b8a6',
       Authority: '#ef4444',
       Indirect: '#22c55e'
     };
-    const total = Math.max(1, TYPES.reduce((s, k) => s + (data[k] || 0), 0));
-    let acc = 0; const stops: string[] = [];
-    TYPES.forEach(k => { const pct = ((data[k] || 0) / total) * 100; const from = acc; const to = acc + pct; acc = to; stops.push(`${colors[k]} ${from}% ${to}%`); });
-    const ringStyle: React.CSSProperties = { width: '220px', height: '220px', borderRadius: '50%', background: `conic-gradient(${stops.join(',')})` };
 
     return (
       <div className="bg-white border border-gray-300 rounded-xl p-4 sm:p-6 lg:p-8 shadow-sm mb-6 hover:shadow-md hover:scale-[1.02] transition-all duration-150">
@@ -1808,35 +1971,88 @@ export function CompetitorInsight() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-xl font-semibold text-gray-900">Competitor Type Breakdown</h3>
-                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Shows how competitors are classified: Direct (retail/brand stores), Indirect (substitutes/alternatives), Marketplaces (Amazon/Etsy), Content (reviews/guides), and Authority (PR/editorial). Helps understand competitive landscape structure.">i</button>
+                <button className="w-6 h-6 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-600 text-xs font-medium flex items-center justify-center" title="Classify as Direct, Indirect, Marketplace, Content, Authority to understand where AI visibility is won.">i</button>
               </div>
-              <div className="text-xs text-gray-600">Shows how competitors are classified: Direct, Marketplace, Content, Authority, Indirect.</div>
+              <div className="text-xs text-gray-600">Direct • Indirect • Marketplaces • Content • Brand Authority</div>
             </div>
           </div>
         </div>
-        {showInfo && (
-          <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
-            We classify competitors into Direct (retail/brand stores), Indirect (substitutes/alternatives), Marketplaces (Amazon/Etsy/eBay), Content (reviews/guides/forums), and Authority (PR/editorial/trusted brands).
+        {/* Narrative cards removed per request */}
+        {false && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+            {(['Direct','Indirect','Marketplace','Content','Authority'] as CompetitorType[]).map(t => renderBucket(t))}
           </div>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-          <div className="flex items-center justify-center">
-            <div className="relative" style={{ width: 220, height: 220 }}>
-              <div style={ringStyle} />
-              <div className="absolute inset-6 bg-white rounded-full" />
-              <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-gray-800">{total}</div>
+
+        {/* Per-competitor bar chart */}
+        <div className="mt-6">
+          {null}
+          <div className="w-full overflow-x-auto">
+            <div className="min-w-[720px] flex items-end gap-4 px-1 py-2">
+              {/* Y axis - absolute positioned tick labels aligned to exact baselines */}
+              <div className="relative w-10 h-56 pr-2 text-[10px] text-gray-600 select-none">
+                {/* 0% and 100% without translate, middle ticks with -1/2 for perfect baseline alignment */}
+                <div className="absolute right-0" style={{ bottom: '0%' }}>0%</div>
+                <div className="absolute right-0 -translate-y-1/2" style={{ bottom: '20%' }}>20%</div>
+                <div className="absolute right-0 -translate-y-1/2" style={{ bottom: '40%' }}>40%</div>
+                <div className="absolute right-0 -translate-y-1/2" style={{ bottom: '60%' }}>60%</div>
+                <div className="absolute right-0 -translate-y-1/2" style={{ bottom: '80%' }}>80%</div>
+                <div className="absolute right-0" style={{ bottom: '100%' }}>100%</div>
+              </div>
+              {rows.map(r => {
+                const pct = (r.mentions / maxMentions) * 100;
+                return (
+                  <div key={`bar-${r.name}`} className="flex flex-col items-center w-24">
+                    <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex items-end justify-center shadow-sm">
+                      <div
+                        className="w-14"
+                        style={{ height: `${pct}%`, backgroundColor: typeColors[r.type] }}
+                        title={`${r.name}: ${r.mentions}`}
+                      />
+          </div>
+                    <div className="mt-2 text-xs text-gray-800 font-medium text-center truncate w-full" title={r.name}>{r.name}</div>
+                </div>
+                );
+              })}
             </div>
           </div>
-          <div className="space-y-2 text-sm">
-            {TYPES.map(t => (
-              <div key={`type-${t}`} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: colors[t] }}></span>
-                  <span className="text-gray-800">{t}</span>
-                </div>
-                <span className="text-gray-700 font-bold text-base">{data[t] || 0}</span>
+          {/* Legend */}
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+            {(['Direct','Indirect','Marketplace','Content','Authority'] as CompetitorType[]).map(t => (
+              <div key={`leg-${t}`} className="flex items-center gap-1">
+                <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: typeColors[t] }}></span>
+                {t}
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Tabular view */}
+        <div className="mt-6">
+          {null}
+          <div className="w-full overflow-x-auto">
+            <table className="min-w-[900px] w-full text-sm border border-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left border-b border-gray-200">Competitor</th>
+                  <th className="px-3 py-2 text-left border-b border-gray-200">Type</th>
+                  <th className="px-3 py-2 text-left border-b border-gray-200">Mentions in AI Tools</th>
+                  <th className="px-3 py-2 text-left border-b border-gray-200">Sources Cited</th>
+                  <th className="px-3 py-2 text-left border-b border-gray-200">Key Takeaway</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={`row-${r.name}`} className="border-b border-gray-100">
+                    <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ color: '#000' }}>{r.name}</td>
+                    <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#000' }}>{r.type}</td>
+                    <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#000' }}>{r.mentions}</td>
+                    <td className="px-3 py-2 text-gray-700">{(r.sources && r.sources.length) ? r.sources.join(', ') : '—'}</td>
+                    <td className="px-3 py-2 text-gray-700">{Info[r.type].why}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1951,7 +2167,6 @@ export function CompetitorInsight() {
                       })}
                     </div>
                     <div className="mt-2 text-xs text-gray-800 font-medium text-center truncate w-full" title={r.name}>{r.name}</div>
-                    <div className="text-[11px] text-gray-600">{r.total}</div>
                   </div>
                 ))}
               </div>
@@ -2176,7 +2391,6 @@ export function CompetitorInsight() {
                       })}
                     </div>
                     <div className="mt-2 text-xs text-gray-800 font-medium text-center truncate w-full" title={r.name}>{r.name}</div>
-                    <div className="text-[11px] text-gray-600">{r.total}</div>
                   </div>
                 ))}
               </div>
@@ -2723,40 +2937,12 @@ export function CompetitorInsight() {
       {analysisResult && (
           <div className="space-y-6">
             {/* Share of Visibility & Placement Tracking */}
-            <VisibilityPlacementSection result={analysisResult} />
+            {/* <VisibilityPlacementSection result={analysisResult} /> */}
 
             {/* Shopping Visibility (Transactional Mentions) */}
-            <ShoppingVisibilitySection result={analysisResult} />
+            {/* <ShoppingVisibilitySection result={analysisResult} /> */}
             
-            {/* Competitor Mentions (Overall + Tool-specific) */}
-            <CompetitorMentionsSection result={analysisResult} />
-
-            {/* Competitor Type Breakdown */}
-            <CompetitorTypeBreakdownSection result={analysisResult} />
-
-            {/* Sources Cited (Donut per AI tool) */}
-            <SourceCitedSection result={analysisResult} />
-
-            {/* Content Style Breakdown */}
-            <ContentStyleSection result={analysisResult} />
-
-            {/* The following 4 sections moved to Product Insights */}
-            {/* SentimentTableSection */}
-            {/* AuthoritySignalsSection */}
-            {/* FAQConversationalSection */}
-            {/* ProductAttributeBubbleSection */}
-
-            {/* Competitor Analysis Section */}
-              {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 && (
-              <>
-                {/* Competitor Analysis Heading */}
-                <div className="mb-6">
-                  <h2 className="text-xl font-bold text-gray-900">Competitor Analysis</h2>
-            </div>
-            
-                {/* Competitor Analysis - 2 Cards */}
-                <div className="space-y-6">
-                {/* Card 1: Competitor Performance Overview (Bar Chart) */}
+            {/* Competitor Performance Overview and Comparison (moved to top) */}
                 <DashboardCard
                   title="Competitor Performance Overview"
                   subtitle="Quick visual snapshot of how each competitor ranks on AI visibility"
@@ -2819,7 +3005,6 @@ export function CompetitorInsight() {
                   </div>
                 </DashboardCard>
 
-                {/* Card 2: Competitors Comparison (Table) */}
                 <DashboardCard
                   title="Competitors Comparison"
                   subtitle="Detailed breakdown of scores across Gemini, Perplexity, Claude, and ChatGPT"
@@ -2903,9 +3088,36 @@ export function CompetitorInsight() {
                     </table>
                   </div>
                 </DashboardCard>
+
+            {/* Competitor Mentions (Overall + Tool-specific) */}
+            <CompetitorMentionsSection result={analysisResult} />
+
+            {/* Competitor Type Breakdown */}
+            <CompetitorTypeBreakdownSection result={analysisResult} />
+
+            {/* Sources Cited (Donut per AI tool) */}
+            <SourceCitedSection result={analysisResult} />
+
+            {/* Content Style Breakdown */}
+            <ContentStyleSection result={analysisResult} />
+
+            {/* The following 4 sections moved to Product Insights */}
+            {/* SentimentTableSection */}
+            {/* AuthoritySignalsSection */}
+            {/* FAQConversationalSection */}
+            {/* ProductAttributeBubbleSection */}
+
+            {/* Competitor Analysis Section (moved to top) - commented out */}
+            {/* {analysisResult.competitors && Array.isArray(analysisResult.competitors) && analysisResult.competitors.length > 0 && (
+              <>
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">Competitor Analysis</h2>
+                </div>
+                <div className="space-y-6">
+                  ... (content moved above)
               </div>
               </>
-            )}
+            )} */}
             
 
             

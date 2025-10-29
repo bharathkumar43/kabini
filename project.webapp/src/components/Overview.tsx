@@ -18,7 +18,7 @@ import { handleInputChange as handleEmojiFilteredInput, handlePaste, handleKeyDo
 import { computeAiCitationScore, computeRelativeAiVisibility, median } from '../utils/formulas';
 import { userStateManager } from '../utils/userStateManager';
 import HighlightedLink from './ui/HighlightedLink';
-import { ChatGPTIcon, GeminiIcon, PerplexityIcon, ClaudeIcon, GenericChatGPTBadge, GenericGeminiBadge, GenericPerplexityBadge, GenericClaudeBadge } from './ui/AIPlatformIcons';
+import AIPlatformIcon, { ChatGPTIcon, GeminiIcon, PerplexityIcon, ClaudeIcon, GenericChatGPTBadge, GenericGeminiBadge, GenericPerplexityBadge, GenericClaudeBadge } from './ui/AIPlatformIcons';
 
 const SESSIONS_KEY = 'llm_qa_sessions';
 const CURRENT_SESSION_KEY = 'llm_qa_current_session';
@@ -835,10 +835,10 @@ function AIPlatformPresenceBreakdown({ result }: { result: any }) {
   const platformAvailability = getPlatformAvailability();
   
   const platforms = [
-    { name: 'ChatGPT', available: platformAvailability.chatgpt, icon: <ChatGPTIcon size={16} /> },
-    { name: 'Gemini', available: platformAvailability.gemini, icon: <GeminiIcon size={16} /> },
-    { name: 'Perplexity', available: platformAvailability.perplexity, icon: <PerplexityIcon size={16} /> },
-    { name: 'Claude', available: platformAvailability.claude, icon: <ClaudeIcon size={16} /> }
+    { name: 'ChatGPT', available: platformAvailability.chatgpt, icon: <AIPlatformIcon platform="ChatGPT" size={16} /> },
+    { name: 'Gemini', available: platformAvailability.gemini, icon: <AIPlatformIcon platform="Gemini" size={16} /> },
+    { name: 'Perplexity', available: platformAvailability.perplexity, icon: <AIPlatformIcon platform="Perplexity" size={16} /> },
+    { name: 'Claude', available: platformAvailability.claude, icon: <AIPlatformIcon platform="Claude" size={16} /> }
   ];
 
   return (
@@ -942,10 +942,10 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
   aiScores?: any
 }) {
   const llmServices = [
-    { name: 'ChatGPT', key: 'chatgpt', icon: <Circle className="w-4 h-4" /> },
-    { name: 'Gemini', key: 'gemini', icon: <Star className="w-4 h-4" /> },
-    { name: 'Perplexity', key: 'perplexity', icon: <Search className="w-4 h-4" /> },
-    { name: 'Claude', key: 'claude', icon: <Globe className="w-4 h-4" /> },
+    { name: 'ChatGPT', key: 'chatgpt', icon: <AIPlatformIcon platform="ChatGPT" /> },
+    { name: 'Gemini', key: 'gemini', icon: <AIPlatformIcon platform="Gemini" /> },
+    { name: 'Perplexity', key: 'perplexity', icon: <AIPlatformIcon platform="Perplexity" /> },
+    { name: 'Claude', key: 'claude', icon: <AIPlatformIcon platform="Claude" /> },
   ];
 
   const getLLMAvailability = () => {
@@ -982,7 +982,7 @@ function LLMPresenceCard({ serviceStatus, aiScores }: {
             <div key={service.key} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {service.icon}
-                <span className="text-gray-700">{service.name}</span>
+              <span className="text-gray-700">{service.name}</span>
               </div>
               <div className={`flex items-center ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
                 {isAvailable ? (
@@ -2878,7 +2878,8 @@ function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
   };
 
   const handleAddProduct = async () => {
-    if (!formData.skuId.trim() || !formData.productName.trim() || !formData.productUrl.trim()) {
+    // SKU is optional; only require product name and URL
+    if (!formData.productName.trim() || !formData.productUrl.trim()) {
       alert('Please fill in all required fields');
       return;
     }
@@ -2941,7 +2942,7 @@ function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              SKU ID <span className="text-red-500">*</span>
+              SKU ID <span className="text-gray-400 text-xs"></span>
             </label>
             <input
               type="text"
@@ -4129,8 +4130,8 @@ export function Overview() {
                 {/* Shopify Sync Card */}
                 <div className="bg-white border-2 border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors group flex flex-col">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-blue-600" />
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm">
+                      <Zap className="w-5 h-5 text-blue-600" />
                     </div>
                     {connectedShopifyAccounts.length > 0 ? (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -4162,9 +4163,9 @@ export function Overview() {
                 </div>
 
               {/* CSV Upload Card */}
-              <div className="bg-white border-2 border-gray-300 rounded-xl p-6 hover:border-gray-400 transition-colors group flex flex-col">
-                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                  <FileText className="w-6 h-6 text-gray-600" />
+              <div className="bg-white border-2 border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors group flex flex-col">
+                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm mb-4">
+                  <FileText className="w-5 h-5 text-gray-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">CSV Upload</h3>
                 <p className="text-gray-600 mb-6 flex-grow">
@@ -4180,8 +4181,8 @@ export function Overview() {
 
               {/* Manual Add Card */}
               <div className="bg-white border-2 border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors group flex flex-col">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                  <Target className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shadow-sm mb-4">
+                  <Target className="w-5 h-5 text-blue-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Manual Add</h3>
                 <p className="text-gray-600 mb-6 flex-grow">

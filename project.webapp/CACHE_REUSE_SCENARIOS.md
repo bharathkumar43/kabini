@@ -535,3 +535,15 @@ Beyond your scenarios, you also get:
 - ✅ Zara → Nike → Zara → Both instant
 - ✅ Navigate away and back → Results persist
 
+
+
+
+
+
+
+
+
+
+
+
+

@@ -132,3 +132,15 @@ testCompetitorDetection().catch(error => {
 });
 
 
+
+
+
+
+
+
+
+
+
+
+
+

@@ -671,3 +671,15 @@ function calculateVisibilityScore(response, competitorName) {
 **That's the complete flow! 🚀**
 
 
+
+
+
+
+
+
+
+
+
+
+
+

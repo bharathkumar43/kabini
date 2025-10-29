@@ -286,32 +286,107 @@ const toneColor = (tone: ToneKey): string => {
   return 'bg-gray-100 text-gray-800';
 };
 
+// Robustly extract readable text from heterogeneous API fields
+function toPlainText(value: any): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(v => toPlainText(v)).join(' ').trim();
+  if (typeof value === 'object') {
+    const preferred = ['mention','quote','text','content','answer','message','value','title'];
+    for (const key of preferred) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        return toPlainText((value as any)[key]);
+      }
+    }
+    try {
+      return Object.values(value).map(v => toPlainText(v)).join(' ').trim();
+    } catch {
+      return '';
+    }
+  }
+  try { return String(value); } catch { return ''; }
+}
+
+// Extract a sentence from text that mentions the brand if possible
+function normalizeBrandToken(value: string): string {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/^the\s+/, '')
+    .replace(/^www\./, '')
+    .replace(/\.(com|co|io|ai|net|org|in)$/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function extractBrandSentence(text: string, brandName: string, domain?: string): string {
+  const raw = toPlainText(text);
+  if (!raw) return '';
+  const sentences = raw.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const targets: string[] = [];
+  if (brandName) targets.push(brandName);
+  if (domain) {
+    try {
+      const label = domain.includes('.') ? domain.split('.')[0] : domain;
+      targets.push(label);
+    } catch {}
+  }
+  const normalizedTargets = targets.map(normalizeBrandToken).filter(Boolean);
+  for (const s of sentences) {
+    const ns = normalizeBrandToken(s);
+    if (normalizedTargets.some(t => ns.includes(t))) return s.trim();
+  }
+  // Fallback: first non-empty sentence
+  return sentences[0]?.trim() || raw.trim();
+}
+
 function SentimentFromCompetitor({ result }: { result: any }) {
   const navigate = useNavigate();
   const [showInfo, setShowInfo] = useState(false);
   
   // Use real competitors from the API response
   const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+  // Dynamic suggestion generator based on tone, attribute and source
+  const buildSuggestion = (tone: ToneKey, attr: string, source: string, name: string, quote: string): string => {
+    const a = String(attr || 'visibility').toLowerCase();
+    const s = String(source || '').toLowerCase();
+    const isCommunity = /reddit|quora|forum|community/.test(s);
+    const isEditorial = /forbes|allure|press|news|editorial|magazine|wirecutter|nyt|review site/.test(s);
+    const isMarketplace = /amazon|walmart|etsy|ebay|marketplace/.test(s);
+    const where = isCommunity ? 'community platforms' : isEditorial ? 'editorial sites' : isMarketplace ? 'marketplaces' : 'top sources';
+    if (tone === 'Positive') return `Double down on strengths around ${a}. Replicate this on ${where} with structured data and fresh reviews.`;
+    if (tone === 'Negative') return `Fix issues related to ${a}. Publish clear guidance on your pages and earn trusted reviews on ${where}.`;
+    if (tone === 'Mixed') return `Clarify messaging about ${a}. Add FAQs and comparison content; secure authoritative citations on ${where}.`;
+    return `Increase visibility for ${a}. Ship schema, PR, and third‑party reviews on ${where}.`;
+  };
+
   const rows = comps.map(c => {
     const name = c?.name || 'Unknown';
     
     // Use backend sentiment data if available
     if (c?.sentiment && Array.isArray(c.sentiment) && c.sentiment.length > 0) {
       const s = c.sentiment[0];
+      const tone = (s.tone || 'Neutral') as ToneKey;
+      const attr = toPlainText(s.attr) || 'General';
+      const source = toPlainText(s.source) || 'AI Analysis';
+      const quoteText = toPlainText(s.quote) || toPlainText((s as any).mention) || toPlainText((s as any).text) || 'No quote available';
       return {
         name: s.name || name,
-        tone: (s.tone || 'Neutral') as ToneKey,
-        quote: s.quote || 'No quote available',
-        source: s.source || 'AI Analysis',
-        attr: s.attr || 'General',
-        takeaway: s.takeaway || 'Analysis not available'
+        tone,
+        quote: quoteText,
+        source,
+        attr,
+        takeaway: toPlainText(s.takeaway) || 'Analysis not available',
+        suggestion: buildSuggestion(tone, attr, source, name, quoteText)
       };
     }
     
     // Otherwise, derive sentiment from AI analysis text
     const texts = [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis]
-      .filter(Boolean)
-      .map((t: any) => String(t || '').toLowerCase());
+      .filter((t: any) => t !== undefined && t !== null)
+      .map((t: any) => {
+        if (typeof t === 'string') return t.toLowerCase();
+        if (Array.isArray(t)) return t.join(' ').toLowerCase();
+        try { return String(t || '').toLowerCase(); } catch { return ''; }
+      });
     const allText = texts.join(' ');
     
     const posCount = POS_WORDS.filter(w => allText.includes(w)).length;
@@ -322,16 +397,24 @@ function SentimentFromCompetitor({ result }: { result: any }) {
     else if (negCount > posCount && negCount > 1) tone = 'Negative';
     else if (posCount > 0 && negCount > 0) tone = 'Mixed';
     
-    const quote = (c?.analysis || '').substring(0, 150) || 'No analysis available';
+    const analysisTextRaw = (c?.analysis ?? c?.breakdowns?.gemini?.analysis ?? c?.breakdowns?.chatgpt?.analysis ?? '');
+    const analysisText = typeof analysisTextRaw === 'string'
+      ? analysisTextRaw
+      : Array.isArray(analysisTextRaw)
+        ? analysisTextRaw.join(' ')
+        : String(analysisTextRaw || '');
+    const quote = (analysisText || '').substring(0, 150) || 'No analysis available';
     
-    return {
+    const row = {
       name,
       tone,
       quote,
       source: 'AI Analysis',
       attr: 'General Perception',
       takeaway: tone === 'Positive' ? 'Strong brand perception' : tone === 'Negative' ? 'Challenges in brand perception' : 'Neutral brand positioning'
-    };
+    } as any;
+    row.suggestion = buildSuggestion(tone, row.attr, row.source, name, quote);
+    return row;
   });
   return (
     <DashboardCard 
@@ -342,26 +425,34 @@ function SentimentFromCompetitor({ result }: { result: any }) {
     >
       {showInfo && <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-3 mb-3">Heuristic tone derived from AI analyses when backend sentiment rows are missing.</div>}
       <div className="w-full overflow-x-auto">
-        <table className="min-w-[900px] w-full text-sm border border-gray-200">
+        <table className="min-w-[1200px] w-full text-sm border border-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2 text-left border-b border-gray-200">Competitor</th>
-              <th className="px-3 py-2 text-left border-b border-gray-200">Tone</th>
-              <th className="px-3 py-2 text-left border-b border-gray-200">Example Mention</th>
-              <th className="px-3 py-2 text-left border-b border-gray-200">Source</th>
-              <th className="px-3 py-2 text-left border-b border-gray-200">Attribute/Context</th>
-              <th className="px-3 py-2 text-left border-b border-gray-200">Key Takeaway</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[180px]">Competitor</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[110px]">Tone</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[420px]">Mention</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[120px]">Source</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[160px]">Attribute/Context</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[300px]">Key Takeaway</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[680px]">Suggestion</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(r => (
               <tr key={`sent-${r.name}`} className="border-b border-gray-100">
-                <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ color: '#0f172a' }}>{r.name}</td>
-                <td className="px-3 py-2"><span className={`px-2 py-1 rounded ${toneColor(r.tone)}`}>{r.tone}</span></td>
-                <td className="px-3 py-2 text-gray-700">{r.quote}</td>
-                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.source}</td>
-                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.attr}</td>
-                <td className="px-3 py-2 text-gray-700">{r.takeaway}</td>
+                <td className="px-3 py-2 font-medium whitespace-nowrap w-[180px]" style={{ color: '#0f172a' }}>{r.name}</td>
+                <td className="px-3 py-2 w-[110px]"><span className={`px-2 py-1 rounded ${toneColor(r.tone)}`}>{r.tone}</span></td>
+                <td
+                  className="px-3 py-2 text-gray-700 whitespace-normal break-words w-[420px] max-w-[420px]"
+                  title={toPlainText(r.quote)}
+                  style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                >
+                  {toPlainText(r.quote)}
+                </td>
+                <td className="px-3 py-2 text-gray-700 whitespace-nowrap w-[120px]">{r.source}</td>
+                <td className="px-3 py-2 text-gray-700 whitespace-nowrap w-[160px]">{r.attr}</td>
+                <td className="px-3 py-2 text-gray-700 w-[300px]">{r.takeaway}</td>
+                <td className="px-3 py-2 whitespace-normal break-words w-[680px] max-w-[680px]" style={{ color: '#000' }}>{r.suggestion}</td>
               </tr>
             ))}
           </tbody>
@@ -476,43 +567,59 @@ const FAQ_THEME_KWS: Record<FAQTheme, string[]> = {
 function FAQFromCompetitor({ result }: { result: any }) {
   const navigate = useNavigate();
   const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
-  const competitorCounts: Record<string, number> = {};
-  const sourceCounts: Record<string, number> = { Reddit: 0, Quora: 0, Trustpilot: 0, Forums: 0 };
-  const themeCounts: Record<string, number> = { 'Safe checkout': 0, 'Fast shipping': 0, 'Return policy': 0, 'Trusted reviews': 0, 'Authenticity': 0 };
-  
-  // Use real competitors from the API response
-  // Process FAQ data if available in backend
-  if (comps.length > 0) {
-  comps.forEach(c => {
-    const name = c?.name || 'Unknown';
-      
-      // Use backend FAQ data if available
-      if (c?.faq && Array.isArray(c.faq) && c.faq.length > 0) {
-        competitorCounts[name] = c.faq.length;
-        
-        // Extract source and theme information from FAQ data
-        c.faq.forEach((f: any) => {
-          const source = (f.source || '').toLowerCase();
-          const question = (f.question || '').toLowerCase();
-          const answer = (f.answer || '').toLowerCase();
-          const combined = `${source} ${question} ${answer}`;
-          
-          // Count sources
-          (FAQ_SOURCE_CATS as readonly FAQSourceCat[]).forEach((cat: FAQSourceCat) => {
-            if (FAQ_SRC_KWS[cat].some((k: string) => combined.includes(k))) {
-              sourceCounts[cat] += 1;
-            }
-          });
-          
-          // Count themes
+  // Build per-competitor FAQ-style row (table output)
+  type FAQRow = { name: string; tone: 'Neutral' | 'Advisory'; mention: string; source: string; signals: string; suggestion: string };
+  const buildFaqSuggestion = (tone: 'Neutral' | 'Advisory', signals: string, source: string): string => {
+    const sig = signals && signals !== '—' ? signals.toLowerCase() : 'safe checkout, fast shipping, easy returns, verified reviews';
+    const src = source || 'top sources';
+    if (tone === 'Advisory') {
+      return `Strengthen presence on ${src}. Highlight ${sig}; add FAQs and structured data to win advisory answers.`;
+    }
+    return `Increase visibility on ${src}. Add trust signals (${sig}) and collect third‑party reviews to convert neutral answers.`;
+  };
+  const getTone = (text: string): 'Neutral' | 'Advisory' => (/recommend|good option|best place|you should|try |safe|trusted|we suggest|if you want/.test(text) ? 'Advisory' : 'Neutral');
+  const detectSignals = (text: string): string[] => {
+    const found: string[] = [];
           (FAQ_THEMES as readonly FAQTheme[]).forEach((theme: FAQTheme) => {
-            if (FAQ_THEME_KWS[theme].some((k: string) => combined.includes(k))) {
-              themeCounts[theme] += 1;
-            }
-          });
-        });
-      } else {
-        // Otherwise, extract from text analysis
+      if (FAQ_THEME_KWS[theme].some((k: string) => text.includes(k))) found.push(theme);
+    });
+    // Additional phrasing for returns/reviews that users asked for
+    if (/reliable\s+returns|easy\s+returns|hassle[-\s]?free\s+returns|refunds?/.test(text)) {
+      found.push('Return policy' as FAQTheme);
+    }
+    if (/verified\s+reviews|trusted\s+reviews/.test(text)) {
+      found.push('Trusted reviews' as FAQTheme);
+    }
+    return Array.from(new Set(found));
+  };
+
+  const detectSource = (text: string, fallback: string): string => {
+    for (const cat of FAQ_SOURCE_CATS as readonly FAQSourceCat[]) {
+      if (FAQ_SRC_KWS[cat].some(k => text.includes(k))) return cat;
+    }
+    if (/sitejabber/.test(text)) return 'SiteJabber';
+    return fallback || 'AI Analysis';
+  };
+
+  const buildRows: FAQRow[] = comps.map((c: any) => {
+    const name = c?.name || 'Unknown';
+    // Prefer backend FAQ entry
+    if (Array.isArray(c?.faq) && c.faq.length > 0) {
+      const f = c.faq[0];
+      const question = toPlainText(f.question || '');
+      const answer = toPlainText(f.answer || '');
+      const sourceRaw = toPlainText(f.source || '');
+      const combined = `${sourceRaw} ${question} ${answer}`.toLowerCase();
+      const tone = getTone(combined);
+      const src = detectSource(combined, sourceRaw);
+      const sigs = detectSignals(combined);
+      // Prefer a sentence from the ANSWER that shows this company being mentioned
+      const mentionSource = answer || toPlainText((f as any).mention) || question || '';
+      const mention = extractBrandSentence(mentionSource, name, c?.domain) || '—';
+      const signals = (sigs.join(', ') || '—');
+      return { name, tone, mention, source: src, signals, suggestion: buildFaqSuggestion(tone, signals, src) };
+    }
+    // Otherwise, derive from analysis text
     const texts = [
       c?.analysis,
       c?.breakdowns?.gemini?.analysis,
@@ -520,93 +627,57 @@ function FAQFromCompetitor({ result }: { result: any }) {
       c?.breakdowns?.perplexity?.analysis,
       c?.breakdowns?.claude?.analysis
     ]
-      .filter((v) => v !== undefined && v !== null)
-      .map((t: any) => String(t || '').toLowerCase());
-        
-    let count = 0;
-    texts.forEach(t => {
-          if (t.includes('where can i') || t.includes('where to buy') || t.includes('faq') || t.includes('question')) {
-            count += 1;
-          }
-          (FAQ_SOURCE_CATS as readonly FAQSourceCat[]).forEach((cat: FAQSourceCat) => {
-            if (FAQ_SRC_KWS[cat].some((k: string) => t.includes(k))) {
-              sourceCounts[cat] += 1;
-            }
-          });
-          (FAQ_THEMES as readonly FAQTheme[]).forEach((theme: FAQTheme) => {
-            if (FAQ_THEME_KWS[theme].some((k: string) => t.includes(k))) {
-              themeCounts[theme] += 1;
-            }
-          });
-    });
-    competitorCounts[name] = count;
-      }
+      .filter((t: any) => t !== undefined && t !== null)
+      .map((t: any) => toPlainText(t));
+    const blob = texts.join(' ').toLowerCase();
+    const tone = getTone(blob);
+    const src = detectSource(blob, '');
+    const sigs = detectSignals(blob);
+    // Choose a sentence that mentions the brand if possible
+    const sentence = extractBrandSentence(texts.join(' '), name, c?.domain);
+    const mention = String(sentence || '').trim() || '—';
+    const signals = (sigs.join(', ') || '—');
+    return { name, tone, mention, source: src, signals, suggestion: buildFaqSuggestion(tone, signals, src) };
   });
-  }
-  
-  const rows = Object.entries(competitorCounts).sort((a,b) => b[1]-a[1]);
-  const maxC = Math.max(1, ...rows.map(r => r[1] as number));
+  const rows = buildRows;
   return (
     <DashboardCard 
       title="FAQ / Conversational Mentions" 
       icon={<BarChartIcon className="w-4 h-4 text-blue-600" />} 
-      tooltip="Shows competitors mentioned in Q&A-style AI responses (like 'Where can I buy X safely?'). Includes source breakdown (Reddit, Quora, Trustpilot, Forums) and common themes (safe checkout, fast shipping, return policy). Captures conversational search intent and trust-building mentions."
+      tooltip="Shows competitors mentioned in Q&A-style AI responses: where to buy, safety, trust. Table lists tone, example mention, source, highlighted trust signals, and why this matters."
       // action removed per request
     >
-      <div className="space-y-6">
-        {/* Competitor bars on top - no horizontal scroll */}
-        <div>
           <div className="w-full overflow-x-auto">
-            <div className="min-w-[640px] flex items-end gap-4 px-1 py-2">
-              {/* Y axis - consistent spacing like other graphs */}
-              <div className="flex flex-col h-56 pr-2 text-[10px] text-gray-500 select-none justify-between">
-                <span>100</span>
-                <span>80</span>
-                <span>60</span>
-                <span>40</span>
-                <span>20</span>
-                <span>0</span>
-              </div>
-              {rows.map(([name, cnt]) => (
-                <div key={name} className="flex flex-col items-center w-24">
-                  <div className="h-56 w-full bg-gray-100 rounded-md overflow-hidden flex items-end justify-center shadow-sm">
-                    <div className="w-14 bg-amber-400" style={{ height: `${(Number(cnt)/maxC)*100}%` }} title={`${name}: ${cnt}`} />
-                  </div>
-                  <div className="mt-2 text-xs text-black font-semibold text-center truncate w-full" title={name}>{name}</div>
-                  <div className="text-[11px] text-gray-600">{cnt}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Sources and Themes below in two columns - COMMENTED OUT FOR LATER USE */}
-        {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <div className="text-sm font-semibold mb-2 text-gray-800">Sources</div>
-          <div className="space-y-2">
-            {(FAQ_SOURCE_CATS as readonly string[]).map(cat => (
-              <div key={cat} className="flex items-center gap-2">
-                <div className="w-24 text-xs text-gray-700">{cat}</div>
-                  <div className="basis-[80%] h-3 bg-gray-100 rounded"><div className="h-3 rounded bg-sky-400" style={{ width: `${(sourceCounts[cat]/maxS)*100}%` }} /></div>
-                <div className="w-8 text-right text-xs text-gray-600">{sourceCounts[cat]}</div>
-              </div>
+        <table className="min-w-[1200px] w-full text-sm border border-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[180px]">Competitor</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[110px]">Tone</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[300px]">Mentions</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[180px]">Trust Signals</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[120px]">Source</th>
+              <th className="px-3 py-2 text-left border-b border-gray-200 w-[560px]">Suggestion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={`faq-${r.name}`} className="border-b border-gray-100">
+                <td className="px-3 py-2 font-medium whitespace-nowrap w-[180px]" style={{ color: '#0f172a' }}>{r.name}</td>
+                <td className="px-3 py-2 w-[110px]"><span className={`px-2 py-1 rounded ${r.tone === 'Advisory' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{r.tone}</span></td>
+                <td
+                  className="px-3 py-2 text-gray-700 whitespace-normal break-words w-[300px] max-w-[300px]"
+                  title={r.mention}
+                  style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                >
+                  {r.mention}
+                </td>
+                <td className="px-3 py-2 text-gray-700 whitespace-nowrap w-[180px]">{r.signals}</td>
+                <td className="px-3 py-2 text-gray-700 whitespace-nowrap w-[120px]">{r.source}</td>
+                <td className="px-3 py-2 whitespace-normal break-words w-[560px] max-w-[560px]" style={{ color: '#000' }}>{r.suggestion}</td>
+              </tr>
             ))}
-          </div>
-        </div>
-        <div>
-          <div className="text-sm font-semibold mb-2 text-gray-800">Themes</div>
-          <div className="space-y-2">
-            {(FAQ_THEMES as readonly string[]).map(theme => (
-              <div key={theme} className="flex items-center gap-2">
-                <div className="w-32 text-xs text-gray-700">{theme}</div>
-                  <div className="basis-[80%] h-3 bg-gray-100 rounded"><div className="h-3 rounded bg-rose-400" style={{ width: `${(themeCounts[theme]/maxT)*100}%` }} /></div>
-                <div className="w-8 text-right text-xs text-gray-600">{themeCounts[theme]}</div>
-              </div>
-            ))}
-            </div>
-          </div>
-        </div> */}
+          </tbody>
+        </table>
       </div>
     </DashboardCard>
   );

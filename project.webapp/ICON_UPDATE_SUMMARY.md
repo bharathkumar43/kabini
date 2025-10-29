@@ -250,3 +250,15 @@ The Competitor Insight page now has **100% identical** card styling and icons as
 **Status**: ✅ Complete
 
 
+
+
+
+
+
+
+
+
+
+
+
+
