@@ -103,25 +103,40 @@ class BackgroundAnalysisOrchestrator {
     try {
       // Priority 1: Check if Dashboard already has good competitor data (≥2 competitors)
       const cached = unifiedCache.get(target);
-      let response;
+      let response: any;
+      let company = target;
+      let competitors: any[] = [];
       
       if (cached?.dashboard?.competitors && cached.dashboard.competitors.length >= 2) {
         console.log('[BackgroundOrchestrator] Competitor Insight - ✅ Reusing competitors from Dashboard cache:', cached.dashboard.competitors.length);
-        // Use cached dashboard data instead of making new API call
-        response = {
-          success: true,
-          data: {
-            company: cached.dashboard.company,
-            competitors: cached.dashboard.competitors,
-            industry: industry
-          }
-        };
+        company = cached.dashboard.company || target;
+        competitors = cached.dashboard.competitors;
+        // Seed a minimal response structure; we'll enrich below
+        response = { success: true, data: { company, competitors, industry } };
       } 
       // Priority 2: If running in foreground (user clicked Analyze on this page), run fresh
       else {
         console.log('[BackgroundOrchestrator] Competitor Insight - Running fresh competitor detection');
         // Get full visibility analysis from API (specify Competitor Insight page type)
         response = await apiService.getAIVisibilityAnalysis(target, industry, { pageType: 'competitorInsight' });
+        company = response?.data?.company || target;
+        competitors = response?.data?.competitors || [];
+      }
+      
+      // Always perform an enrichment call for Competitor Insight so that cached data contains
+      // sourcesByTool/shopping/aiTraffic/etc., enabling instant load on the Competitor page.
+      try {
+        const enriched = await apiService.getAIVisibilityAnalysis(target, industry, { pageType: 'competitorInsight' });
+        if (enriched?.data?.competitors && enriched.data.competitors.length > 0) {
+          console.log('[BackgroundOrchestrator] Competitor Insight - Enriched competitor data received:', enriched.data.competitors.length);
+          competitors = enriched.data.competitors;
+          company = enriched.data.company || company;
+          response = { success: true, data: { ...enriched.data } };
+        } else {
+          console.warn('[BackgroundOrchestrator] Competitor Insight - Enrichment returned no competitors; using existing list');
+        }
+      } catch (enrichErr) {
+        console.warn('[BackgroundOrchestrator] Competitor Insight - Enrichment call failed, proceeding with existing competitors:', enrichErr);
       }
       
       if (!response?.success || !response?.data) {
@@ -129,12 +144,8 @@ class BackgroundAnalysisOrchestrator {
         return null;
       }
 
-      const competitors = response?.data?.competitors || [];
-      console.log('[BackgroundOrchestrator] Competitor Insight - Final competitors count:', competitors.length);
-      console.log('[BackgroundOrchestrator] Competitor Insight - Competitor names:', competitors.map((c: any) => c?.name || c).join(', '));
-      
       // Log warning if only 1 competitor, but STILL SAVE to cache
-      if (competitors.length < 2) {
+      if ((competitors?.length || 0) < 2) {
         console.warn('[BackgroundOrchestrator] Competitor Insight - Only 1 competitor detected');
         console.warn('[BackgroundOrchestrator] Competitor Insight - This will be saved. Dashboard will run fresh analysis in background.');
       }
@@ -197,6 +208,24 @@ class BackgroundAnalysisOrchestrator {
           console.warn('[BackgroundOrchestrator] Product Insight - Only 1 competitor in initial fetch');
           console.warn('[BackgroundOrchestrator] Product Insight - Full Dashboard analysis will run in background to get more');
         }
+      }
+
+      // Regardless of where the competitor list came from, fetch enriched data for the
+      // Product Insight page. The backend computes sentiment, productAttributes, authority
+      // and FAQ only when pageType === 'productInsight'. When we reuse competitors from
+      // other pages, those enriched fields will be missing – causing static-looking UI.
+      // This lightweight call relies on backend-side caching to avoid redundant work.
+      try {
+        const enriched = await apiService.getAIVisibilityAnalysis(target, industry, { pageType: 'productInsight' });
+        if (enriched?.data?.competitors && enriched.data.competitors.length > 0) {
+          console.log('[BackgroundOrchestrator] Product Insight - Enriched competitor data received:', enriched.data.competitors.length);
+          competitors = enriched.data.competitors;
+          company = enriched.data.company || company;
+        } else {
+          console.warn('[BackgroundOrchestrator] Product Insight - Enrichment returned no competitors; using existing list');
+        }
+      } catch (enrichErr) {
+        console.warn('[BackgroundOrchestrator] Product Insight - Enrichment call failed, proceeding with existing competitors:', enrichErr);
       }
 
       // Step 2: Analyze content structure (if URL-like)

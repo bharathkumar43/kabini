@@ -366,14 +366,19 @@ export function CompetitorInsight() {
 
   const mapIndustryLabel = (raw?: string): string => {
     const s = String(raw || '').toLowerCase();
-    if (/tech|software|it|saas|cloud/.test(s)) return 'Information Technology & Services';
-    if (/bank|financ|fintech|invest|payment|insur/.test(s)) return 'Finance';
-    if (/health|medic|pharma|bio|clinic|care/.test(s)) return 'Healthcare';
-    if (/legal|law|attorney|compliance/.test(s)) return 'Legal';
-    if (/e-?commerce|commerce|retail|shop|store|magento|shopify|woocommerce/.test(s)) return 'Ecommerce & Retail';
-    if (/media|news|content|video|stream/.test(s)) return 'Media';
-    if (/edu|school|college|university|learning|edtech/.test(s)) return 'Education';
-    return 'Others';
+    if (!s) return 'Ecommerce & Retail';
+    if (/(tech|software|it|saas|cloud|devops|ai|ml|data|analytics|cyber|security|platform|api|developer)/.test(s)) return 'Information Technology & Services';
+    if (/(bank|financ|fintech|invest|payment|insur|lending|credit|wealth|trading|broker|crypto|defi)/.test(s)) return 'Finance';
+    if (/(health|medic|pharma|bio|clinic|care|wellness|dental|hospital|fitness|supplement)/.test(s)) return 'Healthcare';
+    if (/(legal|law|attorney|compliance|notary)/.test(s)) return 'Legal';
+    if (/(e-?commerce|commerce|retail|shop|store|marketplace|cart|checkout|shopify|woocommerce|magento)/.test(s)) return 'Ecommerce & Retail';
+    if (/(media|news|content|video|stream|publisher|entertainment|music|podcast|ott)/.test(s)) return 'Media';
+    if (/(edu|school|college|university|learning|edtech|course|tutor|exam|academy)/.test(s)) return 'Education';
+    if (/(market(?:ing)?|advertis|seo|sem|ppc|agency|branding|growth|pr\b)/.test(s)) return 'Marketing & Advertising';
+    if (/(automotive|auto|car|vehicle|ev|tires|spare)/.test(s)) return 'Automotive';
+    if (/(real\s?estate|property|realtor|brokerage|rent|mortgage)/.test(s)) return 'Finance';
+    if (/(business services|professional services|consulting|agency)/.test(s)) return 'Marketing & Advertising';
+    return 'Ecommerce & Retail';
   };
   // Removed Root Domain / Exact URL dropdown
   
@@ -692,98 +697,21 @@ export function CompetitorInsight() {
     const name = companyName.toLowerCase();
     const fullUrl = url?.toLowerCase() || '';
     
-    // More specific industry detection logic
-    if (name.includes('cloud') && (name.includes('migration') || name.includes('migrate') || name.includes('transform'))) {
-      return 'Cloud Migration & Transformation';
-    }
-    
-    if (name.includes('cloud') || name.includes('aws') || name.includes('azure') || name.includes('gcp') || 
-        name.includes('kubernetes') || name.includes('docker') || name.includes('devops')) {
-      return 'Cloud Computing & DevOps';
-    }
-    
-    if (name.includes('ai') || name.includes('artificial intelligence') || name.includes('machine learning') || 
-        name.includes('ml') || name.includes('deep learning') || name.includes('neural')) {
-      return 'Artificial Intelligence & ML';
-    }
-    
-    if (name.includes('cyber') || name.includes('security') || name.includes('firewall') || name.includes('vpn') ||
-        name.includes('threat') || name.includes('protection')) {
-      return 'Cybersecurity';
-    }
-    
-    if (name.includes('data') && (name.includes('analytics') || name.includes('warehouse') || name.includes('lake') || 
-        name.includes('science') || name.includes('mining'))) {
-      return 'Data Analytics & Science';
-    }
-    
-    if (name.includes('saas') || name.includes('software as a service') || name.includes('platform') ||
-        name.includes('api') || name.includes('integration')) {
-      return 'SaaS & Platform Services';
-    }
-    
-    if (name.includes('tech') || name.includes('software') || name.includes('digital') || name.includes('innovation')) {
-      return 'Technology & Software';
-    }
-    
-    if (name.includes('bank') || name.includes('finance') || name.includes('credit') || name.includes('loan') ||
-        name.includes('payment') || name.includes('fintech') || name.includes('investment')) {
-      return 'Financial Services & Fintech';
-    }
-    
-    if (name.includes('health') || name.includes('medical') || name.includes('pharma') || name.includes('care') ||
-        name.includes('biotech') || name.includes('telehealth')) {
-      return 'Healthcare & Biotech';
-    }
-    
-    if (name.includes('retail') || name.includes('shop') || name.includes('store') || name.includes('commerce') ||
-        name.includes('ecommerce') || name.includes('marketplace')) {
-      return 'Retail & E-commerce';
-    }
-    
-    if (name.includes('edu') || name.includes('school') || name.includes('university') || name.includes('college') ||
-        name.includes('learning') || name.includes('training')) {
-      return 'Education & Training';
-    }
-    
-    if (name.includes('media') || name.includes('news') || name.includes('entertainment') || name.includes('tv') ||
-        name.includes('content') || name.includes('publishing')) {
-      return 'Media & Entertainment';
-    }
-    
-    if (name.includes('auto') || name.includes('car') || name.includes('vehicle') || name.includes('transport') ||
-        name.includes('logistics') || name.includes('supply chain')) {
-      return 'Automotive & Transportation';
-    }
-    
-    if (name.includes('food') || name.includes('restaurant') || name.includes('cafe') || name.includes('dining') ||
-        name.includes('delivery') || name.includes('catering')) {
-      return 'Food & Beverage';
-    }
-    
-    if (name.includes('real') || name.includes('estate') || name.includes('property') || name.includes('housing') ||
-        name.includes('construction') || name.includes('architecture')) {
-      return 'Real Estate & Construction';
-    }
-    
-    if (name.includes('energy') || name.includes('oil') || name.includes('gas') || name.includes('power') ||
-        name.includes('renewable') || name.includes('solar') || name.includes('wind')) {
-      return 'Energy & Utilities';
-    }
-    
-    if (name.includes('consulting') || name.includes('consultant') || name.includes('advisory') || 
-        name.includes('strategy') || name.includes('management')) {
-      return 'Consulting & Advisory';
-    }
-    
-    // If only a bare domain was provided and no rule matched, default to Ecommerce & Retail
-    // This ensures competitor discovery still runs for consumer sites like florists, groceries, etc.
-    if (/^https?:\/\//.test(fullUrl) || /\./.test(fullUrl)) {
-      return 'Ecommerce & Retail';
-    }
+    const isEcomUrl = /(myshopify\.com|\/products\/|\/collections\/|\/cart|\/checkout|\bshop\b|\bstore\b|\bshop\.|\bstore\.)/.test(fullUrl);
+    if (isEcomUrl) return 'ecommerce & retail';
 
-    // Default industry for unknown cases: favor Ecommerce & Retail to power consumer competitor discovery
-    return 'Ecommerce & Retail';
+    if (/(fashion|apparel|clothing|dress|shoe|saree|kurti|tshirt|jeans|boutique|beauty|cosmetic|skincare|makeup|haircare|fragrance|perfume|electronics|gadgets|mobile|laptop|camera|audio|headphone|tv|home|furniture|sofa|mattress|decor|kitchen|cookware|bedding|jewel|jewelry|ring|necklace|bracelet|gold|silver|diamond|sports|fitness|yoga|outdoor|gear|athletic)/.test(name + ' ' + fullUrl)) return 'ecommerce & retail';
+
+    if (/(cloud|aws|azure|gcp|kubernetes|docker|devops|software|platform|api|saas|ai|ml|analytics|data|security|cyber)/.test(name + ' ' + fullUrl)) return 'information technology & services';
+    if (/(bank|finance|fintech|invest|payment|insur|lending|credit|broker|trading|wallet|crypto|defi)/.test(name + ' ' + fullUrl)) return 'finance';
+    if (/(health|clinic|hospital|pharma|bio|medic|dental|wellness|supplement)/.test(name + ' ' + fullUrl)) return 'healthcare';
+    if (/(law|legal|attorney|solicitor|compliance)/.test(name + ' ' + fullUrl)) return 'legal';
+    if (/(media|news|content|video|stream|publisher|entertainment|music|podcast|ott)/.test(name + ' ' + fullUrl)) return 'media';
+    if (/(edu|school|college|university|learning|edtech|course|academy)/.test(name + ' ' + fullUrl)) return 'education';
+    if (/(marketing|advertis|seo|sem|ppc|agency|branding|growth|pr\b)/.test(name + ' ' + fullUrl)) return 'marketing & advertising';
+
+    if (/shop|store/.test(name)) return 'ecommerce & retail';
+    return 'ecommerce & retail';
   };
 
   // Clear cached analysis data
@@ -1777,6 +1705,26 @@ export function CompetitorInsight() {
     Authority: ['forbes','allure','bloomberg','wsj','nytimes','the verge','guardian','techcrunch','reuters','cnbc','financial times','ft.com','editorial','press'],
     Indirect: ['the ordinary','tata harper','minimalist','affordable alternative','alternative','substitute','sustainable luxury','organic skincare','budget skincare']
   };
+  const normalize = (s: string) => String(s || '').toLowerCase().replace(/^www\./, '');
+  const stripTld = (host: string) => {
+    const parts = String(host || '').split('.');
+    if (parts.length <= 2) return host;
+    return parts.slice(parts.length - 2).join('.');
+  };
+  const getOwnDomain = (c: any): string => normalize(c?.domain || c?.url || c?.website || '');
+  const collectSourceDomains = (c: any): string[] => {
+    const out: string[] = [];
+    const sbt = c?.sourcesByTool || {};
+    Object.keys(sbt).forEach(t => {
+      const ex: Array<{ domain: string; category: string }> = sbt[t]?.examples || [];
+      ex.forEach(e => { if (e?.domain) out.push(normalize(e.domain)); });
+    });
+    // de‑dupe and keep order
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    out.forEach(d => { if (!seen.has(d)) { seen.add(d); deduped.push(d); } });
+    return deduped;
+  };
   const classifyCompetitorType = (name: string, textBlob: string, shoppingTotal: number): CompetitorType => {
     const n = String(name || '').toLowerCase();
     const t = String(textBlob || '').toLowerCase();
@@ -1798,13 +1746,32 @@ export function CompetitorInsight() {
     }
     return 'Direct';
   };
+  // Enhanced classifier that prefers domain evidence from backend
+  const classifyCompetitorTypeEnhanced = (c: any): CompetitorType => {
+    try {
+      const name = c?.name || 'Unknown';
+      const textBlob = [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis, c?.breakdowns?.perplexity?.analysis, c?.breakdowns?.claude?.analysis].filter(Boolean).join('\n');
+      const fallback = classifyCompetitorType(name, textBlob, Number(c?.shopping?.total || 0));
+      const own = stripTld(getOwnDomain(c));
+      const domains = collectSourceDomains(c).map(stripTld);
+      if (own && domains.some(d => d.includes(own))) return 'Direct';
+      // If domains show many marketplaces, classify Marketplace
+      const marketplaceHits = domains.filter(d => /(amazon|etsy|ebay|walmart|flipkart|rakuten)/.test(d)).length;
+      if (marketplaceHits >= 2) return 'Marketplace';
+      // If domains are largely editorial/news sites, treat as Authority
+      const authorityHits = domains.filter(d => /(forbes|bloomberg|wsj|nytimes|guardian|reuters|cnbc|ft\.com|techcrunch)/.test(d)).length;
+      if (authorityHits >= 2) return 'Authority';
+      // If forums/reviews dominate, treat as Content
+      const contentHits = domains.filter(d => /(reddit|quora|trustpilot|blog|wirecutter)/.test(d)).length;
+      if (contentHits >= 2) return 'Content';
+      return fallback;
+    } catch { return 'Direct'; }
+  };
   const computeCompetitorTypeCounts = (result: any): { counts: Record<CompetitorType, number> } => {
     const counts: Record<CompetitorType, number> = { Direct: 0, Marketplace: 0, Content: 0, Authority: 0, Indirect: 0 };
     const comps: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
     comps.forEach(c => {
-      const name = c?.name || 'Unknown';
-      const texts = [c?.analysis, c?.breakdowns?.gemini?.analysis, c?.breakdowns?.chatgpt?.analysis, c?.breakdowns?.perplexity?.analysis, c?.breakdowns?.claude?.analysis].filter(Boolean).join('\n');
-      const type = classifyCompetitorType(name, texts, Number(c?.shopping?.total || 0));
+      const type = classifyCompetitorTypeEnhanced(c);
       counts[type] += 1;
     });
     return { counts };
@@ -1820,7 +1787,7 @@ export function CompetitorInsight() {
     };
     competitors.forEach(c => {
       const name = c?.name || 'Unknown';
-      const type = classifyCompetitorType(name, getTextBlob(c), Number(c?.shopping?.total || 0));
+      const type = classifyCompetitorTypeEnhanced(c);
       buckets[type].push({ name, mentions: getMentions(c) });
     });
     (Object.keys(buckets) as CompetitorType[]).forEach(k => {
@@ -1900,16 +1867,17 @@ export function CompetitorInsight() {
     };
 
     // Build per-competitor summary for chart/table
-    type Row = { name: string; type: CompetitorType; mentions: number; sources: string[] };
+    type Row = { name: string; type: CompetitorType; mentions: number; sources: string[]; takeaway: string };
     const summarize = (): Row[] => {
       const rows: Row[] = [];
       competitors.forEach(c => {
         const name = c?.name || 'Unknown';
-        const type = classifyCompetitorType(name, getTextBlob(c), Number(c?.shopping?.total || 0));
+        const type = classifyCompetitorTypeEnhanced(c);
         const mentions = getMentions(c);
         // Collect top source categories per competitor if backend present
         const categories: Record<string, number> = {};
         const byTool = c?.sourcesByTool || {};
+        const domainList: string[] = collectSourceDomains(c);
         Object.keys(byTool).forEach(t => {
           const counts = byTool[t]?.counts || {};
           Object.keys(counts).forEach(cat => {
@@ -1936,16 +1904,30 @@ export function CompetitorInsight() {
             .slice(0, 3)
             .map(([k]) => k);
         }
-        rows.push({ name, type, mentions, sources });
+        // Prefer concrete domains if available
+        const domainSources = domainList.slice(0, 3);
+        const showSources = domainSources.length > 0 ? domainSources : sources;
+        // Dynamic takeaway
+        const own = stripTld(getOwnDomain(c));
+        const directHit = own && domainList.map(stripTld).some(d => d.includes(own));
+        const buildTakeaway = (): string => {
+          if (type === 'Direct' && directHit) return `${name} gets direct citations from its own site; strengthen PDPs, schema, and reviews to win more mentions.`;
+          if (type === 'Marketplace') return `${name} is surfaced via marketplaces; optimize listings, ratings, and availability to capture AI traffic.`;
+          if (type === 'Content') return `${name} is driven by reviews/guides/forums; engage community content and secure high‑authority reviews.`;
+          if (type === 'Authority') return `${name} gains visibility through editorial/PR; keep a steady PR cadence and citeable assets.`;
+          return `Competes directly; improve differentiation and structured data to win comparisons.`;
+        };
+        const takeaway = buildTakeaway();
+        rows.push({ name, type, mentions, sources: showSources, takeaway });
       });
       // If empty, seed a few rows from fallback buckets
       if (rows.length === 0) {
         ([
-          ...buckets.Direct.slice(0,3).map(x => ({ name: x.name, type: 'Direct' as CompetitorType, mentions: x.mentions, sources: [] })),
-          ...buckets.Indirect.slice(0,2).map(x => ({ name: x.name, type: 'Indirect' as CompetitorType, mentions: x.mentions, sources: [] })),
-          ...buckets.Marketplace.slice(0,3).map(x => ({ name: x.name, type: 'Marketplace' as CompetitorType, mentions: x.mentions, sources: ['Marketplaces'] })),
-          ...buckets.Content.slice(0,3).map(x => ({ name: x.name, type: 'Content' as CompetitorType, mentions: x.mentions, sources: ['Reviews/Guides'] })),
-          ...buckets.Authority.slice(0,3).map(x => ({ name: x.name, type: 'Authority' as CompetitorType, mentions: x.mentions, sources: ['PR/Editorial'] })),
+          ...buckets.Direct.slice(0,3).map(x => ({ name: x.name, type: 'Direct' as CompetitorType, mentions: x.mentions, sources: [], takeaway: 'Competes directly; improve differentiation and structured data to win comparisons.' })),
+          ...buckets.Indirect.slice(0,2).map(x => ({ name: x.name, type: 'Indirect' as CompetitorType, mentions: x.mentions, sources: [], takeaway: 'Competes indirectly; clarify positioning against substitutes in content.' })),
+          ...buckets.Marketplace.slice(0,3).map(x => ({ name: x.name, type: 'Marketplace' as CompetitorType, mentions: x.mentions, sources: ['Marketplaces'], takeaway: 'Optimize marketplace listings and ratings for more AI mentions.' })),
+          ...buckets.Content.slice(0,3).map(x => ({ name: x.name, type: 'Content' as CompetitorType, mentions: x.mentions, sources: ['Reviews/Guides'], takeaway: 'Earn reviews and creator coverage; seed citeable guides.' })),
+          ...buckets.Authority.slice(0,3).map(x => ({ name: x.name, type: 'Authority' as CompetitorType, mentions: x.mentions, sources: ['PR/Editorial'], takeaway: 'Sustain PR/Editorial coverage with credible announcements.' })),
         ] as Row[]).forEach(r => rows.push(r));
       }
       return rows.sort((a,b) => b.mentions - a.mentions);
@@ -2048,7 +2030,7 @@ export function CompetitorInsight() {
                     <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#000' }}>{r.type}</td>
                     <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#000' }}>{r.mentions}</td>
                     <td className="px-3 py-2 text-gray-700">{(r.sources && r.sources.length) ? r.sources.join(', ') : '—'}</td>
-                    <td className="px-3 py-2 text-gray-700">{Info[r.type].why}</td>
+                    <td className="px-3 py-2 text-gray-700">{r.takeaway}</td>
                   </tr>
                 ))}
               </tbody>

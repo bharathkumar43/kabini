@@ -2690,9 +2690,10 @@ function ShopifyConnectModal({ isOpen, onClose, onSuccess }: ShopifyConnectModal
 interface CSVUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onImported?: (value: string) => void;
 }
 
-function CSVUploadModal({ isOpen, onClose }: CSVUploadModalProps) {
+function CSVUploadModal({ isOpen, onClose, onImported }: CSVUploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -2744,8 +2745,42 @@ function CSVUploadModal({ isOpen, onClose }: CSVUploadModalProps) {
 
     setIsUploading(true);
     try {
-      // Simulate upload process
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Read CSV client-side and pick first product URL or name
+      const text = await selectedFile.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length >= 2) {
+        const header = lines[0];
+        const dataLine = lines.slice(1).find(l => l.trim()) || '';
+        const splitCsv = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+              // Toggle quote or escape
+              if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+              else { inQuotes = !inQuotes; }
+            } else if (ch === ',' && !inQuotes) {
+              result.push(current);
+              current = '';
+            } else {
+              current += ch;
+            }
+          }
+          result.push(current);
+          return result.map(s => s.trim());
+        };
+        const headers = splitCsv(header).map(h => h.toLowerCase());
+        const values = splitCsv(dataLine);
+        const urlIdx = headers.findIndex(h => h === 'url' || h === 'product url' || h === 'link');
+        const nameIdx = headers.findIndex(h => h === 'product name' || h === 'name' || h === 'title');
+        const candidate = (urlIdx >= 0 ? values[urlIdx] : '') || (nameIdx >= 0 ? values[nameIdx] : '');
+        if (candidate && onImported) onImported(candidate);
+      }
+
+      // Simulate upload process for UX
+      await new Promise(resolve => setTimeout(resolve, 500));
       alert(`Successfully uploaded ${selectedFile.name}!`);
       onClose();
       setSelectedFile(null);
@@ -2860,9 +2895,10 @@ function CSVUploadModal({ isOpen, onClose }: CSVUploadModalProps) {
 interface ManualAddModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onAdded?: (value: string) => void;
 }
 
-function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
+function ManualAddModal({ isOpen, onClose, onAdded }: ManualAddModalProps) {
   const [formData, setFormData] = useState({
     skuId: '',
     productName: '',
@@ -2889,6 +2925,9 @@ function ManualAddModal({ isOpen, onClose }: ManualAddModalProps) {
       // Simulate adding product
       await new Promise(resolve => setTimeout(resolve, 1500));
       alert(`Successfully added product: ${formData.productName}!`);
+      // Notify parent to set the dashboard input
+      const candidate = formData.productUrl?.trim() || formData.productName?.trim();
+      if (candidate && onAdded) onAdded(candidate);
       onClose();
       setFormData({
         skuId: '',
@@ -3264,14 +3303,22 @@ export function Overview() {
   // Helper functions (restored from original)
   const mapIndustryLabel = (raw?: string): string => {
     const s = String(raw || '').toLowerCase();
-    if (/tech|software|it|saas|cloud/.test(s)) return 'Information Technology & Services';
-    if (/bank|financ|fintech|invest|payment|insur/.test(s)) return 'Finance';
-    if (/health|medic|pharma|bio|clinic|care/.test(s)) return 'Healthcare';
-    if (/legal|law|attorney|compliance/.test(s)) return 'Legal';
-    if (/e-?commerce|commerce|retail|shop|store|magento|shopify|woocommerce/.test(s)) return 'Ecommerce & Retail';
-    if (/media|news|content|video|stream/.test(s)) return 'Media';
-    if (/edu|school|college|university|learning|edtech/.test(s)) return 'Education';
-    return 'Others';
+    if (!s) return 'Ecommerce & Retail';
+    // Core buckets used across app
+    if (/(tech|software|it|saas|cloud|devops|ai|ml|data|analytics|cyber|security|platform|api|developer)/.test(s)) return 'Information Technology & Services';
+    if (/(bank|financ|fintech|invest|payment|insur|lending|credit|wealth|trading|broker|crypto|defi)/.test(s)) return 'Finance';
+    if (/(health|medic|pharma|bio|clinic|care|wellness|dental|hospital|fitness|supplement)/.test(s)) return 'Healthcare';
+    if (/(legal|law|attorney|compliance|notary)/.test(s)) return 'Legal';
+    if (/(e-?commerce|commerce|retail|shop|store|marketplace|cart|checkout|shopify|woocommerce|magento)/.test(s)) return 'Ecommerce & Retail';
+    if (/(media|news|content|video|stream|publisher|entertainment|music|podcast|ott)/.test(s)) return 'Media';
+    if (/(edu|school|college|university|learning|edtech|course|tutor|exam|academy)/.test(s)) return 'Education';
+    if (/(market(?:ing)?|advertis|seo|sem|ppc|agency|branding|growth|pr\b)/.test(s)) return 'Marketing & Advertising';
+    if (/(automotive|auto|car|vehicle|ev|tires|spare)/.test(s)) return 'Automotive';
+    if (/(travel|hotel|flight|tour|booking|hospitality|airline|vacation)/.test(s)) return 'Media';
+    if (/(real\s?estate|property|realtor|brokerage|rent|mortgage)/.test(s)) return 'Finance';
+    // Catch-alls for common vague labels
+    if (/(business services|professional services|consulting|agency)/.test(s)) return 'Marketing & Advertising';
+    return 'Ecommerce & Retail';
   };
 
   const detectUrlType = (url: string): 'root-domain' | 'exact-url' => {
@@ -3315,27 +3362,41 @@ export function Overview() {
   };
 
   const detectIndustry = (companyName: string, url?: string): string => {
-    const name = companyName.toLowerCase();
+    const name = (companyName || '').toLowerCase();
     const urlLower = (url || '').toLowerCase();
     
-    // Check for Shopify stores
-    if (urlLower.includes('myshopify.com') || urlLower.includes('shopify')) {
-      return 'E-commerce & Retail';
-    }
-    
-    if (name.includes('cloud') && (name.includes('migration') || name.includes('migrate') || name.includes('transform'))) {
-      return 'Cloud Migration & Transformation';
-    }
-    
-    if (name.includes('cloud') || name.includes('aws') || name.includes('azure') || name.includes('gcp')) {
-      return 'Cloud Computing & DevOps';
-    }
-    
-    if (name.includes('ai') || name.includes('artificial intelligence') || name.includes('machine learning')) {
-      return 'Artificial Intelligence & ML';
-    }
-    
-    return 'Business Services';
+    // Obvious e‑commerce signals from URL
+    const isEcomUrl = /(myshopify\.com|\/products\/|\/collections\/|\/cart|\/checkout|\bshop\b|\bstore\b|\bshop\.|\bstore\.)/.test(urlLower);
+    if (isEcomUrl) return 'ecommerce & retail';
+
+    // Category keywords
+    if (/(fashion|apparel|clothing|dress|shoe|saree|kurti|tshirt|jeans|boutique)/.test(name + ' ' + urlLower)) return 'ecommerce & retail';
+    if (/(beauty|cosmetic|skincare|makeup|haircare|fragrance|perfume)/.test(name + ' ' + urlLower)) return 'ecommerce & retail';
+    if (/(electronics|gadgets|mobile|laptop|camera|audio|headphone|tv)/.test(name + ' ' + urlLower)) return 'ecommerce & retail';
+    if (/(home|furniture|sofa|mattress|decor|kitchen|cookware|bedding)/.test(name + ' ' + urlLower)) return 'ecommerce & retail';
+    if (/(jewel|jewelry|ring|necklace|bracelet|gold|silver|diamond)/.test(name + ' ' + urlLower)) return 'ecommerce & retail';
+    if (/(sports|fitness|yoga|outdoor|gear|athletic)/.test(name + ' ' + urlLower)) return 'ecommerce & retail';
+
+    // Tech/IT
+    if (/(cloud|aws|azure|gcp|kubernetes|docker|devops|software|platform|api|saas|ai|ml|analytics|data|security|cyber)/.test(name + ' ' + urlLower)) return 'information technology & services';
+
+    // Finance
+    if (/(bank|finance|fintech|invest|payment|insur|lending|credit|broker|trading|wallet|crypto|defi)/.test(name + ' ' + urlLower)) return 'finance';
+
+    // Healthcare
+    if (/(health|clinic|hospital|pharma|bio|medic|dental|wellness|supplement)/.test(name + ' ' + urlLower)) return 'healthcare';
+
+    // Legal
+    if (/(law|legal|attorney|solicitor|compliance)/.test(name + ' ' + urlLower)) return 'legal';
+
+    // Media/Education/Marketing
+    if (/(media|news|content|video|stream|publisher|entertainment|music|podcast|ott)/.test(name + ' ' + urlLower)) return 'media';
+    if (/(edu|school|college|university|learning|edtech|course|academy)/.test(name + ' ' + urlLower)) return 'education';
+    if (/(marketing|advertis|seo|sem|ppc|agency|branding|growth|pr\b)/.test(name + ' ' + urlLower)) return 'marketing & advertising';
+
+    // Fallbacks
+    if (/shop|store/.test(name)) return 'ecommerce & retail';
+    return 'ecommerce & retail';
   };
 
   // Full Analysis Function (restored from original)
@@ -4034,6 +4095,77 @@ export function Overview() {
     return score.toFixed(4);
   };
 
+  // KPI parallel computation state
+  const [kpiScores, setKpiScores] = useState<{ aiVisibility: number; sentiment: number; competitor: number } | null>(null);
+  const [kpiLoading, setKpiLoading] = useState(false);
+
+  // Shared helpers for KPI computation
+  const computeAiVisibilityKpi = (result: any): number => {
+    try {
+      const raw = getAIVisibilityScore(result);
+      // Normalize to 0..100 if on 0..10 scale
+      return raw > 10 ? Math.min(100, Math.max(0, Math.round(raw))) : Math.min(100, Math.max(0, Math.round(raw * 10)));
+    } catch { return 0; }
+  };
+
+  const computeSentimentKpi = (result: any): number => {
+    try {
+      const competitors: any[] = Array.isArray(result?.competitors) ? result.competitors : [];
+      if (competitors.length === 0) return 0;
+      const mainCompany = competitors.find(c => c.name?.toLowerCase() === result.company?.toLowerCase()) || competitors[0];
+      if (!mainCompany) return 0;
+      const breakdowns = mainCompany.breakdowns || {};
+      const keyMetrics = mainCompany.keyMetrics || {};
+      let totalMentions = 0, pos = 0, neu = 0, neg = 0;
+      ['chatgpt','gemini','claude','perplexity'].forEach(platform => {
+        const bd = breakdowns[platform] || {};
+        const km = keyMetrics[platform] || {};
+        const mentions = Number(bd.mentionsScore || km.brandMentions || km.mentionsCount || 0);
+        const s = Number(bd.sentimentScore || km.sentimentScore || 0.5);
+        if (mentions > 0) {
+          totalMentions += mentions;
+          if (s < 0.3) neg += mentions; else if (s > 0.7) pos += mentions; else neu += mentions;
+        }
+      });
+      if (totalMentions <= 0) return 0;
+      return Math.round((pos / totalMentions) * 100);
+    } catch { return 0; }
+  };
+
+  const computeRelativeCompetitorScore = (competitors: any[]): { score: number } => {
+    try {
+      if (!competitors || competitors.length === 0) return { score: 0 };
+      const scores = competitors.map(c => ({
+        name: c.name,
+        score: Math.min(100, Math.max(0, (c.totalScore || 0) > 10 ? c.totalScore : (c.totalScore || 0) * 10))
+      }));
+      const sorted = [...scores].sort((a, b) => b.score - a.score);
+      // Assume your company is first in list or fallback to leader
+      const yourName = competitors.find((c: any) => c.name?.toLowerCase() === (competitors[0]?.company || '').toLowerCase())?.name || competitors[0]?.name || sorted[0].name;
+      const yourIndex = sorted.findIndex(s => s.name === yourName);
+      const yourScore = yourIndex >= 0 ? sorted[yourIndex].score : sorted[0].score;
+      return { score: Math.round(yourScore) };
+    } catch { return { score: 0 }; }
+  };
+
+  // Run KPI computations in parallel whenever analysisResult updates
+  useEffect(() => {
+    if (!analysisResult || !Array.isArray(analysisResult.competitors) || analysisResult.competitors.length === 0) {
+      setKpiScores(null);
+      return;
+    }
+    setKpiLoading(true);
+    Promise.all([
+      Promise.resolve(computeAiVisibilityKpi(analysisResult)),
+      Promise.resolve(computeSentimentKpi(analysisResult)),
+      Promise.resolve(computeRelativeCompetitorScore(analysisResult.competitors).score)
+    ])
+      .then(([ai, sentiment, competitor]) => {
+        setKpiScores({ aiVisibility: ai, sentiment, competitor });
+      })
+      .finally(() => setKpiLoading(false));
+  }, [analysisResult]);
+
   // Conditional rendering: New UI when no analysis, full dashboard when analysis exists
   if (!analysisResult) {
     return (
@@ -4294,10 +4426,30 @@ export function Overview() {
       <CSVUploadModal 
         isOpen={showCSVModal} 
         onClose={handleCloseCSVModal} 
+        onImported={(value) => {
+          setInputValue(value);
+          if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
+            const detectedType = detectUrlType(value);
+            setAnalysisType(detectedType);
+          } else {
+            setInputType('company');
+            setAnalysisType('root-domain');
+          }
+        }}
       />
       <ManualAddModal 
         isOpen={showManualModal} 
         onClose={handleCloseManualModal} 
+        onAdded={(value) => {
+          setInputValue(value);
+          if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
+            const detectedType = detectUrlType(value);
+            setAnalysisType(detectedType);
+          } else {
+            setInputType('company');
+            setAnalysisType('root-domain');
+          }
+        }}
       />
       </>
     );
@@ -4611,10 +4763,30 @@ export function Overview() {
     <CSVUploadModal 
       isOpen={showCSVModal} 
       onClose={handleCloseCSVModal} 
+      onImported={(value) => {
+        setInputValue(value);
+        if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
+          const detectedType = detectUrlType(value);
+          setAnalysisType(detectedType);
+        } else {
+          setInputType('company');
+          setAnalysisType('root-domain');
+        }
+      }}
     />
     <ManualAddModal 
       isOpen={showManualModal} 
       onClose={handleCloseManualModal} 
+      onAdded={(value) => {
+        setInputValue(value);
+        if (value.includes('http://') || value.includes('https://') || value.includes('www.')) {
+          const detectedType = detectUrlType(value);
+          setAnalysisType(detectedType);
+        } else {
+          setInputType('company');
+          setAnalysisType('root-domain');
+        }
+      }}
     />
     </>
   );
